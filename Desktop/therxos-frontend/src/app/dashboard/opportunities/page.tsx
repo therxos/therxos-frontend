@@ -384,6 +384,7 @@ export default function OpportunitiesPage() {
   });
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('all');
+  const [typeFilter, setTypeFilter] = useState<string | null>(null);
   const [groupBy, setGroupBy] = useState('patient');
   const [search, setSearch] = useState('');
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
@@ -391,6 +392,18 @@ export default function OpportunitiesPage() {
   const [selectedGroup, setSelectedGroup] = useState<GroupedItem | null>(null);
   const [notesModal, setNotesModal] = useState<Opportunity | null>(null);
   const [lastSync, setLastSync] = useState(new Date());
+
+  // Check URL for type filter
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      const type = params.get('type');
+      if (type) {
+        setTypeFilter(type);
+        setGroupBy('category');
+      }
+    }
+  }, []);
 
   useEffect(() => { fetchData(); }, []);
   useEffect(() => { groupData(); }, [opportunities, groupBy]);
@@ -537,6 +550,8 @@ export default function OpportunitiesPage() {
       if (filter === 'not_submitted' && o.status !== 'new') return false;
       if (filter === 'submitted' && o.status !== 'reviewed') return false;
       if (filter === 'captured' && o.status !== 'actioned') return false;
+      // Type filter from URL
+      if (typeFilter && o.opportunity_type !== typeFilter) return false;
       // Search filter
       if (search) {
         const s = search.toLowerCase();
@@ -655,6 +670,19 @@ export default function OpportunitiesPage() {
               </button>
             ))}
           </div>
+          {typeFilter && (
+            <div className="flex items-center gap-2 ml-2">
+              <span className="px-3 py-1.5 bg-purple-500/20 text-purple-400 rounded-lg text-sm font-medium">
+                Type: {typeFilter.replace(/_/g, ' ')}
+              </span>
+              <button 
+                onClick={() => { setTypeFilter(null); window.history.replaceState({}, '', '/dashboard/opportunities'); }}
+                className="text-slate-400 hover:text-white text-sm"
+              >
+                ✕ Clear
+              </button>
+            </div>
+          )}
           <div className="flex items-center gap-2 ml-4">
             <span className="text-sm text-slate-400">Group by:</span>
             <select 

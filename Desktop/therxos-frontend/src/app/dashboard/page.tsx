@@ -1,9 +1,10 @@
 'use client';
 
 import { useQuery } from '@tanstack/react-query';
-import { analyticsApi } from '@/lib/api';
+import { analyticsApi, opportunitiesApi } from '@/lib/api';
 import { useAuthStore } from '@/store';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import {
   TrendingUp,
   TrendingDown,
@@ -12,41 +13,12 @@ import {
   RefreshCw,
   AlertTriangle,
   ArrowUpDown,
-  Activity,
+  ShieldAlert,
   Zap,
 } from 'lucide-react';
 
-// Demo data for testing without backend
-const DEMO_DASHBOARD = {
-  pending_opportunities: 12,
-  pending_margin: 4250,
-  realized_margin: 8900,
-  active_patients: 342,
-  action_rate: 67,
-  med_sync_patients: 89,
-  rx_count: 1240,
-};
-
-const DEMO_BY_TYPE = [
-  { opportunity_type: 'ndc_optimization', count: '5', total_margin: '1200' },
-  { opportunity_type: 'brand_to_generic', count: '4', total_margin: '950' },
-  { opportunity_type: 'therapeutic_interchange', count: '2', total_margin: '850' },
-  { opportunity_type: 'missing_therapy', count: '1', total_margin: '250' },
-];
-
-const DEMO_CHANGES = {
-  opportunities: 12,
-  potential_margin: 8,
-  realized_margin: 15,
-};
-
-const DEMO_TOP_PATIENTS = [
-  { patient_id: '1', patient_hash: 'abc123de', first_name: 'Mickey', last_name: 'Mouse', date_of_birth: '1928-11-18', chronic_conditions: ['Diabetes', 'Hypertension', 'High Cholesterol'], opportunity_count: 4, total_margin: 1200, last_visit: '2026-01-01' },
-  { patient_id: '2', patient_hash: 'xyz789uv', first_name: 'Donald', last_name: 'Duck', date_of_birth: '1934-06-09', chronic_conditions: ['COPD', 'Asthma'], opportunity_count: 3, total_margin: 850, last_visit: '2025-12-31' },
-  { patient_id: '3', patient_hash: 'def456gh', first_name: 'Goofy', last_name: 'Goof', date_of_birth: '1932-05-25', chronic_conditions: ['Diabetes', 'Depression'], opportunity_count: 2, total_margin: 600, last_visit: '2025-12-30' },
-];
-
 function formatCurrency(value: number) {
+  if (isNaN(value) || value === null || value === undefined) return '$0';
   return new Intl.NumberFormat('en-US', {
     style: 'currency',
     currency: 'USD',
@@ -56,6 +28,7 @@ function formatCurrency(value: number) {
 }
 
 function formatShortCurrency(value: number) {
+  if (isNaN(value) || value === null || value === undefined) return '$0';
   if (value >= 1000000) return `$${(value / 1000000).toFixed(1)}M`;
   if (value >= 1000) return `$${(value / 1000).toFixed(1)}K`;
   return formatCurrency(value);
@@ -63,10 +36,11 @@ function formatShortCurrency(value: number) {
 
 function formatPatientName(firstName?: string, lastName?: string, hash?: string) {
   if (firstName && lastName) {
-    const first3 = firstName.slice(0, 3).toUpperCase();
     const last3 = lastName.slice(0, 3).toUpperCase();
+    const first3 = firstName.slice(0, 3).toUpperCase();
     return `${last3},${first3}`;
   }
+  if (lastName) return lastName.slice(0, 6).toUpperCase();
   return hash?.slice(0, 8) || 'Unknown';
 }
 
@@ -117,19 +91,27 @@ function OpportunityTypeRow({
   icon: Icon, 
   iconClass, 
   label, 
+  type,
   count, 
   annualValue,
-  monthlyValue 
+  monthlyValue,
+  onClick,
 }: { 
   icon: any; 
   iconClass: string; 
-  label: string; 
+  label: string;
+  type: string;
   count: number; 
   annualValue: number;
   monthlyValue: number;
+  onClick: () => void;
 }) {
   return (
-    <div className="flex items-center justify-between py-3" style={{ borderBottom: '1px solid var(--navy-600)' }}>
+    <div 
+      onClick={onClick}
+      className="flex items-center justify-between py-3 cursor-pointer hover:bg-[var(--navy-700)] px-3 -mx-3 rounded-lg transition-colors" 
+      style={{ borderBottom: '1px solid var(--navy-600)' }}
+    >
       <div className="flex items-center gap-3">
         <div className={`type-icon ${iconClass}`}>
           <Icon className="w-5 h-5" />
@@ -148,18 +130,20 @@ function OpportunityTypeRow({
 }
 
 export default function DashboardPage() {
+  const router = useRouter();
   const user = useAuthStore((state) => state.user);
   const isDemo = user?.userId === 'demo-user-001';
+
+  // Fetch real data
+  const { data: oppData } = useQuery({
+    queryKey: ['all-opportunities'],
+    queryFn: () => opportunitiesApi.getAll({ limit: 2000 }).then((r) => r.data),
+    enabled: !isDemo,
+  });
 
   const { data: dashboardData, isLoading } = useQuery({
     queryKey: ['dashboard'],
     queryFn: () => analyticsApi.dashboard(30).then((r) => r.data),
-    enabled: !isDemo,
-  });
-
-  const { data: byTypeData } = useQuery({
-    queryKey: ['opportunities-by-type'],
-    queryFn: () => analyticsApi.byType('new').then((r) => r.data),
     enabled: !isDemo,
   });
 
@@ -169,33 +153,82 @@ export default function DashboardPage() {
     enabled: !isDemo,
   });
 
-  const { data: topPatients } = useQuery({
-    queryKey: ['top-patients'],
-    queryFn: () => analyticsApi.topPatients(5).then((r) => r.data),
-    enabled: !isDemo,
-  });
+  // Process opportunities for type breakdown and top patients
+  const opportunities = oppData?.opportunities || [];
+  
+  // Group by type
+  const byType = opportunities.reduce((acc: any, opp: any) => {
+    const type = opp.opportunity_type || 'unknown';
+    if (!acc[type]) {
+      acc[type] = { count: 0, totalMargin: 0 };
+    }
+    acc[type].count++;
+    const annual = Number(opp.annual_margin_gain) || Number(opp.potential_margin_gain) * 12 || 0;
+    acc[type].totalMargin += annual;
+    return acc;
+  }, {});
 
-  if (isLoading && !isDemo) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[var(--teal-500)]" />
-      </div>
-    );
-  }
+  const typeData = Object.entries(byType).map(([type, data]: [string, any]) => ({
+    opportunity_type: type,
+    count: data.count,
+    total_margin: data.totalMargin,
+  })).sort((a, b) => b.total_margin - a.total_margin);
 
-  // Use demo data or real data
-  const stats = isDemo ? DEMO_DASHBOARD : (dashboardData || {});
-  const changes = isDemo ? DEMO_CHANGES : (performanceData?.changes || {});
-  const typeData = isDemo ? DEMO_BY_TYPE : byTypeData;
-  const patientsData = isDemo ? DEMO_TOP_PATIENTS : topPatients;
+  // Group by patient for top patients
+  const byPatient = opportunities.reduce((acc: any, opp: any) => {
+    const pid = opp.patient_id;
+    if (!acc[pid]) {
+      acc[pid] = {
+        patient_id: pid,
+        patient_hash: opp.patient_hash,
+        first_name: opp.patient_first_name,
+        last_name: opp.patient_last_name,
+        date_of_birth: opp.patient_dob,
+        chronic_conditions: opp.chronic_conditions || [],
+        opportunity_count: 0,
+        total_margin: 0,
+        last_visit: opp.created_at,
+      };
+    }
+    acc[pid].opportunity_count++;
+    const annual = Number(opp.annual_margin_gain) || Number(opp.potential_margin_gain) * 12 || 0;
+    acc[pid].total_margin += annual;
+    return acc;
+  }, {});
 
-  // Map opportunity types to display info
+  const topPatients = Object.values(byPatient)
+    .sort((a: any, b: any) => b.total_margin - a.total_margin)
+    .slice(0, 5);
+
+  // Calculate stats
+  const totalOpps = opportunities.length;
+  const pendingOpps = opportunities.filter((o: any) => o.status === 'new').length;
+  const totalAnnual = opportunities.reduce((s: number, o: any) => {
+    const annual = Number(o.annual_margin_gain) || Number(o.potential_margin_gain) * 12 || 0;
+    return s + annual;
+  }, 0);
+
+  const stats = isDemo ? {
+    pending_opportunities: 12,
+    pending_margin: 4250,
+    realized_margin: 0,
+    active_patients: 342,
+  } : {
+    pending_opportunities: pendingOpps,
+    pending_margin: totalAnnual,
+    realized_margin: dashboardData?.realized_margin || 0,
+    active_patients: dashboardData?.active_patients || Object.keys(byPatient).length,
+  };
+
+  const changes = performanceData?.changes || {};
+
+  // Type config
   const typeConfig: Record<string, { icon: any; iconClass: string; label: string }> = {
+    missing_therapy: { icon: AlertTriangle, iconClass: 'therapy', label: 'Missing Therapy' },
+    therapeutic_interchange: { icon: ArrowUpDown, iconClass: 'interchange', label: 'Therapeutic Interchange' },
     ndc_optimization: { icon: Pill, iconClass: 'ndc', label: 'NDC Optimization' },
     brand_to_generic: { icon: RefreshCw, iconClass: 'brand', label: 'Brand → Generic' },
-    therapeutic_interchange: { icon: ArrowUpDown, iconClass: 'interchange', label: 'Therapeutic Interchange' },
-    missing_therapy: { icon: AlertTriangle, iconClass: 'therapy', label: 'Missing Therapy' },
-    audit_flag: { icon: AlertTriangle, iconClass: 'audit', label: 'Audit Flags' },
+    audit_flag: { icon: ShieldAlert, iconClass: 'audit', label: 'Audit Flags' },
   };
 
   const greeting = () => {
@@ -204,6 +237,18 @@ export default function DashboardPage() {
     if (hour < 18) return 'Good afternoon';
     return 'Good evening';
   };
+
+  const handleTypeClick = (type: string) => {
+    router.push(`/dashboard/opportunities?type=${type}`);
+  };
+
+  if (isLoading && !isDemo) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[var(--teal-500)]" />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-8 animate-fade-in">
@@ -262,7 +307,7 @@ export default function DashboardPage() {
           <div>
             {typeData && typeData.length > 0 ? (
               typeData.map((item: any) => {
-                const config = typeConfig[item.opportunity_type] || typeConfig.ndc_optimization;
+                const config = typeConfig[item.opportunity_type] || { icon: Zap, iconClass: 'ndc', label: item.opportunity_type?.replace(/_/g, ' ') || 'Unknown' };
                 const annualValue = Number(item.total_margin) || 0;
                 const monthlyValue = annualValue / 12;
                 return (
@@ -271,9 +316,11 @@ export default function DashboardPage() {
                     icon={config.icon}
                     iconClass={config.iconClass}
                     label={config.label}
-                    count={parseInt(item.count)}
+                    type={item.opportunity_type}
+                    count={item.count}
                     annualValue={annualValue}
                     monthlyValue={monthlyValue}
+                    onClick={() => handleTypeClick(item.opportunity_type)}
                   />
                 );
               })
@@ -294,7 +341,7 @@ export default function DashboardPage() {
             <p className="label-text mb-4">Action Rate (30 days)</p>
             <div className="flex items-end gap-2 mb-4">
               <span className="text-4xl font-bold" style={{ color: 'var(--teal-500)' }}>
-                {stats.action_rate || 0}%
+                {dashboardData?.action_rate || 0}%
               </span>
               <span className="text-sm mb-1" style={{ color: 'var(--slate-400)' }}>
                 of opportunities actioned
@@ -303,21 +350,21 @@ export default function DashboardPage() {
             <div className="progress-bar">
               <div
                 className="progress-bar-fill"
-                style={{ width: `${stats.action_rate || 0}%` }}
+                style={{ width: `${dashboardData?.action_rate || 0}%` }}
               />
             </div>
           </div>
 
-          {/* Med Sync */}
+          {/* Audit Risks */}
           <div className="card p-6">
-            <p className="label-text mb-4">Med Sync Enrollment</p>
+            <p className="label-text mb-4">Audit Risks</p>
             <div className="flex items-center justify-between">
               <div>
-                <span className="text-3xl font-bold">{stats.med_sync_patients || 0}</span>
-                <span className="text-sm ml-2" style={{ color: 'var(--slate-400)' }}>patients enrolled</span>
+                <span className="text-3xl font-bold text-amber-400">0</span>
+                <span className="text-sm ml-2" style={{ color: 'var(--slate-400)' }}>active risks</span>
               </div>
-              <div className="type-icon auto">
-                <Activity className="w-5 h-5" />
+              <div className="type-icon audit">
+                <ShieldAlert className="w-5 h-5" />
               </div>
             </div>
           </div>
@@ -325,7 +372,7 @@ export default function DashboardPage() {
           {/* Rx Count */}
           <div className="card p-6">
             <p className="label-text mb-4">Prescriptions (30 days)</p>
-            <span className="text-3xl font-bold">{(stats.rx_count || 0).toLocaleString()}</span>
+            <span className="text-3xl font-bold">{(dashboardData?.rx_count || totalOpps || 0).toLocaleString()}</span>
           </div>
         </div>
       </div>
@@ -343,63 +390,68 @@ export default function DashboardPage() {
           </Link>
         </div>
         
-        <table className="data-table">
-          <thead>
-            <tr>
-              <th>Patient</th>
-              <th>Conditions</th>
-              <th className="text-right">Opportunities</th>
-              <th className="text-right">Potential Margin</th>
-              <th className="text-right">Last Visit</th>
-            </tr>
-          </thead>
-          <tbody>
-            {patientsData && patientsData.length > 0 ? (
-              patientsData.map((patient: any) => (
-                <tr key={patient.patient_id}>
-                  <td>
-                    <Link 
-                      href={`/dashboard/opportunities`} 
-                      className="hover:text-[var(--teal-400)]"
-                      style={{ color: 'var(--teal-500)' }}
-                    >
-                      <div className="font-medium">
-                        {formatPatientName(patient.first_name, patient.last_name, patient.patient_hash)}
-                      </div>
-                      {patient.date_of_birth && (
-                        <div className="text-xs" style={{ color: 'var(--slate-400)' }}>
-                          DOB: {formatDOB(patient.date_of_birth)}
+        <div className="overflow-x-auto">
+          <table className="w-full">
+            <thead>
+              <tr style={{ borderBottom: '1px solid var(--navy-600)' }}>
+                <th className="text-left text-xs font-semibold uppercase tracking-wider px-6 py-4" style={{ color: 'var(--slate-400)', width: '200px' }}>Patient</th>
+                <th className="text-left text-xs font-semibold uppercase tracking-wider px-6 py-4" style={{ color: 'var(--slate-400)', width: '250px' }}>Conditions</th>
+                <th className="text-center text-xs font-semibold uppercase tracking-wider px-6 py-4" style={{ color: 'var(--slate-400)', width: '120px' }}>Opportunities</th>
+                <th className="text-right text-xs font-semibold uppercase tracking-wider px-6 py-4" style={{ color: 'var(--slate-400)', width: '200px' }}>Potential Margin</th>
+                <th className="text-right text-xs font-semibold uppercase tracking-wider px-6 py-4" style={{ color: 'var(--slate-400)', width: '120px' }}>Last Visit</th>
+              </tr>
+            </thead>
+            <tbody>
+              {topPatients && topPatients.length > 0 ? (
+                topPatients.map((patient: any) => (
+                  <tr key={patient.patient_id} style={{ borderBottom: '1px solid var(--navy-600)' }} className="hover:bg-[var(--navy-700)]">
+                    <td className="px-6 py-4">
+                      <Link 
+                        href={`/dashboard/patients/${patient.patient_id}`} 
+                        className="hover:text-[var(--teal-400)] transition-colors"
+                        style={{ color: 'var(--teal-500)' }}
+                      >
+                        <div className="font-semibold">
+                          {formatPatientName(patient.first_name, patient.last_name, patient.patient_hash)}
                         </div>
-                      )}
-                    </Link>
-                  </td>
-                  <td>
-                    <div className="flex flex-wrap gap-1">
-                      {patient.chronic_conditions?.slice(0, 3).map((condition: string) => (
-                        <span key={condition} className="badge badge-slate">
-                          {condition}
-                        </span>
-                      ))}
-                    </div>
-                  </td>
-                  <td className="text-right font-semibold">{patient.opportunity_count}</td>
-                  <td className="text-right value-positive">
-                    {formatCurrency(Number(patient.total_margin) || 0)}
-                  </td>
-                  <td className="text-right" style={{ color: 'var(--slate-400)' }}>
-                    {patient.last_visit ? new Date(patient.last_visit).toLocaleDateString() : '-'}
+                        {patient.date_of_birth && (
+                          <div className="text-xs mt-0.5" style={{ color: 'var(--slate-400)' }}>
+                            DOB: {formatDOB(patient.date_of_birth)}
+                          </div>
+                        )}
+                      </Link>
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="flex flex-wrap gap-1">
+                        {(patient.chronic_conditions || []).slice(0, 3).map((condition: string) => (
+                          <span key={condition} className="badge badge-slate text-xs">
+                            {condition}
+                          </span>
+                        ))}
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 text-center">
+                      <span className="font-semibold text-white">{patient.opportunity_count}</span>
+                    </td>
+                    <td className="px-6 py-4 text-right">
+                      <div className="text-emerald-400 font-semibold">{formatCurrency(patient.total_margin)}/yr</div>
+                      <div className="text-xs" style={{ color: 'var(--slate-400)' }}>{formatShortCurrency(patient.total_margin / 12)}/mo</div>
+                    </td>
+                    <td className="px-6 py-4 text-right" style={{ color: 'var(--slate-400)' }}>
+                      {patient.last_visit ? new Date(patient.last_visit).toLocaleDateString() : '-'}
+                    </td>
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td colSpan={5} className="text-center py-12" style={{ color: 'var(--slate-400)' }}>
+                    No patients with opportunities found
                   </td>
                 </tr>
-              ))
-            ) : (
-              <tr>
-                <td colSpan={5} className="text-center py-8" style={{ color: 'var(--slate-400)' }}>
-                  No patients with opportunities found
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   );
