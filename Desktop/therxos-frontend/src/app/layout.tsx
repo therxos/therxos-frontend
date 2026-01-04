@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
@@ -39,31 +39,17 @@ export default function DashboardLayout({
 }) {
   const router = useRouter();
   const pathname = usePathname();
-  const { user, isAuthenticated, logout } = useAuthStore();
+  const { user, isAuthenticated, logout, _hasHydrated } = useAuthStore();
   const { sidebarOpen, toggleSidebar } = useUIStore();
-  const [isHydrated, setIsHydrated] = useState(false);
-
-  // Wait for hydration before checking auth
-  useEffect(() => {
-    setIsHydrated(true);
-  }, []);
 
   useEffect(() => {
-    if (isHydrated && !isAuthenticated) {
+    if (_hasHydrated && !isAuthenticated) {
       router.push('/login');
     }
-  }, [isHydrated, isAuthenticated, router]);
+  }, [_hasHydrated, isAuthenticated, router]);
 
   // Show loading while hydrating
-  if (!isHydrated) {
-    return (
-      <div className="min-h-screen flex items-center justify-center" style={{ background: 'var(--navy-900)' }}>
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[var(--teal-500)]" />
-      </div>
-    );
-  }
-
-  if (!isAuthenticated) {
+  if (!_hasHydrated || !isAuthenticated) {
     return (
       <div className="min-h-screen flex items-center justify-center" style={{ background: 'var(--navy-900)' }}>
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[var(--teal-500)]" />
