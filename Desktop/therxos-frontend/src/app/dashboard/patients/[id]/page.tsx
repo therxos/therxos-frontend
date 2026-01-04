@@ -1,231 +1,140 @@
 'use client';
 
-import { useQuery } from '@tanstack/react-query';
-import { patientsApi } from '@/lib/api';
-import { useAuthStore } from '@/store';
-import Link from 'next/link';
-import { useParams } from 'next/navigation';
-import { 
-  ArrowLeft, 
-  Calendar, 
-  Pill, 
-  AlertTriangle, 
+import { useState, useEffect } from 'react';
+import { useParams, useRouter } from 'next/navigation';
+import {
+  ArrowLeft,
+  Pill,
+  DollarSign,
+  Building2,
+  AlertCircle,
   CheckCircle,
   Clock,
-  DollarSign,
-  Activity
+  RefreshCw,
+  FileText,
+  Heart,
 } from 'lucide-react';
 
-// Demo patient data
-const DEMO_PATIENT = {
-  patient_id: '1',
-  patient_hash: 'abc123de456789',
-  date_of_birth: '1955-03-15',
-  chronic_conditions: ['Diabetes', 'Hypertension', 'High Cholesterol'],
-  med_sync_date: 15,
-  primary_insurance_bin: '610014',
-  primary_insurance_pcn: 'ABC',
-  prescriptions: [
-    { rx_number: 'RX100001', drug_name: 'Metformin 500mg', quantity: 90, days_supply: 30, last_fill: '2025-12-20' },
-    { rx_number: 'RX100002', drug_name: 'Lisinopril 10mg', quantity: 30, days_supply: 30, last_fill: '2025-12-20' },
-    { rx_number: 'RX100003', drug_name: 'Atorvastatin 20mg', quantity: 30, days_supply: 30, last_fill: '2025-12-15' },
-  ],
-  opportunities: [
-    { opportunity_id: '1', type: 'ndc_optimization', current_drug: 'Lisinopril 10mg', recommended: 'Lisinopril 10mg (Alt NDC)', margin: 2.50, status: 'new' },
-    { opportunity_id: '2', type: 'brand_to_generic', current_drug: 'Lipitor 20mg', recommended: 'Atorvastatin 20mg', margin: 41.80, status: 'new' },
-  ],
-};
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://therxos-backend-production.up.railway.app';
 
-function formatCurrency(value: number) {
-  return new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency: 'USD',
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(value);
+interface Patient {
+  patient_id: string;
+  first_name: string;
+  last_name: string;
+  date_of_birth: string;
+  primary_insurance_bin: string;
+  primary_insurance_pcn: string;
+  primary_insurance_group: string;
+  chronic_conditions: string[];
+  profile_data: { medications?: string[] };
 }
 
-export default function PatientDetailPage() {
+interface Prescription {
+  prescription_id: string;
+  rx_number: string;
+  drug_name: string;
+  dispensed_date: string;
+  patient_pay: number;
+  insurance_pay: number;
+  prescriber_name: string;
+}
+
+interface Opportunity {
+  opportunity_id: string;
+  current_drug_name: string;
+  recommended_drug_name: string;
+  annual_margin_gain: number;
+  status: string;
+}
+
+function formatCurrency(value: number): string {
+  if (isNaN(value)) return '$0.00';
+  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(value);
+}
+
+function formatDate(date: string): string {
+  if (!date) return 'N/A';
+  return new Date(date).toLocaleDateString('en-US');
+}
+
+function formatPatientName(first?: string, last?: string): string {
+  const f = (first || '').toUpperCase().slice(0, 3);
+  const l = (last || '').toUpperCase().slice(0, 3);
+  return f && l ? `${l},${f}` : l || 'UNKNOWN';
+}
+
+function StatusBadge({ status }: { status: string }) {
+  const styles: Record<string, string> = {
+    new: 'bg-amber-500/20 text-amber-400',
+    reviewed: 'bg-blue-500/20 text-blue-400',
+    actioned: 'bg-emerald-500/20 text-emerald-400',
+    dismissed: 'bg-slate-500/20 text-slate-400',
+  };
+  const labels: Record<string, string> = {
+    new: 'Not Submitted', reviewed: 'Submitted', actioned: 'Captured', dismissed: 'Denied',
+  };
+  return <span className={`px-2 py-1 rounded text-xs font-medium ${styles[status] || styles.new}`}>{labels[status] || status}</span>;
+}
+
+export default function PatientProfilePage() {
   const params = useParams();
-  const user = useAuthStore((state) => state.user);
-  const isDemo = user?.userId === 'demo-user-001';
+  const router = useRouter();
+  const patientId = params.id as string;
+  const [patient, setPatient] = useState<Patient | null>(null);
+  const [prescriptions, setPrescriptions] = useState<Prescription[]>([]);
+  const [opportunities, setOpportunities] = useState<Opportunity[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const { data: patient, isLoading } = useQuery({
-    queryKey: ['patient', params.id],
-    queryFn: () => patientsApi.getOne(params.id as string).then((r) => r.data),
-    enabled: !isDemo,
-  });
+  useEffect(() => { if (patientId) fetchPatientData(); }, [patientId]);
 
-  const displayPatient = isDemo ? DEMO_PATIENT : patient;
-
-  if (isLoading && !isDemo) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[var(--teal-500)]" />
-      </div>
-    );
+  async function fetchPatientData() {
+    setLoading(true);
+    try {
+      const token = localStorage.getItem('therxos_token');
+      const res = await fetch(`${API_URL}/api/patients/${patientId}`, { headers: { Authorization: `Bearer ${token}` } });
+      if (res.ok) {
+        const data = await res.json();
+        setPatient(data.patient);
+        setPrescriptions(data.prescriptions || []);
+        setOpportunities(data.opportunities || []);
+      }
+    } catch (e) { console.error(e); }
+    setLoading(false);
   }
 
-  if (!displayPatient) {
-    return (
-      <div className="text-center py-12" style={{ color: 'var(--slate-400)' }}>
-        <p>Patient not found</p>
-        <Link href="/dashboard/patients" className="btn btn-secondary mt-4">
-          Back to Patients
-        </Link>
-      </div>
-    );
-  }
+  const totalOppValue = opportunities.reduce((s, o) => s + (Number(o.annual_margin_gain) || 0), 0);
+  const pending = opportunities.filter(o => o.status === 'new').length;
+  const captured = opportunities.filter(o => o.status === 'actioned').length;
 
-  const totalMargin = displayPatient.opportunities?.reduce((sum: number, o: any) => sum + (o.margin || 0), 0) || 0;
+  if (loading) return <div className="min-h-screen bg-[#0a1628] flex items-center justify-center"><RefreshCw className="w-8 h-8 text-[#14b8a6] animate-spin" /></div>;
+  if (!patient) return <div className="min-h-screen bg-[#0a1628] p-8 text-center py-20"><AlertCircle className="w-12 h-12 text-slate-600 mx-auto mb-4" /><h2 className="text-xl font-semibold text-white mb-2">Patient Not Found</h2><button onClick={() => router.back()} className="px-4 py-2 bg-[#1e3a5f] text-white rounded-lg">Go Back</button></div>;
 
   return (
-    <div className="space-y-6 animate-fade-in">
-      {/* Header */}
-      <div className="flex items-center gap-4">
-        <Link href="/dashboard/patients" className="icon-btn">
-          <ArrowLeft className="w-5 h-5" />
-        </Link>
-        <div>
-          <h1 className="text-2xl font-bold flex items-center gap-3">
-            Patient 
-            <span className="font-mono text-lg" style={{ color: 'var(--teal-500)' }}>
-              {displayPatient.patient_hash?.slice(0, 8)}...
-            </span>
-          </h1>
-          <p className="mt-1" style={{ color: 'var(--slate-400)' }}>
-            DOB: {displayPatient.date_of_birth ? new Date(displayPatient.date_of_birth).toLocaleDateString() : 'Unknown'}
-          </p>
-        </div>
+    <div className="min-h-screen bg-[#0a1628] p-8">
+      <div className="flex items-center gap-4 mb-8">
+        <button onClick={() => router.back()} className="p-2 hover:bg-[#1e3a5f] rounded-lg"><ArrowLeft className="w-5 h-5 text-slate-400" /></button>
+        <div className="w-14 h-14 rounded-full bg-[#14b8a6]/20 flex items-center justify-center"><span className="text-lg font-bold text-[#14b8a6]">{(patient.last_name || '?').slice(0,2).toUpperCase()}</span></div>
+        <div><h1 className="text-2xl font-bold text-white">{formatPatientName(patient.first_name, patient.last_name)}</h1><p className="text-slate-400">DOB: {formatDate(patient.date_of_birth)}</p></div>
       </div>
 
-      {/* Stats Row */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <div className="stat-card teal p-4">
-          <p className="label-text mb-1">Active Rx</p>
-          <p className="text-2xl font-bold" style={{ color: 'var(--teal-500)' }}>
-            {displayPatient.prescriptions?.length || 0}
-          </p>
-        </div>
-        <div className="stat-card amber p-4">
-          <p className="label-text mb-1">Opportunities</p>
-          <p className="text-2xl font-bold" style={{ color: 'var(--amber-500)' }}>
-            {displayPatient.opportunities?.length || 0}
-          </p>
-        </div>
-        <div className="stat-card green p-4">
-          <p className="label-text mb-1">Potential Margin</p>
-          <p className="text-2xl font-bold" style={{ color: 'var(--green-500)' }}>
-            {formatCurrency(totalMargin)}
-          </p>
-        </div>
-        <div className="stat-card blue p-4">
-          <p className="label-text mb-1">Med Sync</p>
-          <p className="text-2xl font-bold" style={{ color: 'var(--blue-500)' }}>
-            {displayPatient.med_sync_date ? `Day ${displayPatient.med_sync_date}` : 'Not enrolled'}
-          </p>
-        </div>
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+        <div className="bg-[#0d2137] border border-[#1e3a5f] rounded-xl p-5"><div className="flex items-center gap-3"><div className="w-10 h-10 rounded-lg bg-[#14b8a6]/20 flex items-center justify-center"><DollarSign className="w-5 h-5 text-[#14b8a6]" /></div><div><p className="text-sm text-slate-400">Opp Value</p><p className="text-xl font-bold text-[#14b8a6]">{formatCurrency(totalOppValue)}</p></div></div></div>
+        <div className="bg-[#0d2137] border border-[#1e3a5f] rounded-xl p-5"><div className="flex items-center gap-3"><div className="w-10 h-10 rounded-lg bg-amber-500/20 flex items-center justify-center"><Clock className="w-5 h-5 text-amber-400" /></div><div><p className="text-sm text-slate-400">Pending</p><p className="text-xl font-bold text-amber-400">{pending}</p></div></div></div>
+        <div className="bg-[#0d2137] border border-[#1e3a5f] rounded-xl p-5"><div className="flex items-center gap-3"><div className="w-10 h-10 rounded-lg bg-emerald-500/20 flex items-center justify-center"><CheckCircle className="w-5 h-5 text-emerald-400" /></div><div><p className="text-sm text-slate-400">Captured</p><p className="text-xl font-bold text-emerald-400">{captured}</p></div></div></div>
+        <div className="bg-[#0d2137] border border-[#1e3a5f] rounded-xl p-5"><div className="flex items-center gap-3"><div className="w-10 h-10 rounded-lg bg-blue-500/20 flex items-center justify-center"><Pill className="w-5 h-5 text-blue-400" /></div><div><p className="text-sm text-slate-400">Prescriptions</p><p className="text-xl font-bold text-blue-400">{prescriptions.length}</p></div></div></div>
       </div>
 
-      {/* Main Content */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Conditions & Insurance */}
-        <div className="card p-6">
-          <h2 className="text-lg font-semibold mb-4">Patient Info</h2>
-          
-          <div className="mb-6">
-            <p className="label-text mb-2">Chronic Conditions</p>
-            <div className="flex flex-wrap gap-2">
-              {displayPatient.chronic_conditions?.map((condition: string) => (
-                <span key={condition} className="badge badge-purple">{condition}</span>
-              ))}
-            </div>
-          </div>
-
-          <div>
-            <p className="label-text mb-2">Insurance</p>
-            <div className="space-y-1 text-sm">
-              <p>BIN: <span style={{ color: 'var(--slate-300)' }}>{displayPatient.primary_insurance_bin || '—'}</span></p>
-              <p>PCN: <span style={{ color: 'var(--slate-300)' }}>{displayPatient.primary_insurance_pcn || '—'}</span></p>
-            </div>
-          </div>
+        <div className="space-y-6">
+          <div className="bg-[#0d2137] border border-[#1e3a5f] rounded-xl p-6"><h2 className="text-lg font-semibold text-white mb-4 flex items-center gap-2"><Building2 className="w-5 h-5 text-[#14b8a6]" />Insurance</h2><div className="space-y-3"><div className="flex justify-between"><span className="text-slate-400">BIN</span><span className="text-white font-medium">{patient.primary_insurance_bin || 'N/A'}</span></div>{patient.primary_insurance_pcn && <div className="flex justify-between"><span className="text-slate-400">PCN</span><span className="text-white font-medium">{patient.primary_insurance_pcn}</span></div>}<div className="flex justify-between"><span className="text-slate-400">Group</span><span className="text-white font-medium">{patient.primary_insurance_group || 'N/A'}</span></div></div></div>
+          <div className="bg-[#0d2137] border border-[#1e3a5f] rounded-xl p-6"><h2 className="text-lg font-semibold text-white mb-4 flex items-center gap-2"><Heart className="w-5 h-5 text-red-400" />Chronic Conditions</h2>{patient.chronic_conditions?.length > 0 ? <div className="flex flex-wrap gap-2">{patient.chronic_conditions.map((c, i) => <span key={i} className="px-3 py-1 bg-red-500/20 text-red-400 rounded-full text-sm">{c}</span>)}</div> : <p className="text-slate-500">None identified</p>}</div>
+          <div className="bg-[#0d2137] border border-[#1e3a5f] rounded-xl p-6"><h2 className="text-lg font-semibold text-white mb-4 flex items-center gap-2"><FileText className="w-5 h-5 text-blue-400" />Medication List</h2>{patient.profile_data?.medications?.length > 0 ? <ul className="space-y-2 max-h-64 overflow-y-auto">{patient.profile_data.medications.map((m, i) => <li key={i} className="text-sm text-slate-300 flex items-center gap-2"><Pill className="w-3 h-3 text-slate-500" />{m}</li>)}</ul> : <p className="text-slate-500">No medications on file</p>}</div>
         </div>
 
-        {/* Prescriptions */}
-        <div className="lg:col-span-2 card p-6">
-          <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
-            <Pill className="w-5 h-5" style={{ color: 'var(--teal-500)' }} />
-            Active Prescriptions
-          </h2>
-          
-          {displayPatient.prescriptions?.length > 0 ? (
-            <div className="space-y-3">
-              {displayPatient.prescriptions.map((rx: any) => (
-                <div 
-                  key={rx.rx_number} 
-                  className="flex items-center justify-between p-3 rounded-lg"
-                  style={{ background: 'var(--navy-700)' }}
-                >
-                  <div>
-                    <p className="font-medium">{rx.drug_name}</p>
-                    <p className="text-sm" style={{ color: 'var(--slate-400)' }}>
-                      {rx.rx_number} • Qty {rx.quantity} • {rx.days_supply} days
-                    </p>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-sm" style={{ color: 'var(--slate-400)' }}>Last fill</p>
-                    <p className="text-sm">{new Date(rx.last_fill).toLocaleDateString()}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <p style={{ color: 'var(--slate-400)' }}>No active prescriptions</p>
-          )}
+        <div className="lg:col-span-2 space-y-6">
+          <div className="bg-[#0d2137] border border-[#1e3a5f] rounded-xl overflow-hidden"><div className="px-6 py-4 border-b border-[#1e3a5f]"><h2 className="text-lg font-semibold text-white flex items-center gap-2"><DollarSign className="w-5 h-5 text-emerald-400" />Opportunities ({opportunities.length})</h2></div>{opportunities.length > 0 ? <table className="w-full"><thead className="bg-[#1e3a5f]/50"><tr><th className="text-left text-xs font-semibold text-slate-400 uppercase px-4 py-3">Opportunity</th><th className="text-right text-xs font-semibold text-slate-400 uppercase px-4 py-3">Value</th><th className="text-center text-xs font-semibold text-slate-400 uppercase px-4 py-3">Status</th></tr></thead><tbody>{opportunities.map(o => <tr key={o.opportunity_id} className="border-t border-[#1e3a5f]"><td className="px-4 py-3 text-sm text-white">{o.current_drug_name} → <span className="text-[#14b8a6]">{o.recommended_drug_name}</span></td><td className="px-4 py-3 text-right text-emerald-400 font-medium">{formatCurrency(Number(o.annual_margin_gain) || 0)}</td><td className="px-4 py-3 text-center"><StatusBadge status={o.status} /></td></tr>)}</tbody></table> : <div className="p-8 text-center text-slate-500">No opportunities</div>}</div>
+          <div className="bg-[#0d2137] border border-[#1e3a5f] rounded-xl overflow-hidden"><div className="px-6 py-4 border-b border-[#1e3a5f]"><h2 className="text-lg font-semibold text-white flex items-center gap-2"><Pill className="w-5 h-5 text-blue-400" />Recent Prescriptions ({prescriptions.length})</h2></div>{prescriptions.length > 0 ? <table className="w-full"><thead className="bg-[#1e3a5f]/50"><tr><th className="text-left text-xs font-semibold text-slate-400 uppercase px-4 py-3">Drug</th><th className="text-left text-xs font-semibold text-slate-400 uppercase px-4 py-3">Prescriber</th><th className="text-center text-xs font-semibold text-slate-400 uppercase px-4 py-3">Date</th><th className="text-right text-xs font-semibold text-slate-400 uppercase px-4 py-3">GP</th></tr></thead><tbody>{prescriptions.slice(0,20).map(rx => <tr key={rx.prescription_id} className="border-t border-[#1e3a5f]"><td className="px-4 py-3"><div className="text-sm text-white">{rx.drug_name}</div><div className="text-xs text-slate-500">Rx# {rx.rx_number}</div></td><td className="px-4 py-3 text-sm text-slate-300">{rx.prescriber_name || 'Unknown'}</td><td className="px-4 py-3 text-center text-sm text-slate-400">{formatDate(rx.dispensed_date)}</td><td className="px-4 py-3 text-right text-emerald-400 font-medium">{formatCurrency((Number(rx.insurance_pay) || 0) + (Number(rx.patient_pay) || 0))}</td></tr>)}</tbody></table> : <div className="p-8 text-center text-slate-500">No prescriptions</div>}</div>
         </div>
-      </div>
-
-      {/* Opportunities */}
-      <div className="card p-6">
-        <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
-          <AlertTriangle className="w-5 h-5" style={{ color: 'var(--amber-500)' }} />
-          Opportunities
-        </h2>
-        
-        {displayPatient.opportunities?.length > 0 ? (
-          <div className="space-y-3">
-            {displayPatient.opportunities.map((opp: any) => (
-              <div 
-                key={opp.opportunity_id} 
-                className="flex items-center justify-between p-4 rounded-lg border"
-                style={{ background: 'var(--navy-700)', borderColor: 'var(--navy-600)' }}
-              >
-                <div className="flex items-center gap-4">
-                  <div className={`type-icon ${opp.type === 'ndc_optimization' ? 'ndc' : opp.type === 'brand_to_generic' ? 'brand' : 'therapy'}`}>
-                    <DollarSign className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <p className="font-medium">{opp.current_drug} → {opp.recommended}</p>
-                    <p className="text-sm" style={{ color: 'var(--slate-400)' }}>
-                      {opp.type.replace(/_/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase())}
-                    </p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-4">
-                  <span className="value-positive text-lg">{formatCurrency(opp.margin)}</span>
-                  <span className={`badge ${opp.status === 'new' ? 'badge-amber' : opp.status === 'actioned' ? 'badge-green' : 'badge-slate'}`}>
-                    {opp.status}
-                  </span>
-                </div>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <div className="text-center py-8" style={{ color: 'var(--slate-400)' }}>
-            <CheckCircle className="w-12 h-12 mx-auto mb-3 opacity-30" />
-            <p>No opportunities for this patient</p>
-          </div>
-        )}
       </div>
     </div>
   );

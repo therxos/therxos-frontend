@@ -1,289 +1,362 @@
 'use client';
 
-import { useQuery } from '@tanstack/react-query';
-import { analyticsApi } from '@/lib/api';
-import { useAuthStore } from '@/store';
-import { 
-  TrendingUp, 
+import { useState, useEffect } from 'react';
+import {
+  TrendingUp,
   TrendingDown,
-  DollarSign, 
-  Users, 
-  Pill,
-  Target,
-  Calendar,
-  BarChart3
+  DollarSign,
+  Users,
+  Activity,
+  ChevronDown,
+  ChevronUp,
+  BarChart3,
+  RefreshCw,
+  Building2,
+  Stethoscope,
 } from 'lucide-react';
 
-// Demo data
-const DEMO_STATS = {
-  total_opportunities: 156,
-  actioned_opportunities: 89,
-  dismissed_opportunities: 23,
-  pending_opportunities: 44,
-  total_margin_captured: 12450,
-  total_margin_potential: 8200,
-  action_rate: 67,
-  avg_margin_per_opportunity: 140,
-};
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://therxos-backend-production.up.railway.app';
 
-const DEMO_MONTHLY = [
-  { month: 'Aug', captured: 1800, potential: 2200 },
-  { month: 'Sep', captured: 2100, potential: 1900 },
-  { month: 'Oct', captured: 2400, potential: 2100 },
-  { month: 'Nov', captured: 2800, potential: 1800 },
-  { month: 'Dec', captured: 3350, potential: 2200 },
-];
+interface AnalyticsData {
+  pharmacy_wide: {
+    total_rx_count: number;
+    total_gross_profit: number;
+    gp_per_rx: number;
+    opportunity_impact: number;
+    projected_gp_per_rx: number;
+  };
+  by_bin: Array<{
+    bin: string;
+    rx_count: number;
+    gross_profit: number;
+    gp_per_rx: number;
+    opportunity_count: number;
+    opportunity_value: number;
+  }>;
+  by_group: Array<{
+    bin: string;
+    group: string;
+    rx_count: number;
+    gross_profit: number;
+    gp_per_rx: number;
+    opportunity_count: number;
+    opportunity_value: number;
+  }>;
+  by_prescriber: Array<{
+    prescriber_name: string;
+    rx_count: number;
+    gross_profit: number;
+    gp_per_rx: number;
+    opportunity_count: number;
+    opportunity_value: number;
+  }>;
+}
 
-function formatCurrency(value: number) {
+function formatCurrency(value: number): string {
+  if (isNaN(value)) return '$0.00';
   return new Intl.NumberFormat('en-US', {
     style: 'currency',
     currency: 'USD',
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
   }).format(value);
 }
 
-function StatCard({ 
-  label, 
-  value, 
-  subValue,
-  icon: Icon, 
+function formatNumber(value: number): string {
+  if (isNaN(value)) return '0';
+  return new Intl.NumberFormat('en-US').format(value);
+}
+
+// Expandable section for BIN/Group/Prescriber breakdowns
+function BreakdownSection({
+  title,
+  icon: Icon,
+  data,
+  columns,
+  expanded,
+  onToggle,
   color,
-  trend
-}: { 
-  label: string; 
-  value: string | number; 
-  subValue?: string;
-  icon: any; 
+}: {
+  title: string;
+  icon: React.ElementType;
+  data: Array<Record<string, unknown>>;
+  columns: Array<{ key: string; label: string; format?: (v: unknown) => string; align?: string }>;
+  expanded: boolean;
+  onToggle: () => void;
   color: string;
-  trend?: number;
 }) {
+  const sortedData = [...data].sort((a, b) => (b.gp_per_rx as number) - (a.gp_per_rx as number));
+  const avgGpRx = data.length > 0 ? data.reduce((s, d) => s + (d.gp_per_rx as number), 0) / data.length : 0;
+
+  const colorClasses: Record<string, { bg: string; text: string }> = {
+    teal: { bg: 'bg-[#14b8a6]/20', text: 'text-[#14b8a6]' },
+    blue: { bg: 'bg-blue-500/20', text: 'text-blue-400' },
+    purple: { bg: 'bg-purple-500/20', text: 'text-purple-400' },
+  };
+  const colors = colorClasses[color] || colorClasses.teal;
+
   return (
-    <div className="stat-card p-6" style={{ '--card-color': `var(--${color}-500)` } as any}>
-      <div className="flex items-start justify-between">
-        <div>
-          <p className="label-text mb-2">{label}</p>
-          <p className="text-3xl font-bold" style={{ color: `var(--${color}-500)` }}>
-            {value}
-          </p>
-          {subValue && (
-            <p className="text-sm mt-1" style={{ color: 'var(--slate-400)' }}>{subValue}</p>
-          )}
-          {trend !== undefined && (
-            <div className={`flex items-center gap-1 text-xs mt-2 ${trend >= 0 ? 'text-[var(--green-500)]' : 'text-[var(--red-500)]'}`}>
-              {trend >= 0 ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
-              <span>{trend >= 0 ? '+' : ''}{trend}% vs last month</span>
-            </div>
-          )}
+    <div className="bg-[#0d2137] border border-[#1e3a5f] rounded-xl overflow-hidden">
+      <div
+        onClick={onToggle}
+        className="flex items-center justify-between px-6 py-4 cursor-pointer hover:bg-[#1e3a5f]/30 transition-colors"
+      >
+        <div className="flex items-center gap-3">
+          <div className={`w-10 h-10 rounded-lg ${colors.bg} flex items-center justify-center`}>
+            <Icon className={`w-5 h-5 ${colors.text}`} />
+          </div>
+          <div>
+            <h3 className="font-semibold text-white">{title}</h3>
+            <p className="text-sm text-slate-400">{data.length} records • Avg GP/Rx: {formatCurrency(avgGpRx)}</p>
+          </div>
         </div>
-        <div className={`type-icon`} style={{ background: `rgba(var(--${color}-rgb), 0.15)`, color: `var(--${color}-500)` }}>
-          <Icon className="w-5 h-5" />
+        <div className="flex items-center gap-4">
+          {expanded ? (
+            <ChevronUp className="w-5 h-5 text-slate-400" />
+          ) : (
+            <ChevronDown className="w-5 h-5 text-slate-400" />
+          )}
         </div>
       </div>
+
+      {expanded && (
+        <div className="border-t border-[#1e3a5f]">
+          <table className="w-full">
+            <thead className="bg-[#1e3a5f]/50">
+              <tr>
+                {columns.map((col) => (
+                  <th
+                    key={col.key}
+                    className={`text-xs font-semibold text-slate-400 uppercase tracking-wider px-4 py-3 ${
+                      col.align === 'right' ? 'text-right' : 'text-left'
+                    }`}
+                  >
+                    {col.label}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {sortedData.map((row, idx) => (
+                <tr key={idx} className="border-t border-[#1e3a5f] hover:bg-[#1e3a5f]/20">
+                  {columns.map((col) => (
+                    <td
+                      key={col.key}
+                      className={`px-4 py-3 text-sm ${col.align === 'right' ? 'text-right' : 'text-left'} ${
+                        col.key === 'gp_per_rx'
+                          ? (row[col.key] as number) >= avgGpRx
+                            ? 'text-emerald-400 font-semibold'
+                            : 'text-amber-400 font-semibold'
+                          : 'text-slate-300'
+                      }`}
+                    >
+                      {col.format ? col.format(row[col.key]) : String(row[col.key] || 'N/A')}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 }
 
 export default function AnalyticsPage() {
-  const user = useAuthStore((state) => state.user);
-  const isDemo = user?.userId === 'demo-user-001';
+  const [analytics, setAnalytics] = useState<AnalyticsData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set(['bin']));
 
-  const { data: performance, isLoading } = useQuery({
-    queryKey: ['analytics-performance'],
-    queryFn: () => analyticsApi.performance(30).then((r) => r.data),
-    enabled: !isDemo,
-  });
+  useEffect(() => {
+    fetchAnalytics();
+  }, []);
 
-  const stats = isDemo ? DEMO_STATS : (performance || DEMO_STATS);
-  const monthlyData = DEMO_MONTHLY; // Always use demo for chart
+  async function fetchAnalytics() {
+    setLoading(true);
+    try {
+      const token = localStorage.getItem('therxos_token');
+      const res = await fetch(`${API_URL}/api/analytics/gp-metrics`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setAnalytics(data);
+      }
+    } catch (e) {
+      console.error('Failed to load analytics:', e);
+    }
+    setLoading(false);
+  }
 
-  // Calculate max for chart scaling
-  const maxValue = Math.max(...monthlyData.flatMap(m => [m.captured, m.potential]));
+  function toggleSection(section: string) {
+    setExpandedSections((prev) => {
+      const next = new Set(prev);
+      if (next.has(section)) next.delete(section);
+      else next.add(section);
+      return next;
+    });
+  }
+
+  // Calculate display values
+  const gpPerRx = analytics?.pharmacy_wide?.gp_per_rx || 0;
+  const projectedGpPerRx = analytics?.pharmacy_wide?.projected_gp_per_rx || gpPerRx;
+  const totalRx = analytics?.pharmacy_wide?.total_rx_count || 0;
+  const totalGP = analytics?.pharmacy_wide?.total_gross_profit || 0;
+  const oppImpact = analytics?.pharmacy_wide?.opportunity_impact || 0;
+  const gpPerRxChange = projectedGpPerRx - gpPerRx;
 
   return (
-    <div className="space-y-6 animate-fade-in">
+    <div className="min-h-screen bg-[#0a1628] p-8">
       {/* Header */}
-      <div>
-        <h1 className="text-2xl font-bold">Analytics</h1>
-        <p className="mt-1" style={{ color: 'var(--slate-400)' }}>
-          Performance overview for {user?.pharmacyName}
-        </p>
+      <div className="flex items-center justify-between mb-8">
+        <div>
+          <h1 className="text-2xl font-bold text-white">Analytics</h1>
+          <p className="text-slate-400 mt-1">GP/Rx performance metrics and opportunity impact</p>
+        </div>
+        <button
+          onClick={fetchAnalytics}
+          className="flex items-center gap-2 px-4 py-2 bg-[#1e3a5f] hover:bg-[#2d4a6f] text-white rounded-lg"
+        >
+          <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+          Refresh
+        </button>
       </div>
 
-      {/* Stats Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <div className="stat-card teal p-6">
-          <div className="flex items-start justify-between">
-            <div>
-              <p className="label-text mb-2">Margin Captured</p>
-              <p className="text-3xl font-bold" style={{ color: 'var(--teal-500)' }}>
-                {formatCurrency(stats.total_margin_captured)}
-              </p>
-              <div className="flex items-center gap-1 text-xs mt-2 text-[var(--green-500)]">
-                <TrendingUp className="w-3 h-3" />
-                <span>+18% vs last month</span>
-              </div>
-            </div>
-            <div className="type-icon auto">
-              <DollarSign className="w-5 h-5" />
-            </div>
-          </div>
+      {loading ? (
+        <div className="flex items-center justify-center py-20">
+          <RefreshCw className="w-8 h-8 text-[#14b8a6] animate-spin" />
         </div>
-
-        <div className="stat-card green p-6">
-          <div className="flex items-start justify-between">
-            <div>
-              <p className="label-text mb-2">Action Rate</p>
-              <p className="text-3xl font-bold" style={{ color: 'var(--green-500)' }}>
-                {stats.action_rate}%
-              </p>
-              <p className="text-sm mt-1" style={{ color: 'var(--slate-400)' }}>
-                {stats.actioned_opportunities} of {stats.total_opportunities} actioned
-              </p>
-            </div>
-            <div className="type-icon brand">
-              <Target className="w-5 h-5" />
-            </div>
-          </div>
-        </div>
-
-        <div className="stat-card amber p-6">
-          <div className="flex items-start justify-between">
-            <div>
-              <p className="label-text mb-2">Pending Value</p>
-              <p className="text-3xl font-bold" style={{ color: 'var(--amber-500)' }}>
-                {formatCurrency(stats.total_margin_potential)}
-              </p>
-              <p className="text-sm mt-1" style={{ color: 'var(--slate-400)' }}>
-                {stats.pending_opportunities} opportunities
-              </p>
-            </div>
-            <div className="type-icon interchange">
-              <Pill className="w-5 h-5" />
-            </div>
-          </div>
-        </div>
-
-        <div className="stat-card blue p-6">
-          <div className="flex items-start justify-between">
-            <div>
-              <p className="label-text mb-2">Avg per Opportunity</p>
-              <p className="text-3xl font-bold" style={{ color: 'var(--blue-500)' }}>
-                {formatCurrency(stats.avg_margin_per_opportunity)}
-              </p>
-              <p className="text-sm mt-1" style={{ color: 'var(--slate-400)' }}>
-                per actioned item
-              </p>
-            </div>
-            <div className="type-icon ndc">
-              <BarChart3 className="w-5 h-5" />
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Chart Section */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2 card p-6">
-          <h2 className="text-lg font-semibold mb-6">Monthly Performance</h2>
-          
-          {/* Simple Bar Chart */}
-          <div className="space-y-4">
-            {monthlyData.map((month) => (
-              <div key={month.month} className="space-y-2">
-                <div className="flex items-center justify-between text-sm">
-                  <span style={{ color: 'var(--slate-300)' }}>{month.month}</span>
-                  <span style={{ color: 'var(--slate-400)' }}>
-                    {formatCurrency(month.captured)} captured
-                  </span>
+      ) : (
+        <>
+          {/* Top Stats Cards */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+            {/* Current GP/Rx */}
+            <div className="bg-[#0d2137] border border-[#1e3a5f] rounded-xl p-6">
+              <div className="flex items-start justify-between">
+                <div>
+                  <p className="text-sm text-slate-400 mb-1">Current GP/Rx</p>
+                  <p className="text-3xl font-bold text-[#14b8a6]">{formatCurrency(gpPerRx)}</p>
+                  <p className="text-xs text-slate-500 mt-2">Based on {formatNumber(totalRx)} scripts</p>
                 </div>
-                <div className="flex gap-2 h-8">
-                  <div 
-                    className="rounded-md transition-all"
-                    style={{ 
-                      width: `${(month.captured / maxValue) * 100}%`,
-                      background: 'var(--teal-500)'
-                    }}
-                  />
-                  <div 
-                    className="rounded-md transition-all"
-                    style={{ 
-                      width: `${(month.potential / maxValue) * 100}%`,
-                      background: 'var(--amber-500)',
-                      opacity: 0.5
-                    }}
-                  />
+                <div className="w-12 h-12 rounded-lg bg-[#14b8a6]/20 flex items-center justify-center">
+                  <DollarSign className="w-6 h-6 text-[#14b8a6]" />
                 </div>
               </div>
-            ))}
+            </div>
+
+            {/* Projected GP/Rx */}
+            <div className="bg-[#0d2137] border border-[#1e3a5f] rounded-xl p-6">
+              <div className="flex items-start justify-between">
+                <div>
+                  <p className="text-sm text-slate-400 mb-1">Projected GP/Rx</p>
+                  <p className="text-3xl font-bold text-emerald-400">{formatCurrency(projectedGpPerRx)}</p>
+                  <div className="flex items-center gap-1 mt-2">
+                    {gpPerRxChange >= 0 ? (
+                      <TrendingUp className="w-4 h-4 text-emerald-400" />
+                    ) : (
+                      <TrendingDown className="w-4 h-4 text-red-400" />
+                    )}
+                    <span className={`text-xs ${gpPerRxChange >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                      {gpPerRxChange >= 0 ? '+' : ''}
+                      {formatCurrency(gpPerRxChange)} with opportunities
+                    </span>
+                  </div>
+                </div>
+                <div className="w-12 h-12 rounded-lg bg-emerald-500/20 flex items-center justify-center">
+                  <TrendingUp className="w-6 h-6 text-emerald-400" />
+                </div>
+              </div>
+            </div>
+
+            {/* Total GP */}
+            <div className="bg-[#0d2137] border border-[#1e3a5f] rounded-xl p-6">
+              <div className="flex items-start justify-between">
+                <div>
+                  <p className="text-sm text-slate-400 mb-1">Total Gross Profit</p>
+                  <p className="text-3xl font-bold text-blue-400">{formatCurrency(totalGP)}</p>
+                  <p className="text-xs text-slate-500 mt-2">Last 365 days</p>
+                </div>
+                <div className="w-12 h-12 rounded-lg bg-blue-500/20 flex items-center justify-center">
+                  <BarChart3 className="w-6 h-6 text-blue-400" />
+                </div>
+              </div>
+            </div>
+
+            {/* Opportunity Impact */}
+            <div className="bg-[#0d2137] border border-[#1e3a5f] rounded-xl p-6">
+              <div className="flex items-start justify-between">
+                <div>
+                  <p className="text-sm text-slate-400 mb-1">Opportunity Impact</p>
+                  <p className="text-3xl font-bold text-amber-400">{formatCurrency(oppImpact)}</p>
+                  <p className="text-xs text-slate-500 mt-2">Annual potential gain</p>
+                </div>
+                <div className="w-12 h-12 rounded-lg bg-amber-500/20 flex items-center justify-center">
+                  <Activity className="w-6 h-6 text-amber-400" />
+                </div>
+              </div>
+            </div>
           </div>
 
-          <div className="flex items-center gap-6 mt-6 pt-4" style={{ borderTop: '1px solid var(--navy-600)' }}>
-            <div className="flex items-center gap-2">
-              <div className="w-3 h-3 rounded" style={{ background: 'var(--teal-500)' }} />
-              <span className="text-sm" style={{ color: 'var(--slate-400)' }}>Captured</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="w-3 h-3 rounded" style={{ background: 'var(--amber-500)', opacity: 0.5 }} />
-              <span className="text-sm" style={{ color: 'var(--slate-400)' }}>Pending</span>
-            </div>
-          </div>
-        </div>
-
-        {/* Breakdown */}
-        <div className="card p-6">
-          <h2 className="text-lg font-semibold mb-6">Opportunity Breakdown</h2>
-          
+          {/* GP/Rx Breakdown Sections */}
           <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <span style={{ color: 'var(--slate-300)' }}>Actioned</span>
-              <span className="font-semibold" style={{ color: 'var(--green-500)' }}>{stats.actioned_opportunities}</span>
-            </div>
-            <div className="progress-bar">
-              <div 
-                className="progress-bar-fill" 
-                style={{ 
-                  width: `${(stats.actioned_opportunities / stats.total_opportunities) * 100}%`,
-                  background: 'var(--green-500)'
-                }} 
-              />
-            </div>
+            {/* By BIN */}
+            <BreakdownSection
+              title="GP/Rx by BIN"
+              icon={Building2}
+              data={analytics?.by_bin || []}
+              expanded={expandedSections.has('bin')}
+              onToggle={() => toggleSection('bin')}
+              color="teal"
+              columns={[
+                { key: 'bin', label: 'BIN' },
+                { key: 'rx_count', label: 'Rx Count', format: (v) => formatNumber(v as number), align: 'right' },
+                { key: 'gross_profit', label: 'Gross Profit', format: (v) => formatCurrency(v as number), align: 'right' },
+                { key: 'gp_per_rx', label: 'GP/Rx', format: (v) => formatCurrency(v as number), align: 'right' },
+                { key: 'opportunity_count', label: 'Opportunities', format: (v) => formatNumber(v as number), align: 'right' },
+                { key: 'opportunity_value', label: 'Opp Value', format: (v) => formatCurrency(v as number), align: 'right' },
+              ]}
+            />
 
-            <div className="flex items-center justify-between mt-4">
-              <span style={{ color: 'var(--slate-300)' }}>Pending</span>
-              <span className="font-semibold" style={{ color: 'var(--amber-500)' }}>{stats.pending_opportunities}</span>
-            </div>
-            <div className="progress-bar">
-              <div 
-                className="progress-bar-fill" 
-                style={{ 
-                  width: `${(stats.pending_opportunities / stats.total_opportunities) * 100}%`,
-                  background: 'var(--amber-500)'
-                }} 
-              />
-            </div>
+            {/* By Group */}
+            <BreakdownSection
+              title="GP/Rx by BIN + Group"
+              icon={Users}
+              data={analytics?.by_group || []}
+              expanded={expandedSections.has('group')}
+              onToggle={() => toggleSection('group')}
+              color="blue"
+              columns={[
+                { key: 'bin', label: 'BIN' },
+                { key: 'group', label: 'Group' },
+                { key: 'rx_count', label: 'Rx Count', format: (v) => formatNumber(v as number), align: 'right' },
+                { key: 'gross_profit', label: 'Gross Profit', format: (v) => formatCurrency(v as number), align: 'right' },
+                { key: 'gp_per_rx', label: 'GP/Rx', format: (v) => formatCurrency(v as number), align: 'right' },
+                { key: 'opportunity_count', label: 'Opportunities', format: (v) => formatNumber(v as number), align: 'right' },
+                { key: 'opportunity_value', label: 'Opp Value', format: (v) => formatCurrency(v as number), align: 'right' },
+              ]}
+            />
 
-            <div className="flex items-center justify-between mt-4">
-              <span style={{ color: 'var(--slate-300)' }}>Dismissed</span>
-              <span className="font-semibold" style={{ color: 'var(--slate-500)' }}>{stats.dismissed_opportunities}</span>
-            </div>
-            <div className="progress-bar">
-              <div 
-                className="progress-bar-fill" 
-                style={{ 
-                  width: `${(stats.dismissed_opportunities / stats.total_opportunities) * 100}%`,
-                  background: 'var(--slate-500)'
-                }} 
-              />
-            </div>
+            {/* By Prescriber */}
+            <BreakdownSection
+              title="GP/Rx by Prescriber"
+              icon={Stethoscope}
+              data={analytics?.by_prescriber || []}
+              expanded={expandedSections.has('prescriber')}
+              onToggle={() => toggleSection('prescriber')}
+              color="purple"
+              columns={[
+                { key: 'prescriber_name', label: 'Prescriber' },
+                { key: 'rx_count', label: 'Rx Count', format: (v) => formatNumber(v as number), align: 'right' },
+                { key: 'gross_profit', label: 'Gross Profit', format: (v) => formatCurrency(v as number), align: 'right' },
+                { key: 'gp_per_rx', label: 'GP/Rx', format: (v) => formatCurrency(v as number), align: 'right' },
+                { key: 'opportunity_count', label: 'Opportunities', format: (v) => formatNumber(v as number), align: 'right' },
+                { key: 'opportunity_value', label: 'Opp Value', format: (v) => formatCurrency(v as number), align: 'right' },
+              ]}
+            />
           </div>
-
-          <div className="mt-6 pt-4 text-center" style={{ borderTop: '1px solid var(--navy-600)' }}>
-            <p className="text-sm" style={{ color: 'var(--slate-400)' }}>Total Opportunities</p>
-            <p className="text-2xl font-bold mt-1">{stats.total_opportunities}</p>
-          </div>
-        </div>
-      </div>
+        </>
+      )}
     </div>
   );
 }

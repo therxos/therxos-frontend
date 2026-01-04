@@ -593,14 +593,46 @@ export default function OpportunitiesPage() {
       if (typeFilter && o.opportunity_type !== typeFilter) return false;
       // Search filter
       if (search) {
-        const s = search.toLowerCase();
-        const matchesPatient = (o.patient_first_name?.toLowerCase().includes(s) || 
-                               o.patient_last_name?.toLowerCase().includes(s) ||
-                               o.patient_hash?.toLowerCase().includes(s));
+        const s = search.toLowerCase().trim();
+        
+        // Build searchable patient name variations
+        const firstName = (o.patient_first_name || '').toLowerCase();
+        const lastName = (o.patient_last_name || '').toLowerCase();
+        const firstThree = firstName.slice(0, 3);
+        const lastThree = lastName.slice(0, 3);
+        
+        // Match against multiple formats:
+        // - "don,san" or "don, san" (formatted display)
+        // - "donald" or "sanchez" (full names)
+        // - "don san" or "san don" (either order, space separated)
+        // - "donald sanchez" (full name space separated)
+        const formattedName = `${lastThree},${firstThree}`.toLowerCase(); // "san,don"
+        const formattedNameSpace = `${lastThree}, ${firstThree}`.toLowerCase(); // "san, don"
+        const fullName = `${firstName} ${lastName}`.toLowerCase(); // "donald sanchez"
+        const fullNameReverse = `${lastName} ${firstName}`.toLowerCase(); // "sanchez donald"
+        const fullNameComma = `${lastName},${firstName}`.toLowerCase(); // "sanchez,donald"
+        
+        const matchesPatient = (
+          firstName.includes(s) ||
+          lastName.includes(s) ||
+          formattedName.includes(s.replace(/\s+/g, '')) || // remove spaces from search
+          formattedNameSpace.includes(s) ||
+          fullName.includes(s) ||
+          fullNameReverse.includes(s) ||
+          fullNameComma.includes(s.replace(/\s+/g, ',')) ||
+          o.patient_hash?.toLowerCase().includes(s)
+        );
+        
         const matchesDrug = (o.current_drug_name?.toLowerCase().includes(s) ||
                             o.recommended_drug_name?.toLowerCase().includes(s));
         const matchesPrescriber = o.prescriber_name?.toLowerCase().includes(s);
-        if (!matchesPatient && !matchesDrug && !matchesPrescriber) return false;
+        const matchesInsurance = (
+          o.insurance_bin?.toLowerCase().includes(s) ||
+          o.insurance_group?.toLowerCase().includes(s) ||
+          o.contract_id?.toLowerCase().includes(s)
+        );
+        
+        if (!matchesPatient && !matchesDrug && !matchesPrescriber && !matchesInsurance) return false;
       }
       return true;
     }),
