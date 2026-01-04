@@ -231,7 +231,7 @@ function SidePanel({
             </div>
             <div>
               <div className="text-xs text-slate-500">Annual Value</div>
-              <div className="text-lg font-semibold text-[#14b8a6]">{formatCurrency(opportunity.annual_margin_gain)}</div>
+              <div className="text-lg font-semibold text-[#14b8a6]">{formatCurrency(parseFloat(opportunity.annual_margin_gain) || parseFloat(opportunity.potential_margin_gain) * 12 || 0)}</div>
             </div>
           </div>
         </div>
@@ -309,14 +309,13 @@ export default function OpportunitiesPage() {
       const opps: Opportunity[] = data.opportunities || [];
       setOpportunities(opps);
 
-      // Group by patient
       const map = new Map<string, Patient>();
       opps.forEach(opp => {
         if (!map.has(opp.patient_id)) {
           map.set(opp.patient_id, {
             patient_id: opp.patient_id,
             patient_hash: opp.patient_hash || opp.patient_id.slice(0, 8),
-            date_of_birth: '',
+            date_of_birth: opp.patient_dob || '',
             insurance_bin: opp.insurance_bin || '',
             insurance_group: opp.insurance_group || '',
             opportunities: [],
@@ -325,7 +324,7 @@ export default function OpportunitiesPage() {
         }
         const p = map.get(opp.patient_id)!;
         p.opportunities.push(opp);
-        p.total_value += opp.annual_margin_gain || 0;
+        p.total_value += parseFloat(opp.annual_margin_gain) || parseFloat(opp.potential_margin_gain) * 12 || 0;
       });
       
       const sorted = Array.from(map.values()).sort((a, b) => b.total_value - a.total_value);
@@ -338,10 +337,10 @@ export default function OpportunitiesPage() {
         not_submitted: opps.filter(o => o.status === 'new').length,
         submitted: opps.filter(o => o.status === 'reviewed').length,
         captured: opps.filter(o => o.status === 'actioned').length,
-        total_annual: opps.reduce((s, o) => s + (o.annual_margin_gain || 0), 0),
-        not_submitted_annual: opps.filter(o => o.status === 'new').reduce((s, o) => s + (o.annual_margin_gain || 0), 0),
-        submitted_annual: opps.filter(o => o.status === 'reviewed').reduce((s, o) => s + (o.annual_margin_gain || 0), 0),
-        captured_annual: opps.filter(o => o.status === 'actioned').reduce((s, o) => s + (o.annual_margin_gain || 0), 0),
+        total_annual: opps.reduce((s, o) => s + (parseFloat(o.annual_margin_gain) || parseFloat(o.potential_margin_gain) * 12 || 0), 0),
+        not_submitted_annual: opps.filter(o => o.status === 'new').reduce((s, o) => s + (parseFloat(o.annual_margin_gain) || parseFloat(o.potential_margin_gain) * 12 || 0), 0),
+        submitted_annual: opps.filter(o => o.status === 'reviewed').reduce((s, o) => s + (parseFloat(o.annual_margin_gain) || parseFloat(o.potential_margin_gain) * 12 || 0), 0),
+        captured_annual: opps.filter(o => o.status === 'actioned').reduce((s, o) => s + (parseFloat(o.annual_margin_gain) || parseFloat(o.potential_margin_gain) * 12 || 0), 0),
       });
       setLastSync(new Date());
     } catch (e) {
@@ -569,7 +568,7 @@ export default function OpportunitiesPage() {
                                 <div className="text-sm text-slate-400 max-w-xs truncate">{action || rationale}</div>
                               </td>
                               <td className="px-5 py-3">
-                                <div className="text-emerald-400 font-semibold">{formatCurrency(opp.annual_margin_gain)}</div>
+                                <div className="text-emerald-400 font-semibold">{formatCurrency(parseFloat(opp.annual_margin_gain) || parseFloat(opp.potential_margin_gain) * 12 || 0)}</div>
                               </td>
                               <td className="px-5 py-3">
                                 <div className="text-sm text-slate-300">{opp.prescriber_name || 'Unknown'}</div>
