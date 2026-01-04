@@ -41,9 +41,9 @@ const DEMO_CHANGES = {
 };
 
 const DEMO_TOP_PATIENTS = [
-  { patient_id: '1', patient_hash: 'abc123de', chronic_conditions: ['Diabetes', 'Hypertension', 'High Cholesterol'], opportunity_count: 4, total_margin: 1200, last_visit: '2026-01-01' },
-  { patient_id: '2', patient_hash: 'xyz789uv', chronic_conditions: ['COPD', 'Asthma'], opportunity_count: 3, total_margin: 850, last_visit: '2025-12-31' },
-  { patient_id: '3', patient_hash: 'def456gh', chronic_conditions: ['Diabetes', 'Depression'], opportunity_count: 2, total_margin: 600, last_visit: '2025-12-30' },
+  { patient_id: '1', patient_hash: 'abc123de', first_name: 'Mickey', last_name: 'Mouse', date_of_birth: '1928-11-18', chronic_conditions: ['Diabetes', 'Hypertension', 'High Cholesterol'], opportunity_count: 4, total_margin: 1200, last_visit: '2026-01-01' },
+  { patient_id: '2', patient_hash: 'xyz789uv', first_name: 'Donald', last_name: 'Duck', date_of_birth: '1934-06-09', chronic_conditions: ['COPD', 'Asthma'], opportunity_count: 3, total_margin: 850, last_visit: '2025-12-31' },
+  { patient_id: '3', patient_hash: 'def456gh', first_name: 'Goofy', last_name: 'Goof', date_of_birth: '1932-05-25', chronic_conditions: ['Diabetes', 'Depression'], opportunity_count: 2, total_margin: 600, last_visit: '2025-12-30' },
 ];
 
 function formatCurrency(value: number) {
@@ -53,6 +53,27 @@ function formatCurrency(value: number) {
     minimumFractionDigits: 0,
     maximumFractionDigits: 0,
   }).format(value);
+}
+
+function formatShortCurrency(value: number) {
+  if (value >= 1000000) return `$${(value / 1000000).toFixed(1)}M`;
+  if (value >= 1000) return `$${(value / 1000).toFixed(1)}K`;
+  return formatCurrency(value);
+}
+
+function formatPatientName(firstName?: string, lastName?: string, hash?: string) {
+  if (firstName && lastName) {
+    const first3 = firstName.slice(0, 3).toUpperCase();
+    const last3 = lastName.slice(0, 3).toUpperCase();
+    return `${last3},${first3}`;
+  }
+  return hash?.slice(0, 8) || 'Unknown';
+}
+
+function formatDOB(dob?: string) {
+  if (!dob) return '';
+  const date = new Date(dob);
+  return date.toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' });
 }
 
 function StatCard({
@@ -97,13 +118,15 @@ function OpportunityTypeRow({
   iconClass, 
   label, 
   count, 
-  value 
+  annualValue,
+  monthlyValue 
 }: { 
   icon: any; 
   iconClass: string; 
   label: string; 
   count: number; 
-  value: number;
+  annualValue: number;
+  monthlyValue: number;
 }) {
   return (
     <div className="flex items-center justify-between py-3" style={{ borderBottom: '1px solid var(--navy-600)' }}>
@@ -116,7 +139,10 @@ function OpportunityTypeRow({
           <p className="text-xs" style={{ color: 'var(--slate-400)' }}>{count} opportunities</p>
         </div>
       </div>
-      <p className="font-bold text-[var(--green-500)]">{formatCurrency(value)}</p>
+      <div className="text-right">
+        <p className="font-bold text-[var(--green-500)]">{formatCurrency(annualValue)}</p>
+        <p className="text-xs" style={{ color: 'var(--slate-400)' }}>{formatShortCurrency(monthlyValue)}/mo</p>
+      </div>
     </div>
   );
 }
@@ -237,6 +263,8 @@ export default function DashboardPage() {
             {typeData && typeData.length > 0 ? (
               typeData.map((item: any) => {
                 const config = typeConfig[item.opportunity_type] || typeConfig.ndc_optimization;
+                const annualValue = Number(item.total_margin) || 0;
+                const monthlyValue = annualValue / 12;
                 return (
                   <OpportunityTypeRow
                     key={item.opportunity_type}
@@ -244,7 +272,8 @@ export default function DashboardPage() {
                     iconClass={config.iconClass}
                     label={config.label}
                     count={parseInt(item.count)}
-                    value={parseFloat(item.total_margin) || 0}
+                    annualValue={annualValue}
+                    monthlyValue={monthlyValue}
                   />
                 );
               })
@@ -306,7 +335,7 @@ export default function DashboardPage() {
         <div className="flex items-center justify-between p-6" style={{ borderBottom: '1px solid var(--navy-600)' }}>
           <h2 className="text-lg font-semibold">Top Opportunity Patients</h2>
           <Link 
-            href="/dashboard/patients?hasOpportunities=true" 
+            href="/dashboard/opportunities" 
             className="text-sm flex items-center gap-1 transition-colors hover:text-[var(--teal-400)]"
             style={{ color: 'var(--teal-500)' }}
           >
@@ -317,7 +346,7 @@ export default function DashboardPage() {
         <table className="data-table">
           <thead>
             <tr>
-              <th>Patient ID</th>
+              <th>Patient</th>
               <th>Conditions</th>
               <th className="text-right">Opportunities</th>
               <th className="text-right">Potential Margin</th>
@@ -330,11 +359,18 @@ export default function DashboardPage() {
                 <tr key={patient.patient_id}>
                   <td>
                     <Link 
-                      href={`/dashboard/patients/${patient.patient_id}`} 
-                      className="font-mono text-sm hover:text-[var(--teal-400)]"
+                      href={`/dashboard/opportunities`} 
+                      className="hover:text-[var(--teal-400)]"
                       style={{ color: 'var(--teal-500)' }}
                     >
-                      {patient.patient_hash?.slice(0, 8)}...
+                      <div className="font-medium">
+                        {formatPatientName(patient.first_name, patient.last_name, patient.patient_hash)}
+                      </div>
+                      {patient.date_of_birth && (
+                        <div className="text-xs" style={{ color: 'var(--slate-400)' }}>
+                          DOB: {formatDOB(patient.date_of_birth)}
+                        </div>
+                      )}
                     </Link>
                   </td>
                   <td>
@@ -348,7 +384,7 @@ export default function DashboardPage() {
                   </td>
                   <td className="text-right font-semibold">{patient.opportunity_count}</td>
                   <td className="text-right value-positive">
-                    {formatCurrency(patient.total_margin)}
+                    {formatCurrency(Number(patient.total_margin) || 0)}
                   </td>
                   <td className="text-right" style={{ color: 'var(--slate-400)' }}>
                     {patient.last_visit ? new Date(patient.last_visit).toLocaleDateString() : '-'}

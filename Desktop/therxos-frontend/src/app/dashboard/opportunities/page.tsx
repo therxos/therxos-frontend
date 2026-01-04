@@ -30,6 +30,9 @@ interface Opportunity {
   status: string;
   created_at: string;
   patient_hash?: string;
+  patient_first_name?: string;
+  patient_last_name?: string;
+  patient_dob?: string;
   insurance_bin?: string;
   insurance_group?: string;
   prescriber_name?: string;
@@ -38,6 +41,8 @@ interface Opportunity {
 interface Patient {
   patient_id: string;
   patient_hash: string;
+  first_name: string;
+  last_name: string;
   date_of_birth: string;
   insurance_bin: string;
   insurance_group: string;
@@ -84,6 +89,18 @@ function formatDate(dateStr: string) {
 function getInitials(str: string) {
   if (!str) return 'PT';
   return str.slice(0, 2).toUpperCase();
+}
+
+function formatPatientName(firstName?: string, lastName?: string, hash?: string) {
+  if (firstName && lastName) {
+    const last3 = lastName.slice(0, 3).toUpperCase();
+    const first3 = firstName.slice(0, 3).toUpperCase();
+    return `${last3},${first3}`;
+  }
+  if (lastName) {
+    return lastName.slice(0, 6).toUpperCase();
+  }
+  return hash?.slice(0, 8) || 'Unknown';
 }
 
 // Status Dropdown
@@ -164,10 +181,10 @@ function SidePanel({
           <div className="text-xs text-slate-500 uppercase tracking-wider mb-3">Patient</div>
           <div className="flex items-center gap-3 mb-3">
             <div className="w-12 h-12 rounded-full bg-[#14b8a6] flex items-center justify-center text-[#0a1628] font-semibold">
-              {getInitials(patient.patient_hash)}
+              {getInitials(patient.last_name || patient.patient_hash)}
             </div>
             <div>
-              <div className="font-semibold text-white">{patient.patient_hash?.slice(0, 12) || 'Unknown'}</div>
+              <div className="font-semibold text-white">{formatPatientName(patient.first_name, patient.last_name, patient.patient_hash)}</div>
               <div className="text-sm text-slate-400">DOB: {formatDate(patient.date_of_birth)}</div>
             </div>
           </div>
@@ -231,7 +248,7 @@ function SidePanel({
             </div>
             <div>
               <div className="text-xs text-slate-500">Annual Value</div>
-              <div className="text-lg font-semibold text-[#14b8a6]">{formatCurrency(parseFloat(opportunity.annual_margin_gain) || parseFloat(opportunity.potential_margin_gain) * 12 || 0)}</div>
+              <div className="text-lg font-semibold text-[#14b8a6]">{formatCurrency(Number(opportunity.annual_margin_gain) || Number(opportunity.potential_margin_gain) * 12 || 0)}</div>
             </div>
           </div>
         </div>
@@ -311,10 +328,13 @@ export default function OpportunitiesPage() {
 
       const map = new Map<string, Patient>();
       opps.forEach(opp => {
+        const annualValue = Number(opp.annual_margin_gain) || Number(opp.potential_margin_gain) * 12 || 0;
         if (!map.has(opp.patient_id)) {
           map.set(opp.patient_id, {
             patient_id: opp.patient_id,
             patient_hash: opp.patient_hash || opp.patient_id.slice(0, 8),
+            first_name: opp.patient_first_name || '',
+            last_name: opp.patient_last_name || '',
             date_of_birth: opp.patient_dob || '',
             insurance_bin: opp.insurance_bin || '',
             insurance_group: opp.insurance_group || '',
@@ -324,7 +344,7 @@ export default function OpportunitiesPage() {
         }
         const p = map.get(opp.patient_id)!;
         p.opportunities.push(opp);
-        p.total_value += parseFloat(opp.annual_margin_gain) || parseFloat(opp.potential_margin_gain) * 12 || 0;
+        p.total_value += annualValue;
       });
       
       const sorted = Array.from(map.values()).sort((a, b) => b.total_value - a.total_value);
@@ -332,15 +352,21 @@ export default function OpportunitiesPage() {
       if (sorted.length) setExpanded(new Set([sorted[0].patient_id]));
 
       // Stats
+      const getAnnualValue = (o: Opportunity) => {
+        const annual = Number(o.annual_margin_gain) || 0;
+        const potential = Number(o.potential_margin_gain) || 0;
+        return annual > 0 ? annual : potential * 12;
+      };
+      
       setStats({
         total: opps.length,
         not_submitted: opps.filter(o => o.status === 'new').length,
         submitted: opps.filter(o => o.status === 'reviewed').length,
         captured: opps.filter(o => o.status === 'actioned').length,
-        total_annual: opps.reduce((s, o) => s + (parseFloat(o.annual_margin_gain) || parseFloat(o.potential_margin_gain) * 12 || 0), 0),
-        not_submitted_annual: opps.filter(o => o.status === 'new').reduce((s, o) => s + (parseFloat(o.annual_margin_gain) || parseFloat(o.potential_margin_gain) * 12 || 0), 0),
-        submitted_annual: opps.filter(o => o.status === 'reviewed').reduce((s, o) => s + (parseFloat(o.annual_margin_gain) || parseFloat(o.potential_margin_gain) * 12 || 0), 0),
-        captured_annual: opps.filter(o => o.status === 'actioned').reduce((s, o) => s + (parseFloat(o.annual_margin_gain) || parseFloat(o.potential_margin_gain) * 12 || 0), 0),
+        total_annual: opps.reduce((s, o) => s + getAnnualValue(o), 0),
+        not_submitted_annual: opps.filter(o => o.status === 'new').reduce((s, o) => s + getAnnualValue(o), 0),
+        submitted_annual: opps.filter(o => o.status === 'reviewed').reduce((s, o) => s + getAnnualValue(o), 0),
+        captured_annual: opps.filter(o => o.status === 'actioned').reduce((s, o) => s + getAnnualValue(o), 0),
       });
       setLastSync(new Date());
     } catch (e) {
@@ -516,11 +542,11 @@ export default function OpportunitiesPage() {
                 >
                   <div className="flex items-center gap-4">
                     <div className="w-10 h-10 rounded-full bg-slate-700 flex items-center justify-center text-sm font-semibold text-white">
-                      {getInitials(patient.patient_hash)}
+                      {getInitials(patient.last_name || patient.patient_hash)}
                     </div>
                     <div>
                       <div className="flex items-center gap-2">
-                        <span className="font-semibold text-white">{patient.patient_hash?.slice(0, 10)}</span>
+                        <span className="font-semibold text-white">{formatPatientName(patient.first_name, patient.last_name, patient.patient_hash)}</span>
                         <span className="px-2 py-0.5 bg-[#14b8a6]/20 text-[#14b8a6] text-xs rounded font-medium">
                           {patient.insurance_bin || 'N/A'}
                         </span>
@@ -568,7 +594,7 @@ export default function OpportunitiesPage() {
                                 <div className="text-sm text-slate-400 max-w-xs truncate">{action || rationale}</div>
                               </td>
                               <td className="px-5 py-3">
-                                <div className="text-emerald-400 font-semibold">{formatCurrency(parseFloat(opp.annual_margin_gain) || parseFloat(opp.potential_margin_gain) * 12 || 0)}</div>
+                                <div className="text-emerald-400 font-semibold">{formatCurrency(Number(opp.annual_margin_gain) || Number(opp.potential_margin_gain) * 12 || 0)}</div>
                               </td>
                               <td className="px-5 py-3">
                                 <div className="text-sm text-slate-300">{opp.prescriber_name || 'Unknown'}</div>
