@@ -65,15 +65,14 @@ function formatPatientName(first?: string, last?: string): string {
 
 function StatusBadge({ status }: { status: string }) {
   const styles: Record<string, string> = {
-    new: 'bg-amber-500/20 text-amber-400',
-    reviewed: 'bg-blue-500/20 text-blue-400',
-    actioned: 'bg-emerald-500/20 text-emerald-400',
-    dismissed: 'bg-slate-500/20 text-slate-400',
+    'Not Submitted': 'bg-amber-500/20 text-amber-400',
+    'Submitted': 'bg-blue-500/20 text-blue-400',
+    'Approved': 'bg-emerald-500/20 text-emerald-400',
+    'Completed': 'bg-green-500/20 text-green-400',
+    'Denied': 'bg-slate-500/20 text-slate-400',
+    "Didn't Work": 'bg-red-500/20 text-red-400',
   };
-  const labels: Record<string, string> = {
-    new: 'Not Submitted', reviewed: 'Submitted', actioned: 'Captured', dismissed: 'Denied',
-  };
-  return <span className={`px-2 py-1 rounded text-xs font-medium ${styles[status] || styles.new}`}>{labels[status] || status}</span>;
+  return <span className={`px-2 py-1 rounded text-xs font-medium ${styles[status] || 'bg-amber-500/20 text-amber-400'}`}>{status}</span>;
 }
 
 export default function PatientProfilePage() {

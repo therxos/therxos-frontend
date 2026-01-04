@@ -166,11 +166,12 @@ function StatusDropdown({ status, onChange }: { status: string; onChange: (s: st
   const [open, setOpen] = useState(false);
   
   const statuses = [
-    { value: 'new', label: 'Not Submitted', color: 'bg-amber-500' },
-    { value: 'reviewed', label: 'Submitted', color: 'bg-blue-500' },
-    { value: 'actioned', label: 'Captured', color: 'bg-emerald-500' },
-    { value: 'dismissed', label: 'Denied', color: 'bg-slate-500' },
-    { value: 'didnt_work', label: "Didn't Work", color: 'bg-red-500' },
+    { value: 'Not Submitted', label: 'Not Submitted', color: 'bg-amber-500' },
+    { value: 'Submitted', label: 'Submitted', color: 'bg-blue-500' },
+    { value: 'Approved', label: 'Approved', color: 'bg-emerald-500' },
+    { value: 'Completed', label: 'Completed', color: 'bg-green-500' },
+    { value: 'Denied', label: 'Denied', color: 'bg-slate-500' },
+    { value: "Didn't Work", label: "Didn't Work", color: 'bg-red-500' },
   ];
   
   const current = statuses.find(s => s.value === status) || statuses[0];
@@ -399,7 +400,7 @@ function SidePanel({
           Send Now
         </button>
         <button
-          onClick={() => onStatusChange(opportunity.opportunity_id, 'reviewed')}
+          onClick={() => onStatusChange(opportunity.opportunity_id, 'Submitted')}
           className="w-full py-2.5 bg-[#1e3a5f] hover:bg-[#2d4a6f] text-white rounded-lg font-medium flex items-center justify-center gap-2 border border-[#2d4a6f]"
         >
           <Clock className="w-4 h-4" />
@@ -462,14 +463,14 @@ export default function OpportunitiesPage() {
       // Calculate stats
       const calcStats: Stats = {
         total: opps.length,
-        not_submitted: opps.filter(o => o.status === 'new').length,
-        submitted: opps.filter(o => o.status === 'reviewed').length,
-        captured: opps.filter(o => o.status === 'actioned').length,
-        didnt_work: opps.filter(o => o.status === 'didnt_work').length,
+        not_submitted: opps.filter(o => o.status === 'Not Submitted').length,
+        submitted: opps.filter(o => o.status === 'Submitted').length,
+        captured: opps.filter(o => o.status === 'Completed' || o.status === 'Approved').length,
+        didnt_work: opps.filter(o => o.status === "Didn't Work").length,
         total_annual: opps.reduce((s, o) => s + getAnnualValue(o), 0),
-        not_submitted_annual: opps.filter(o => o.status === 'new').reduce((s, o) => s + getAnnualValue(o), 0),
-        submitted_annual: opps.filter(o => o.status === 'reviewed').reduce((s, o) => s + getAnnualValue(o), 0),
-        captured_annual: opps.filter(o => o.status === 'actioned').reduce((s, o) => s + getAnnualValue(o), 0),
+        not_submitted_annual: opps.filter(o => o.status === 'Not Submitted').reduce((s, o) => s + getAnnualValue(o), 0),
+        submitted_annual: opps.filter(o => o.status === 'Submitted').reduce((s, o) => s + getAnnualValue(o), 0),
+        captured_annual: opps.filter(o => o.status === 'Completed' || o.status === 'Approved').reduce((s, o) => s + getAnnualValue(o), 0),
       };
       setStats(calcStats);
       setLastSync(new Date());
@@ -557,14 +558,14 @@ export default function OpportunitiesPage() {
       const opps = opportunities.map(o => o.opportunity_id === id ? { ...o, status } : o);
       setStats({
         total: opps.length,
-        not_submitted: opps.filter(o => o.status === 'new').length,
-        submitted: opps.filter(o => o.status === 'reviewed').length,
-        captured: opps.filter(o => o.status === 'actioned').length,
-        didnt_work: opps.filter(o => o.status === 'didnt_work').length,
+        not_submitted: opps.filter(o => o.status === 'Not Submitted').length,
+        submitted: opps.filter(o => o.status === 'Submitted').length,
+        captured: opps.filter(o => o.status === 'Completed' || o.status === 'Approved').length,
+        didnt_work: opps.filter(o => o.status === "Didn't Work").length,
         total_annual: opps.reduce((s, o) => s + getAnnualValue(o), 0),
-        not_submitted_annual: opps.filter(o => o.status === 'new').reduce((s, o) => s + getAnnualValue(o), 0),
-        submitted_annual: opps.filter(o => o.status === 'reviewed').reduce((s, o) => s + getAnnualValue(o), 0),
-        captured_annual: opps.filter(o => o.status === 'actioned').reduce((s, o) => s + getAnnualValue(o), 0),
+        not_submitted_annual: opps.filter(o => o.status === 'Not Submitted').reduce((s, o) => s + getAnnualValue(o), 0),
+        submitted_annual: opps.filter(o => o.status === 'Submitted').reduce((s, o) => s + getAnnualValue(o), 0),
+        captured_annual: opps.filter(o => o.status === 'Completed' || o.status === 'Approved').reduce((s, o) => s + getAnnualValue(o), 0),
       });
     } catch (e) { console.error(e); }
   }
@@ -586,9 +587,9 @@ export default function OpportunitiesPage() {
     ...g,
     opportunities: g.opportunities.filter(o => {
       // Status filter
-      if (filter === 'not_submitted' && o.status !== 'new') return false;
-      if (filter === 'submitted' && o.status !== 'reviewed') return false;
-      if (filter === 'captured' && o.status !== 'actioned') return false;
+      if (filter === 'not_submitted' && o.status !== 'Not Submitted') return false;
+      if (filter === 'submitted' && o.status !== 'Submitted') return false;
+      if (filter === 'captured' && o.status !== 'Completed' && o.status !== 'Approved') return false;
       // Type filter from URL
       if (typeFilter && o.opportunity_type !== typeFilter) return false;
       // Search filter
@@ -796,7 +797,7 @@ export default function OpportunitiesPage() {
         ) : (
           filtered.map(group => {
             const isExpanded = expanded.has(group.id);
-            const capturedCount = group.opportunities.filter(o => o.status === 'actioned').length;
+            const capturedCount = group.opportunities.filter(o => o.status === 'Completed' || o.status === 'Approved').length;
             const groupTotal = group.opportunities.reduce((s, o) => s + getAnnualValue(o), 0);
             
             return (
