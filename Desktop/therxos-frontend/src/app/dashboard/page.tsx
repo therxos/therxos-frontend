@@ -122,7 +122,7 @@ function OpportunityTypeRow({
         </div>
       </div>
       <div className="text-right">
-        <p className="font-bold text-[var(--green-500)]">{formatCurrency(annualValue)}</p>
+        <p className="font-bold text-[var(--green-500)]">{formatCurrency(annualValue)}<span className="text-xs font-normal text-slate-400">/yr</span></p>
         <p className="text-xs" style={{ color: 'var(--slate-400)' }}>{formatShortCurrency(monthlyValue)}/mo</p>
       </div>
     </div>
@@ -156,8 +156,10 @@ export default function DashboardPage() {
   // Process opportunities for type breakdown and top patients
   const opportunities = oppData?.opportunities || [];
   
-  // Group by type
-  const byType = opportunities.reduce((acc: any, opp: any) => {
+  // Group by type - only count Not Submitted opportunities
+  const pendingOpportunities = opportunities.filter((o: any) => o.status === 'Not Submitted');
+  
+  const byType = pendingOpportunities.reduce((acc: any, opp: any) => {
     const type = opp.opportunity_type || 'unknown';
     if (!acc[type]) {
       acc[type] = { count: 0, totalMargin: 0 };
@@ -174,8 +176,8 @@ export default function DashboardPage() {
     total_margin: data.totalMargin,
   })).sort((a, b) => b.total_margin - a.total_margin);
 
-  // Group by patient for top patients
-  const byPatient = opportunities.reduce((acc: any, opp: any) => {
+  // Group by patient for top patients - only Not Submitted
+  const byPatient = pendingOpportunities.reduce((acc: any, opp: any) => {
     const pid = opp.patient_id;
     if (!acc[pid]) {
       acc[pid] = {
@@ -200,24 +202,43 @@ export default function DashboardPage() {
     .sort((a: any, b: any) => b.total_margin - a.total_margin)
     .slice(0, 5);
 
-  // Calculate stats
+  // Calculate stats - use V1 status values
   const totalOpps = opportunities.length;
-  const pendingOpps = opportunities.filter((o: any) => o.status === 'new').length;
-  const totalAnnual = opportunities.reduce((s: number, o: any) => {
+  const pendingOpps = opportunities.filter((o: any) => o.status === 'Not Submitted').length;
+  const capturedOpps = opportunities.filter((o: any) => o.status === 'Completed' || o.status === 'Approved');
+  
+  // Pending = Not Submitted opportunities
+  const pendingAnnual = opportunities
+    .filter((o: any) => o.status === 'Not Submitted')
+    .reduce((s: number, o: any) => {
+      const annual = Number(o.annual_margin_gain) || Number(o.potential_margin_gain) * 12 || 0;
+      return s + annual;
+    }, 0);
+  const pendingMonthly = pendingAnnual / 12;
+  
+  // Captured = Completed + Approved opportunities
+  const capturedAnnual = capturedOpps.reduce((s: number, o: any) => {
     const annual = Number(o.annual_margin_gain) || Number(o.potential_margin_gain) * 12 || 0;
     return s + annual;
   }, 0);
+  const capturedMonthly = capturedAnnual / 12;
 
   const stats = isDemo ? {
     pending_opportunities: 12,
-    pending_margin: 4250,
-    realized_margin: 0,
-    active_patients: 342,
+    pending_annual: 4250,
+    pending_monthly: 354,
+    captured_annual: 0,
+    captured_monthly: 0,
+    total_patients: 342,
+    patients_with_opps: 89,
   } : {
     pending_opportunities: pendingOpps,
-    pending_margin: totalAnnual,
-    realized_margin: dashboardData?.realized_margin || 0,
-    active_patients: dashboardData?.active_patients || Object.keys(byPatient).length,
+    pending_annual: pendingAnnual,
+    pending_monthly: pendingMonthly,
+    captured_annual: capturedAnnual,
+    captured_monthly: capturedMonthly,
+    total_patients: dashboardData?.total_patients || 0,
+    patients_with_opps: dashboardData?.patients_with_opportunities || Object.keys(byPatient).length,
   };
 
   const changes = performanceData?.changes || {};
@@ -264,29 +285,43 @@ export default function DashboardPage() {
 
       {/* Stats Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <StatCard
-          label="Pending Opportunities"
-          value={stats.pending_opportunities || 0}
-          change={changes.opportunities}
-          color="teal"
-        />
-        <StatCard
-          label="Potential Margin"
-          value={formatCurrency(stats.pending_margin || 0)}
-          change={changes.potential_margin}
-          color="green"
-        />
-        <StatCard
-          label="Margin Realized (30d)"
-          value={formatCurrency(stats.realized_margin || 0)}
-          change={changes.realized_margin}
-          color="amber"
-        />
-        <StatCard
-          label="Active Patients"
-          value={stats.active_patients || 0}
-          color="blue"
-        />
+        <div className="stat-card teal p-6">
+          <p className="label-text mb-2">Not Submitted</p>
+          <p className="text-3xl font-bold mb-1" style={{ color: 'var(--teal-500)' }}>
+            {(stats.pending_opportunities || 0).toLocaleString()}
+          </p>
+          <p className="text-xs" style={{ color: 'var(--slate-400)' }}>opportunities pending action</p>
+        </div>
+        
+        <div className="stat-card green p-6">
+          <p className="label-text mb-2">Potential Margin</p>
+          <p className="text-3xl font-bold mb-1" style={{ color: 'var(--green-500)' }}>
+            {formatCurrency(stats.pending_annual || 0)}
+          </p>
+          <p className="text-xs" style={{ color: 'var(--slate-400)' }}>
+            {formatShortCurrency(stats.pending_monthly || 0)}/mo annual opportunity
+          </p>
+        </div>
+        
+        <div className="stat-card amber p-6">
+          <p className="label-text mb-2">Captured Value</p>
+          <p className="text-3xl font-bold mb-1" style={{ color: 'var(--amber-500)' }}>
+            {formatCurrency(stats.captured_annual || 0)}
+          </p>
+          <p className="text-xs" style={{ color: 'var(--slate-400)' }}>
+            {formatShortCurrency(stats.captured_monthly || 0)}/mo realized
+          </p>
+        </div>
+        
+        <div className="stat-card blue p-6">
+          <p className="label-text mb-2">Patients</p>
+          <p className="text-3xl font-bold mb-1" style={{ color: 'var(--blue-500)' }}>
+            {(stats.total_patients || 0).toLocaleString()}
+          </p>
+          <p className="text-xs" style={{ color: 'var(--slate-400)' }}>
+            {stats.patients_with_opps || 0} with open opportunities
+          </p>
+        </div>
       </div>
 
       {/* Main Content Grid */}
