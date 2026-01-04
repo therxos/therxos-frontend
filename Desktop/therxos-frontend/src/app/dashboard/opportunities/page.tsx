@@ -1,347 +1,614 @@
 'use client';
 
-import { useState } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { opportunitiesApi } from '@/lib/api';
-import { useUIStore } from '@/store';
-import Link from 'next/link';
+import { useState, useEffect } from 'react';
 import {
   Search,
-  Filter,
-  CheckCircle2,
-  XCircle,
-  Eye,
   ChevronDown,
-  DollarSign,
-  AlertTriangle,
-  Pill,
+  ChevronUp,
+  X,
+  FileText,
+  Send,
+  Clock,
   RefreshCw,
-  ArrowUpDown,
+  DollarSign,
+  AlertCircle,
 } from 'lucide-react';
 
-const TYPE_LABELS: Record<string, { label: string; color: string; icon: any }> = {
-  ndc_optimization: { label: 'NDC Optimization', color: 'bg-blue-100 text-blue-800', icon: Pill },
-  brand_to_generic: { label: 'Brand → Generic', color: 'bg-green-100 text-green-800', icon: RefreshCw },
-  therapeutic_interchange: { label: 'Therapeutic Interchange', color: 'bg-purple-100 text-purple-800', icon: ArrowUpDown },
-  missing_therapy: { label: 'Missing Therapy', color: 'bg-orange-100 text-orange-800', icon: AlertTriangle },
-  audit_flag: { label: 'Audit Flag', color: 'bg-red-100 text-red-800', icon: AlertTriangle },
-};
+// Types
+interface Opportunity {
+  opportunity_id: string;
+  patient_id: string;
+  prescription_id: string;
+  opportunity_type: string;
+  current_ndc: string;
+  current_drug_name: string;
+  recommended_drug_name: string;
+  potential_margin_gain: number;
+  annual_margin_gain: number;
+  clinical_rationale: string;
+  clinical_priority: string;
+  status: string;
+  created_at: string;
+  patient_hash?: string;
+  insurance_bin?: string;
+  insurance_group?: string;
+  prescriber_name?: string;
+}
 
-const PRIORITY_LABELS: Record<string, { label: string; color: string }> = {
-  critical: { label: 'Critical', color: 'bg-red-100 text-red-800' },
-  high: { label: 'High', color: 'bg-orange-100 text-orange-800' },
-  medium: { label: 'Medium', color: 'bg-yellow-100 text-yellow-800' },
-  low: { label: 'Low', color: 'bg-gray-100 text-gray-600' },
-};
+interface Patient {
+  patient_id: string;
+  patient_hash: string;
+  date_of_birth: string;
+  insurance_bin: string;
+  insurance_group: string;
+  opportunities: Opportunity[];
+  total_value: number;
+}
 
+interface Stats {
+  total: number;
+  not_submitted: number;
+  submitted: number;
+  captured: number;
+  total_annual: number;
+  not_submitted_annual: number;
+  submitted_annual: number;
+  captured_annual: number;
+}
+
+// Helpers
 function formatCurrency(value: number) {
   return new Intl.NumberFormat('en-US', {
     style: 'currency',
     currency: 'USD',
     minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
   }).format(value);
 }
 
+function formatShortCurrency(value: number) {
+  if (value >= 1000000) return `$${(value / 1000000).toFixed(1)}M`;
+  if (value >= 1000) return `$${(value / 1000).toFixed(1)}K`;
+  return formatCurrency(value);
+}
+
+function formatDate(dateStr: string) {
+  if (!dateStr) return 'N/A';
+  return new Date(dateStr).toLocaleDateString('en-US', {
+    month: 'numeric',
+    day: 'numeric',
+    year: 'numeric',
+  });
+}
+
+function getInitials(str: string) {
+  if (!str) return 'PT';
+  return str.slice(0, 2).toUpperCase();
+}
+
+// Status Dropdown
+function StatusDropdown({ status, onChange }: { status: string; onChange: (s: string) => void }) {
+  const [open, setOpen] = useState(false);
+  
+  const statuses = [
+    { value: 'new', label: 'Not Submitted', color: 'bg-amber-500' },
+    { value: 'reviewed', label: 'Submitted', color: 'bg-blue-500' },
+    { value: 'actioned', label: 'Approved', color: 'bg-emerald-500' },
+    { value: 'dismissed', label: 'Denied', color: 'bg-red-500' },
+    { value: 'captured', label: 'Completed', color: 'bg-emerald-600' },
+  ];
+  
+  const current = statuses.find(s => s.value === status) || statuses[0];
+  
+  return (
+    <div className="relative">
+      <button
+        onClick={() => setOpen(!open)}
+        className={`${current.color} text-white px-3 py-1 rounded text-xs font-medium flex items-center gap-1`}
+      >
+        {current.label}
+        <ChevronDown className="w-3 h-3" />
+      </button>
+      {open && (
+        <>
+          <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
+          <div className="absolute right-0 mt-1 w-36 bg-[#0d2137] rounded-lg shadow-xl border border-[#1e3a5f] z-50 overflow-hidden">
+            {statuses.map(s => (
+              <button
+                key={s.value}
+                onClick={() => { onChange(s.value); setOpen(false); }}
+                className={`w-full px-3 py-2 text-left text-sm hover:bg-[#1e3a5f] ${
+                  s.value === status ? 'text-[#14b8a6]' : 'text-slate-300'
+                }`}
+              >
+                {s.label}
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+// Side Panel
+function SidePanel({
+  opportunity,
+  patient,
+  onClose,
+  onStatusChange,
+}: {
+  opportunity: Opportunity | null;
+  patient: Patient | null;
+  onClose: () => void;
+  onStatusChange: (id: string, status: string) => void;
+}) {
+  if (!opportunity || !patient) return null;
+  
+  const [rationale, action] = (opportunity.clinical_rationale || '').split('\n\nAction: ');
+  
+  return (
+    <aside className="fixed inset-y-0 right-0 w-[400px] bg-[#0d2137] border-l border-[#1e3a5f] shadow-2xl z-50 flex flex-col">
+      {/* Header */}
+      <div className="flex items-center justify-between px-6 py-4 border-b border-[#1e3a5f]">
+        <span className="font-semibold text-white">Opportunity Details</span>
+        <button onClick={onClose} className="text-slate-400 hover:text-white">
+          <X className="w-5 h-5" />
+        </button>
+      </div>
+      
+      {/* Content */}
+      <div className="flex-1 overflow-y-auto p-6 space-y-6">
+        {/* Patient */}
+        <div>
+          <div className="text-xs text-slate-500 uppercase tracking-wider mb-3">Patient</div>
+          <div className="flex items-center gap-3 mb-3">
+            <div className="w-12 h-12 rounded-full bg-[#14b8a6] flex items-center justify-center text-[#0a1628] font-semibold">
+              {getInitials(patient.patient_hash)}
+            </div>
+            <div>
+              <div className="font-semibold text-white">{patient.patient_hash?.slice(0, 12) || 'Unknown'}</div>
+              <div className="text-sm text-slate-400">DOB: {formatDate(patient.date_of_birth)}</div>
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <span className="px-2 py-1 bg-[#14b8a6]/20 text-[#14b8a6] text-xs rounded font-medium">
+              BIN: {patient.insurance_bin || 'N/A'}
+            </span>
+            <span className="px-2 py-1 bg-blue-500/20 text-blue-400 text-xs rounded font-medium">
+              Group: {patient.insurance_group || 'N/A'}
+            </span>
+          </div>
+        </div>
+        
+        {/* Opportunity */}
+        <div>
+          <div className="text-xs text-slate-500 uppercase tracking-wider mb-3">Opportunity</div>
+          <div className="bg-[#1e3a5f] rounded-lg p-4">
+            <div className="flex items-start gap-3 mb-4">
+              <div className="w-9 h-9 rounded-lg bg-purple-500/20 flex items-center justify-center">
+                <AlertCircle className="w-5 h-5 text-purple-400" />
+              </div>
+              <div>
+                <div className="font-medium text-white">{rationale}</div>
+                <div className="text-xs text-slate-400 mt-1">Clinical Review Required</div>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3 text-sm">
+              <div>
+                <div className="text-slate-500 text-xs">Current</div>
+                <div className="text-white">{opportunity.current_drug_name || 'N/A'}</div>
+              </div>
+              <div>
+                <div className="text-slate-500 text-xs">Recommended</div>
+                <div className="text-[#14b8a6]">{opportunity.recommended_drug_name}</div>
+              </div>
+            </div>
+            {action && (
+              <div className="mt-4 pt-4 border-t border-[#2d4a6f]">
+                <div className="text-xs text-slate-500 mb-1">Action</div>
+                <div className="text-sm text-[#14b8a6]">{action}</div>
+              </div>
+            )}
+          </div>
+        </div>
+        
+        {/* Value */}
+        <div>
+          <div className="text-xs text-slate-500 uppercase tracking-wider mb-3">Value</div>
+          <div className="bg-[#1e3a5f] rounded-lg p-4 grid grid-cols-2 gap-4">
+            <div>
+              <div className="text-xs text-slate-500">Current GP</div>
+              <div className="text-lg font-semibold text-red-400">-$8.06</div>
+            </div>
+            <div>
+              <div className="text-xs text-slate-500">New GP</div>
+              <div className="text-lg font-semibold text-emerald-400">{formatCurrency(opportunity.potential_margin_gain)}</div>
+            </div>
+            <div>
+              <div className="text-xs text-slate-500">Difference</div>
+              <div className="text-lg font-semibold text-white">{formatCurrency(opportunity.potential_margin_gain + 8.06)}</div>
+            </div>
+            <div>
+              <div className="text-xs text-slate-500">Annual Value</div>
+              <div className="text-lg font-semibold text-[#14b8a6]">{formatCurrency(opportunity.annual_margin_gain)}</div>
+            </div>
+          </div>
+        </div>
+        
+        {/* Prescriber */}
+        <div>
+          <div className="text-xs text-slate-500 uppercase tracking-wider mb-3">Prescriber</div>
+          <div className="bg-[#1e3a5f] rounded-lg p-4">
+            <div className="grid grid-cols-2 gap-3 text-sm">
+              <div>
+                <div className="text-xs text-slate-500">Name</div>
+                <div className="text-white">{opportunity.prescriber_name || 'Unknown'}</div>
+              </div>
+              <div>
+                <div className="text-xs text-slate-500">Fax</div>
+                <div className="text-white">N/A</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      {/* Footer Actions */}
+      <div className="p-4 border-t border-[#1e3a5f] space-y-2">
+        <button className="w-full py-2.5 bg-red-500 hover:bg-red-600 text-white rounded-lg font-medium flex items-center justify-center gap-2">
+          <FileText className="w-4 h-4" />
+          Generate Fax
+        </button>
+        <button className="w-full py-2.5 bg-[#14b8a6] hover:bg-[#0d9488] text-[#0a1628] rounded-lg font-medium flex items-center justify-center gap-2">
+          <Send className="w-4 h-4" />
+          Send Now
+        </button>
+        <button
+          onClick={() => onStatusChange(opportunity.opportunity_id, 'reviewed')}
+          className="w-full py-2.5 bg-[#1e3a5f] hover:bg-[#2d4a6f] text-white rounded-lg font-medium flex items-center justify-center gap-2 border border-[#2d4a6f]"
+        >
+          <Clock className="w-4 h-4" />
+          Send to Approval Queue
+        </button>
+        <button onClick={onClose} className="w-full py-2 text-slate-400 hover:text-white text-sm">
+          Close
+        </button>
+      </div>
+    </aside>
+  );
+}
+
+// Main Component
 export default function OpportunitiesPage() {
-  const queryClient = useQueryClient();
-  const { filters, setFilter, selectedOpportunities, toggleOpportunitySelection, clearSelection } = useUIStore();
-  const [showFilters, setShowFilters] = useState(false);
-
-  const { data, isLoading, refetch } = useQuery({
-    queryKey: ['opportunities', filters],
-    queryFn: () => opportunitiesApi.getAll(filters).then((r) => r.data),
+  const [opportunities, setOpportunities] = useState<Opportunity[]>([]);
+  const [patients, setPatients] = useState<Patient[]>([]);
+  const [stats, setStats] = useState<Stats>({
+    total: 0, not_submitted: 0, submitted: 0, captured: 0,
+    total_annual: 0, not_submitted_annual: 0, submitted_annual: 0, captured_annual: 0,
   });
+  const [loading, setLoading] = useState(true);
+  const [filter, setFilter] = useState('all');
+  const [search, setSearch] = useState('');
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const [selectedOpp, setSelectedOpp] = useState<Opportunity | null>(null);
+  const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
+  const [lastSync, setLastSync] = useState(new Date());
 
-  const updateMutation = useMutation({
-    mutationFn: ({ id, status }: { id: string; status: string }) =>
-      opportunitiesApi.update(id, { status }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['opportunities'] });
-      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
-    },
-  });
+  useEffect(() => { fetchData(); }, []);
 
-  const bulkUpdateMutation = useMutation({
-    mutationFn: ({ ids, status }: { ids: string[]; status: string }) =>
-      opportunitiesApi.bulkUpdate(ids, status),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['opportunities'] });
-      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
-      clearSelection();
-    },
-  });
+  async function fetchData() {
+    setLoading(true);
+    try {
+      const token = localStorage.getItem('therxos_token');
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/opportunities`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) throw new Error('Failed');
+      const data = await res.json();
+      const opps: Opportunity[] = data.opportunities || [];
+      setOpportunities(opps);
 
-  const opportunities = data?.opportunities || [];
-  const counts = data?.counts || {};
+      // Group by patient
+      const map = new Map<string, Patient>();
+      opps.forEach(opp => {
+        if (!map.has(opp.patient_id)) {
+          map.set(opp.patient_id, {
+            patient_id: opp.patient_id,
+            patient_hash: opp.patient_hash || opp.patient_id.slice(0, 8),
+            date_of_birth: '',
+            insurance_bin: opp.insurance_bin || '',
+            insurance_group: opp.insurance_group || '',
+            opportunities: [],
+            total_value: 0,
+          });
+        }
+        const p = map.get(opp.patient_id)!;
+        p.opportunities.push(opp);
+        p.total_value += opp.annual_margin_gain || 0;
+      });
+      
+      const sorted = Array.from(map.values()).sort((a, b) => b.total_value - a.total_value);
+      setPatients(sorted);
+      if (sorted.length) setExpanded(new Set([sorted[0].patient_id]));
 
-  const handleStatusUpdate = (id: string, status: string) => {
-    updateMutation.mutate({ id, status });
-  };
+      // Stats
+      setStats({
+        total: opps.length,
+        not_submitted: opps.filter(o => o.status === 'new').length,
+        submitted: opps.filter(o => o.status === 'reviewed').length,
+        captured: opps.filter(o => o.status === 'actioned').length,
+        total_annual: opps.reduce((s, o) => s + (o.annual_margin_gain || 0), 0),
+        not_submitted_annual: opps.filter(o => o.status === 'new').reduce((s, o) => s + (o.annual_margin_gain || 0), 0),
+        submitted_annual: opps.filter(o => o.status === 'reviewed').reduce((s, o) => s + (o.annual_margin_gain || 0), 0),
+        captured_annual: opps.filter(o => o.status === 'actioned').reduce((s, o) => s + (o.annual_margin_gain || 0), 0),
+      });
+      setLastSync(new Date());
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setLoading(false);
+    }
+  }
 
-  const handleBulkAction = (status: string) => {
-    if (selectedOpportunities.length === 0) return;
-    bulkUpdateMutation.mutate({ ids: selectedOpportunities, status });
-  };
+  async function updateStatus(id: string, status: string) {
+    try {
+      const token = localStorage.getItem('therxos_token');
+      await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/opportunities/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ status }),
+      });
+      setOpportunities(prev => prev.map(o => o.opportunity_id === id ? { ...o, status } : o));
+      fetchData();
+    } catch (e) { console.error(e); }
+  }
+
+  const filtered = patients.map(p => ({
+    ...p,
+    opportunities: p.opportunities.filter(o => {
+      if (filter === 'not_submitted') return o.status === 'new';
+      if (filter === 'submitted') return o.status === 'reviewed';
+      if (filter === 'captured') return o.status === 'actioned';
+      return true;
+    }),
+  })).filter(p => p.opportunities.length > 0);
+
+  const filteredCount = filtered.reduce((s, p) => s + p.opportunities.length, 0);
+  const filteredValue = filtered.reduce((s, p) => s + p.opportunities.reduce((ss, o) => ss + (o.annual_margin_gain || 0), 0), 0);
 
   return (
-    <div className="space-y-6 animate-fade-in">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Opportunities</h1>
-          <p className="mt-1 text-gray-500">Review and action pharmacy optimization opportunities</p>
-        </div>
-        <div className="flex items-center space-x-3">
-          <button onClick={() => refetch()} className="btn-secondary flex items-center">
-            <RefreshCw className="w-4 h-4 mr-2" />
-            Refresh
-          </button>
+    <div className="min-h-screen bg-[#0a1628]">
+      {/* Top Bar */}
+      <div className="sticky top-0 z-30 bg-[#0d2137] border-b border-[#1e3a5f]">
+        <div className="px-8 py-4 flex items-center justify-between">
+          <div className="flex items-center gap-6">
+            <h1 className="text-xl font-bold text-white">Opportunity Dashboard</h1>
+            <div className="flex items-center gap-2 text-sm text-slate-400">
+              <span className="text-slate-300">{stats.total} opportunities</span>
+              <span>•</span>
+              <span className="text-emerald-400 font-medium">{formatCurrency(stats.total_annual)} annual</span>
+              <span>•</span>
+              <span className="text-[#14b8a6] font-medium">{formatCurrency(stats.total_annual / 12)}/mo</span>
+            </div>
+          </div>
+          <div className="flex items-center gap-4">
+            <div className="flex items-center gap-2 text-xs text-slate-500">
+              <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse" />
+              Last synced: {lastSync.toLocaleTimeString()}
+            </div>
+            <button onClick={fetchData} className="flex items-center gap-2 px-3 py-2 bg-[#1e3a5f] hover:bg-[#2d4a6f] text-white rounded-lg text-sm">
+              <RefreshCw className="w-4 h-4" /> Refresh
+            </button>
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
+              <input
+                type="text"
+                placeholder="Search patients, drugs, prescribers..."
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                className="pl-10 pr-4 py-2 w-72 bg-[#1e3a5f] border border-[#2d4a6f] rounded-lg text-sm text-white placeholder-slate-500 focus:outline-none focus:border-[#14b8a6]"
+              />
+            </div>
+          </div>
         </div>
       </div>
 
-      {/* Status Tabs */}
-      <div className="flex space-x-1 bg-gray-100 p-1 rounded-lg w-fit">
-        {['new', 'reviewed', 'actioned', 'dismissed'].map((status) => (
-          <button
-            key={status}
-            onClick={() => setFilter('status', status)}
-            className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${
-              filters.status === status
-                ? 'bg-white text-gray-900 shadow-sm'
-                : 'text-gray-600 hover:text-gray-900'
-            }`}
-          >
-            {status.charAt(0).toUpperCase() + status.slice(1)}
-            {counts[status] && (
-              <span className="ml-2 px-2 py-0.5 text-xs bg-gray-200 rounded-full">
-                {counts[status].count}
-              </span>
-            )}
-          </button>
-        ))}
+      {/* Stats Cards */}
+      <div className="px-8 py-6">
+        <div className="grid grid-cols-4 gap-6">
+          {[
+            { label: 'TOTAL OPPORTUNITIES', value: stats.total, annual: stats.total_annual, color: 'teal', borderColor: 'border-t-[#14b8a6]' },
+            { label: 'NOT SUBMITTED', value: stats.not_submitted, annual: stats.not_submitted_annual, color: 'amber', borderColor: 'border-t-amber-500' },
+            { label: 'SUBMITTED', value: stats.submitted, annual: stats.submitted_annual, color: 'blue', borderColor: 'border-t-blue-500' },
+            { label: 'CAPTURED', value: stats.captured, annual: stats.captured_annual, color: 'green', borderColor: 'border-t-emerald-500' },
+          ].map(card => (
+            <div key={card.label} className={`bg-[#0d2137] border border-[#1e3a5f] ${card.borderColor} border-t-[3px] rounded-xl p-6`}>
+              <div className="text-xs text-slate-400 uppercase tracking-wider">{card.label}</div>
+              <div className={`text-4xl font-bold mt-2 ${
+                card.color === 'teal' ? 'text-[#14b8a6]' :
+                card.color === 'amber' ? 'text-amber-400' :
+                card.color === 'blue' ? 'text-blue-400' : 'text-emerald-400'
+              }`}>{card.value}</div>
+              <div className="flex gap-2 mt-3">
+                <span className="text-xs px-2 py-1 bg-[#1e3a5f] text-slate-300 rounded">
+                  {formatShortCurrency(card.annual)}/yr
+                </span>
+                <span className="text-xs px-2 py-1 bg-[#1e3a5f] text-slate-300 rounded">
+                  {formatShortCurrency(card.annual / 12)}/mo
+                </span>
+              </div>
+            </div>
+          ))}
+        </div>
       </div>
 
       {/* Filters */}
-      <div className="card p-4">
-        <div className="flex flex-col sm:flex-row gap-4">
-          {/* Search */}
-          <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
-            <input
-              type="text"
-              placeholder="Search opportunities..."
-              value={filters.search}
-              onChange={(e) => setFilter('search', e.target.value)}
-              className="input pl-10"
-            />
+      <div className="px-8 py-2 flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div className="flex bg-[#0d2137] border border-[#1e3a5f] rounded-lg p-1">
+            {[
+              { key: 'all', label: `All (${stats.total})` },
+              { key: 'not_submitted', label: 'Not Submitted' },
+              { key: 'submitted', label: 'Submitted' },
+              { key: 'captured', label: 'Captured' },
+            ].map(f => (
+              <button
+                key={f.key}
+                onClick={() => setFilter(f.key)}
+                className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+                  filter === f.key
+                    ? 'bg-[#14b8a6] text-[#0a1628]'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                {f.label}
+              </button>
+            ))}
           </div>
-
-          {/* Type Filter */}
-          <select
-            value={filters.type}
-            onChange={(e) => setFilter('type', e.target.value)}
-            className="input w-full sm:w-48"
-          >
-            <option value="">All Types</option>
-            <option value="ndc_optimization">NDC Optimization</option>
-            <option value="brand_to_generic">Brand → Generic</option>
-            <option value="therapeutic_interchange">Therapeutic Interchange</option>
-            <option value="missing_therapy">Missing Therapy</option>
-            <option value="audit_flag">Audit Flag</option>
-          </select>
-
-          {/* Priority Filter */}
-          <select
-            value={filters.priority}
-            onChange={(e) => setFilter('priority', e.target.value)}
-            className="input w-full sm:w-40"
-          >
-            <option value="">All Priorities</option>
-            <option value="critical">Critical</option>
-            <option value="high">High</option>
-            <option value="medium">Medium</option>
-            <option value="low">Low</option>
-          </select>
+          <div className="flex items-center gap-2 ml-4">
+            <span className="text-sm text-slate-400">Group by:</span>
+            <select className="bg-[#0d2137] border border-[#1e3a5f] rounded-lg px-3 py-2 text-sm text-white">
+              <option>Patient</option>
+              <option>Drug</option>
+              <option>Prescriber</option>
+            </select>
+          </div>
+          <button onClick={() => setExpanded(new Set(patients.map(p => p.patient_id)))} className="text-sm text-slate-400 hover:text-white ml-4">
+            Expand All
+          </button>
+          <button onClick={() => setExpanded(new Set())} className="text-sm text-slate-400 hover:text-white">
+            Collapse All
+          </button>
+        </div>
+        <div className="text-sm text-slate-400">
+          {filteredCount} opportunities • <span className="text-[#14b8a6] font-medium">{formatCurrency(filteredValue)}</span> annual value
         </div>
       </div>
 
-      {/* Bulk Actions */}
-      {selectedOpportunities.length > 0 && (
-        <div className="card p-4 bg-primary-50 border-primary-200 flex items-center justify-between">
-          <span className="text-sm text-primary-700">
-            {selectedOpportunities.length} opportunities selected
-          </span>
-          <div className="flex items-center space-x-2">
-            <button
-              onClick={() => handleBulkAction('reviewed')}
-              className="btn-secondary text-sm py-1"
-              disabled={bulkUpdateMutation.isPending}
-            >
-              Mark Reviewed
-            </button>
-            <button
-              onClick={() => handleBulkAction('actioned')}
-              className="btn-success text-sm py-1"
-              disabled={bulkUpdateMutation.isPending}
-            >
-              Mark Actioned
-            </button>
-            <button
-              onClick={() => handleBulkAction('dismissed')}
-              className="btn-secondary text-sm py-1 text-gray-600"
-              disabled={bulkUpdateMutation.isPending}
-            >
-              Dismiss
-            </button>
-            <button onClick={clearSelection} className="text-sm text-gray-500 hover:text-gray-700 ml-2">
-              Clear
-            </button>
+      {/* Patient List */}
+      <div className="px-8 py-4 space-y-3">
+        {loading ? (
+          <div className="flex items-center justify-center py-16">
+            <RefreshCw className="w-8 h-8 text-[#14b8a6] animate-spin" />
           </div>
-        </div>
-      )}
-
-      {/* Opportunities List */}
-      <div className="space-y-3">
-        {isLoading ? (
-          <div className="card p-8 text-center">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600 mx-auto" />
-          </div>
-        ) : opportunities.length === 0 ? (
-          <div className="card p-12 text-center">
-            <DollarSign className="w-12 h-12 text-gray-300 mx-auto mb-4" />
-            <h3 className="text-lg font-medium text-gray-900 mb-2">No opportunities found</h3>
-            <p className="text-gray-500">
-              {filters.status === 'new'
-                ? 'Great job! No new opportunities to review.'
-                : `No ${filters.status} opportunities match your filters.`}
-            </p>
+        ) : filtered.length === 0 ? (
+          <div className="text-center py-16 bg-[#0d2137] rounded-xl border border-[#1e3a5f]">
+            <DollarSign className="w-12 h-12 text-slate-600 mx-auto mb-4" />
+            <h3 className="text-lg font-medium text-white mb-2">No opportunities found</h3>
+            <p className="text-slate-400">Try adjusting your filters or run the scanner.</p>
           </div>
         ) : (
-          opportunities.map((opp: any) => {
-            const typeInfo = TYPE_LABELS[opp.opportunity_type] || {
-              label: opp.opportunity_type,
-              color: 'bg-gray-100 text-gray-800',
-              icon: Pill,
-            };
-            const priorityInfo = PRIORITY_LABELS[opp.clinical_priority] || PRIORITY_LABELS.medium;
-            const Icon = typeInfo.icon;
-            const isSelected = selectedOpportunities.includes(opp.opportunity_id);
-
+          filtered.map(patient => {
+            const isExpanded = expanded.has(patient.patient_id);
+            const capturedCount = patient.opportunities.filter(o => o.status === 'actioned').length;
+            
             return (
-              <div
-                key={opp.opportunity_id}
-                className={`card p-4 hover:shadow-md transition-shadow ${
-                  isSelected ? 'ring-2 ring-primary-500' : ''
-                }`}
-              >
-                <div className="flex items-start gap-4">
-                  {/* Checkbox */}
-                  <input
-                    type="checkbox"
-                    checked={isSelected}
-                    onChange={() => toggleOpportunitySelection(opp.opportunity_id)}
-                    className="mt-1 h-4 w-4 text-primary-600 rounded border-gray-300 focus:ring-primary-500"
-                  />
-
-                  {/* Icon */}
-                  <div className={`p-2 rounded-lg ${typeInfo.color.replace('text-', 'bg-').split(' ')[0]}`}>
-                    <Icon className={`w-5 h-5 ${typeInfo.color.split(' ')[1]}`} />
-                  </div>
-
-                  {/* Content */}
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-start justify-between gap-4">
-                      <div>
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span className={`badge ${typeInfo.color}`}>{typeInfo.label}</span>
-                          <span className={`badge ${priorityInfo.color}`}>{priorityInfo.label}</span>
-                        </div>
-                        <h3 className="mt-2 font-medium text-gray-900">
-                          {opp.current_drug_name || opp.recommended_drug_name}
-                        </h3>
-                        <p className="mt-1 text-sm text-gray-500 line-clamp-2">
-                          {opp.clinical_rationale}
-                        </p>
-                        {opp.current_ndc && opp.recommended_ndc && (
-                          <p className="mt-2 text-xs text-gray-400 font-mono">
-                            NDC: {opp.current_ndc} → {opp.recommended_ndc}
-                          </p>
-                        )}
-                      </div>
-
-                      {/* Margin */}
-                      <div className="text-right flex-shrink-0">
-                        <p className="text-lg font-bold text-success-600">
-                          +{formatCurrency(opp.potential_margin_gain || 0)}
-                        </p>
-                        <p className="text-xs text-gray-500">per fill</p>
-                        {opp.annual_margin_gain && (
-                          <p className="text-sm text-gray-600 mt-1">
-                            ~{formatCurrency(opp.annual_margin_gain)}/yr
-                          </p>
-                        )}
-                      </div>
+              <div key={patient.patient_id} className="bg-[#0d2137] border border-[#1e3a5f] rounded-xl overflow-hidden">
+                {/* Patient Header */}
+                <div
+                  onClick={() => {
+                    const next = new Set(expanded);
+                    if (next.has(patient.patient_id)) next.delete(patient.patient_id);
+                    else next.add(patient.patient_id);
+                    setExpanded(next);
+                  }}
+                  className="flex items-center justify-between px-5 py-4 cursor-pointer hover:bg-[#1e3a5f]/50 transition-colors"
+                >
+                  <div className="flex items-center gap-4">
+                    <div className="w-10 h-10 rounded-full bg-slate-700 flex items-center justify-center text-sm font-semibold text-white">
+                      {getInitials(patient.patient_hash)}
                     </div>
-
-                    {/* Actions */}
-                    <div className="mt-4 flex items-center justify-between">
-                      <div className="flex items-center gap-2 text-sm text-gray-500">
-                        {opp.patient_hash && (
-                          <Link
-                            href={`/dashboard/patients/${opp.patient_id}`}
-                            className="text-primary-600 hover:text-primary-700"
-                          >
-                            Patient: {opp.patient_hash.slice(0, 8)}...
-                          </Link>
-                        )}
-                        <span>•</span>
-                        <span>{new Date(opp.created_at).toLocaleDateString()}</span>
-                      </div>
-
+                    <div>
                       <div className="flex items-center gap-2">
-                        <Link
-                          href={`/dashboard/opportunities/${opp.opportunity_id}`}
-                          className="btn-secondary text-sm py-1 px-3 flex items-center"
-                        >
-                          <Eye className="w-4 h-4 mr-1" />
-                          View
-                        </Link>
-                        {opp.status === 'new' && (
-                          <>
-                            <button
-                              onClick={() => handleStatusUpdate(opp.opportunity_id, 'actioned')}
-                              className="btn-success text-sm py-1 px-3 flex items-center"
-                              disabled={updateMutation.isPending}
-                            >
-                              <CheckCircle2 className="w-4 h-4 mr-1" />
-                              Action
-                            </button>
-                            <button
-                              onClick={() => handleStatusUpdate(opp.opportunity_id, 'dismissed')}
-                              className="text-gray-400 hover:text-gray-600 p-1"
-                              disabled={updateMutation.isPending}
-                              title="Dismiss"
-                            >
-                              <XCircle className="w-5 h-5" />
-                            </button>
-                          </>
-                        )}
+                        <span className="font-semibold text-white">{patient.patient_hash?.slice(0, 10)}</span>
+                        <span className="px-2 py-0.5 bg-[#14b8a6]/20 text-[#14b8a6] text-xs rounded font-medium">
+                          {patient.insurance_bin || 'N/A'}
+                        </span>
+                        <span className="px-2 py-0.5 bg-blue-500/20 text-blue-400 text-xs rounded font-medium">
+                          {patient.insurance_group || 'N/A'}
+                        </span>
                       </div>
+                      <div className="text-sm text-slate-400">DOB: {formatDate(patient.date_of_birth)}</div>
                     </div>
+                  </div>
+                  <div className="flex items-center gap-8">
+                    <div className="text-right">
+                      <div className="text-[#14b8a6] font-semibold">{formatCurrency(patient.total_value)}</div>
+                      <div className="text-xs text-slate-400">{patient.opportunities.length} opps • {capturedCount} captured</div>
+                    </div>
+                    {isExpanded ? <ChevronUp className="w-5 h-5 text-slate-400" /> : <ChevronDown className="w-5 h-5 text-slate-400" />}
                   </div>
                 </div>
+
+                {/* Opportunities Table */}
+                {isExpanded && (
+                  <div className="border-t border-[#1e3a5f]">
+                    <table className="w-full">
+                      <thead className="bg-[#1e3a5f]/50">
+                        <tr>
+                          <th className="text-left text-xs font-semibold text-slate-400 uppercase tracking-wider px-5 py-3">Opportunity</th>
+                          <th className="text-left text-xs font-semibold text-slate-400 uppercase tracking-wider px-5 py-3">Action</th>
+                          <th className="text-left text-xs font-semibold text-slate-400 uppercase tracking-wider px-5 py-3">Value</th>
+                          <th className="text-left text-xs font-semibold text-slate-400 uppercase tracking-wider px-5 py-3">Prescriber</th>
+                          <th className="text-left text-xs font-semibold text-slate-400 uppercase tracking-wider px-5 py-3">Status</th>
+                          <th className="text-right text-xs font-semibold text-slate-400 uppercase tracking-wider px-5 py-3"></th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {patient.opportunities.map(opp => {
+                          const [rationale, action] = (opp.clinical_rationale || '').split('\n\nAction: ');
+                          return (
+                            <tr key={opp.opportunity_id} className="border-t border-[#1e3a5f] hover:bg-[#1e3a5f]/30">
+                              <td className="px-5 py-3">
+                                <div className="text-white font-medium">
+                                  {opp.current_drug_name} → <span className="text-[#14b8a6]">{opp.recommended_drug_name}</span>
+                                </div>
+                              </td>
+                              <td className="px-5 py-3">
+                                <div className="text-sm text-slate-400 max-w-xs truncate">{action || rationale}</div>
+                              </td>
+                              <td className="px-5 py-3">
+                                <div className="text-emerald-400 font-semibold">{formatCurrency(opp.annual_margin_gain)}</div>
+                              </td>
+                              <td className="px-5 py-3">
+                                <div className="text-sm text-slate-300">{opp.prescriber_name || 'Unknown'}</div>
+                              </td>
+                              <td className="px-5 py-3">
+                                <StatusDropdown status={opp.status} onChange={s => updateStatus(opp.opportunity_id, s)} />
+                              </td>
+                              <td className="px-5 py-3 text-right">
+                                <button
+                                  onClick={() => { setSelectedOpp(opp); setSelectedPatient(patient); }}
+                                  className="px-3 py-1.5 bg-[#1e3a5f] hover:bg-[#2d4a6f] text-white rounded text-sm"
+                                >
+                                  View
+                                </button>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
               </div>
             );
           })
         )}
       </div>
 
-      {/* Pagination placeholder */}
-      {opportunities.length > 0 && (
-        <div className="flex items-center justify-between text-sm text-gray-500">
-          <span>Showing {opportunities.length} opportunities</span>
-          {/* Add pagination controls here */}
-        </div>
+      {/* Side Panel */}
+      {selectedOpp && (
+        <>
+          <div className="fixed inset-0 bg-black/50 z-40" onClick={() => { setSelectedOpp(null); setSelectedPatient(null); }} />
+          <SidePanel
+            opportunity={selectedOpp}
+            patient={selectedPatient}
+            onClose={() => { setSelectedOpp(null); setSelectedPatient(null); }}
+            onStatusChange={updateStatus}
+          />
+        </>
       )}
     </div>
   );
