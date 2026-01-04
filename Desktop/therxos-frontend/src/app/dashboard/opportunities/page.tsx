@@ -122,6 +122,45 @@ function getAnnualValue(opp: Opportunity): number {
   return 0;
 }
 
+// Format Contract ID + PBP as X####-### (e.g., H2226-001)
+function formatContractPBP(contractId?: string, planName?: string): string | null {
+  if (!contractId) return null;
+  const contract = contractId.trim();
+  const pbp = planName ? planName.trim().padStart(3, '0') : '001';
+  return `${contract}-${pbp}`;
+}
+
+// Insurance Tags Component - displays in order: Contract-PBP, BIN, PCN, GROUP
+function InsuranceTags({ opp, size = 'sm' }: { opp: Opportunity; size?: 'sm' | 'xs' }) {
+  const contractPbp = formatContractPBP(opp.contract_id, opp.plan_name);
+  const sizeClass = size === 'xs' ? 'text-[10px] px-1.5 py-0.5' : 'text-xs px-2 py-0.5';
+  
+  return (
+    <div className="flex flex-wrap gap-1">
+      {contractPbp && (
+        <span className={`${sizeClass} bg-purple-500/20 text-purple-400 rounded font-medium`}>
+          {contractPbp}
+        </span>
+      )}
+      {opp.insurance_bin && (
+        <span className={`${sizeClass} bg-[#14b8a6]/20 text-[#14b8a6] rounded font-medium`}>
+          {opp.insurance_bin}
+        </span>
+      )}
+      {opp.insurance_pcn && (
+        <span className={`${sizeClass} bg-amber-500/20 text-amber-400 rounded font-medium`}>
+          {opp.insurance_pcn}
+        </span>
+      )}
+      {opp.insurance_group && (
+        <span className={`${sizeClass} bg-blue-500/20 text-blue-400 rounded font-medium`}>
+          {opp.insurance_group}
+        </span>
+      )}
+    </div>
+  );
+}
+
 // Status Dropdown
 function StatusDropdown({ status, onChange }: { status: string; onChange: (s: string) => void }) {
   const [open, setOpen] = useState(false);
@@ -751,15 +790,8 @@ export default function OpportunitiesPage() {
                             ? formatPatientName(group.first_name, group.last_name, group.label)
                             : group.label}
                         </span>
-                        {groupBy === 'patient' && (
-                          <>
-                            <span className="px-2 py-0.5 bg-[#14b8a6]/20 text-[#14b8a6] text-xs rounded font-medium">
-                              {group.insurance_bin || 'N/A'}
-                            </span>
-                            <span className="px-2 py-0.5 bg-blue-500/20 text-blue-400 text-xs rounded font-medium">
-                              {group.insurance_group || 'N/A'}
-                            </span>
-                          </>
+                        {groupBy === 'patient' && group.opportunities[0] && (
+                          <InsuranceTags opp={group.opportunities[0]} size="sm" />
                         )}
                         {group.sublabel && (
                           <span className="text-xs text-slate-400">({group.sublabel})</span>
@@ -785,6 +817,9 @@ export default function OpportunitiesPage() {
                     <table className="w-full">
                       <thead className="bg-[#1e3a5f]/50">
                         <tr>
+                          {groupBy !== 'patient' && (
+                            <th className="text-left text-xs font-semibold text-slate-400 uppercase tracking-wider px-5 py-3">Patient</th>
+                          )}
                           <th className="text-left text-xs font-semibold text-slate-400 uppercase tracking-wider px-5 py-3">Opportunity</th>
                           <th className="text-left text-xs font-semibold text-slate-400 uppercase tracking-wider px-5 py-3">Action</th>
                           <th className="text-left text-xs font-semibold text-slate-400 uppercase tracking-wider px-5 py-3">Value</th>
@@ -799,6 +834,14 @@ export default function OpportunitiesPage() {
                           const [rationale, action] = (opp.clinical_rationale || '').split('\n\nAction: ');
                           return (
                             <tr key={opp.opportunity_id} className="border-t border-[#1e3a5f] hover:bg-[#1e3a5f]/30">
+                              {groupBy !== 'patient' && (
+                                <td className="px-5 py-3">
+                                  <div className="font-medium text-white">
+                                    {formatPatientName(opp.patient_first_name, opp.patient_last_name, opp.patient_hash)}
+                                  </div>
+                                  <InsuranceTags opp={opp} size="xs" />
+                                </td>
+                              )}
                               <td className="px-5 py-3">
                                 <div className="text-white font-medium">
                                   {opp.current_drug_name || 'N/A'} → <span className="text-[#14b8a6]">{opp.recommended_drug_name}</span>
