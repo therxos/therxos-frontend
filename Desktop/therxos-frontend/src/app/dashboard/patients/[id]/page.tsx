@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import {
   ArrowLeft,
@@ -85,9 +85,7 @@ export default function PatientProfilePage() {
   const [opportunities, setOpportunities] = useState<Opportunity[]>([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => { if (patientId) fetchPatientData(); }, [patientId]);
-
-  async function fetchPatientData() {
+  const fetchPatientData = useCallback(async () => {
     setLoading(true);
     try {
       const token = localStorage.getItem('therxos_token');
@@ -100,7 +98,11 @@ export default function PatientProfilePage() {
       }
     } catch (e) { console.error(e); }
     setLoading(false);
-  }
+  }, [patientId]);
+
+  useEffect(() => { 
+    if (patientId) fetchPatientData(); 
+  }, [patientId, fetchPatientData]);
 
   const totalOppValue = opportunities.reduce((s, o) => s + (Number(o.annual_margin_gain) || 0), 0);
   const pending = opportunities.filter(o => o.status === 'new').length;
@@ -127,8 +129,8 @@ export default function PatientProfilePage() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="space-y-6">
           <div className="bg-[#0d2137] border border-[#1e3a5f] rounded-xl p-6"><h2 className="text-lg font-semibold text-white mb-4 flex items-center gap-2"><Building2 className="w-5 h-5 text-[#14b8a6]" />Insurance</h2><div className="space-y-3"><div className="flex justify-between"><span className="text-slate-400">BIN</span><span className="text-white font-medium">{patient.primary_insurance_bin || 'N/A'}</span></div>{patient.primary_insurance_pcn && <div className="flex justify-between"><span className="text-slate-400">PCN</span><span className="text-white font-medium">{patient.primary_insurance_pcn}</span></div>}<div className="flex justify-between"><span className="text-slate-400">Group</span><span className="text-white font-medium">{patient.primary_insurance_group || 'N/A'}</span></div></div></div>
-          <div className="bg-[#0d2137] border border-[#1e3a5f] rounded-xl p-6"><h2 className="text-lg font-semibold text-white mb-4 flex items-center gap-2"><Heart className="w-5 h-5 text-red-400" />Chronic Conditions</h2>{patient.chronic_conditions?.length > 0 ? <div className="flex flex-wrap gap-2">{patient.chronic_conditions.map((c, i) => <span key={i} className="px-3 py-1 bg-red-500/20 text-red-400 rounded-full text-sm">{c}</span>)}</div> : <p className="text-slate-500">None identified</p>}</div>
-          <div className="bg-[#0d2137] border border-[#1e3a5f] rounded-xl p-6"><h2 className="text-lg font-semibold text-white mb-4 flex items-center gap-2"><FileText className="w-5 h-5 text-blue-400" />Medication List</h2>{patient.profile_data?.medications?.length > 0 ? <ul className="space-y-2 max-h-64 overflow-y-auto">{patient.profile_data.medications.map((m, i) => <li key={i} className="text-sm text-slate-300 flex items-center gap-2"><Pill className="w-3 h-3 text-slate-500" />{m}</li>)}</ul> : <p className="text-slate-500">No medications on file</p>}</div>
+          <div className="bg-[#0d2137] border border-[#1e3a5f] rounded-xl p-6"><h2 className="text-lg font-semibold text-white mb-4 flex items-center gap-2"><Heart className="w-5 h-5 text-red-400" />Chronic Conditions</h2>{patient.chronic_conditions && patient.chronic_conditions.length > 0 ? <div className="flex flex-wrap gap-2">{patient.chronic_conditions.map((c, i) => <span key={i} className="px-3 py-1 bg-red-500/20 text-red-400 rounded-full text-sm">{c}</span>)}</div> : <p className="text-slate-500">None identified</p>}</div>
+          <div className="bg-[#0d2137] border border-[#1e3a5f] rounded-xl p-6"><h2 className="text-lg font-semibold text-white mb-4 flex items-center gap-2"><FileText className="w-5 h-5 text-blue-400" />Medication List</h2>{patient.profile_data?.medications && patient.profile_data.medications.length > 0 ? <ul className="space-y-2 max-h-64 overflow-y-auto">{patient.profile_data.medications.map((m, i) => <li key={i} className="text-sm text-slate-300 flex items-center gap-2"><Pill className="w-3 h-3 text-slate-500" />{m}</li>)}</ul> : <p className="text-slate-500">No medications on file</p>}</div>
         </div>
 
         <div className="lg:col-span-2 space-y-6">

@@ -168,10 +168,6 @@ export default function AnalyticsPage() {
   const [loading, setLoading] = useState(true);
   const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set(['bin']));
 
-  useEffect(() => {
-    fetchAnalytics();
-  }, []);
-
   async function fetchAnalytics() {
     setLoading(true);
     try {
@@ -189,8 +185,13 @@ export default function AnalyticsPage() {
     setLoading(false);
   }
 
+  useEffect(() => {
+    fetchAnalytics();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   function toggleSection(section: string) {
-    setExpandedSections((prev) => {
+    setExpandedSections((prev: Set<string>) => {
       const next = new Set(prev);
       if (next.has(section)) next.delete(section);
       else next.add(section);
