@@ -1,24 +1,9 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { authApi } from '@/lib/api';
 import { useAuthStore } from '@/store';
-
-// Demo user for testing without backend
-const DEMO_USER = {
-  userId: 'demo-user-001',
-  email: 'demo@therxos.app',
-  firstName: 'Stan',
-  lastName: 'Demo',
-  role: 'owner' as const,
-  clientId: 'demo-client-001',
-  clientName: 'PharmacyStan LLC',
-  pharmacyId: 'demo-pharmacy-001',
-  pharmacyName: 'PharmacyStan LLC',
-  subdomain: 'demo',
-  mustChangePassword: false,
-};
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
@@ -26,35 +11,35 @@ export default function LoginPage() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const router = useRouter();
-  const setAuth = useAuthStore((state) => state.setAuth);
+  const { setAuth, isAuthenticated } = useAuthStore();
+
+  // If already authenticated, redirect to dashboard
+  useEffect(() => {
+    if (isAuthenticated) {
+      router.push('/dashboard');
+    }
+  }, [isAuthenticated, router]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     setLoading(true);
 
-    // Demo mode: accept demo@therxos.app / demo1234
-    if (email === 'demo@therxos.app' && password === 'demo1234') {
-      setTimeout(() => {
-        setAuth(DEMO_USER, 'demo-token-12345');
-        router.push('/dashboard');
-      }, 500);
-      return;
-    }
-
     try {
       const response = await authApi.login(email, password);
       const { token, user } = response.data;
       setAuth(user, token);
-
-      if (user.mustChangePassword) {
-        router.push('/change-password');
-      } else {
-        router.push('/dashboard');
-      }
+      
+      // Small delay to ensure state is persisted before redirect
+      setTimeout(() => {
+        if (user.mustChangePassword) {
+          router.push('/change-password');
+        } else {
+          router.push('/dashboard');
+        }
+      }, 100);
     } catch (err: any) {
-      setError(err.response?.data?.error || 'Login failed. Use demo@therxos.app / demo1234 for demo mode.');
-    } finally {
+      setError(err.response?.data?.error || 'Login failed. Please check your credentials.');
       setLoading(false);
     }
   };
