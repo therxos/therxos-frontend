@@ -50,7 +50,7 @@ export default function SettingsPage() {
   const queryClient = useQueryClient();
   const user = useAuthStore((state) => state.user);
   const updateUser = useAuthStore((state) => state.updateUser);
-  const isOwnerOrAdmin = user?.role === 'owner' || user?.role === 'admin';
+  const isOwnerOrAdmin = user?.role === 'super_admin' || user?.role === 'admin';
 
   const [activeTab, setActiveTab] = useState('profile');
   const [saved, setSaved] = useState(false);
@@ -476,15 +476,15 @@ export default function SettingsPage() {
                       value={u.role}
                       onChange={(e) => updateUserMutation.mutate({ userId: u.user_id, data: { role: e.target.value } })}
                       className="input py-1 px-2 text-sm"
-                      disabled={u.user_id === user?.userId || u.role === 'owner'}
+                      disabled={u.user_id === user?.userId || u.role === 'super_admin'}
                     >
-                      {u.role === 'owner' && <option value="owner">Owner</option>}
+                      {u.role === 'super_admin' && <option value="super_admin">Super Admin</option>}
                       <option value="admin">Admin</option>
                       <option value="pharmacist">Pharmacist</option>
                       <option value="technician">Technician</option>
                       <option value="staff">Staff</option>
                     </select>
-                    {u.user_id !== user?.userId && u.role !== 'owner' && (
+                    {u.user_id !== user?.userId && u.role !== 'super_admin' && (
                       <button
                         onClick={() => updateUserMutation.mutate({ userId: u.user_id, data: { isActive: !u.is_active } })}
                         className={`text-sm ${u.is_active ? 'text-red-400 hover:text-red-300' : 'text-green-400 hover:text-green-300'}`}
