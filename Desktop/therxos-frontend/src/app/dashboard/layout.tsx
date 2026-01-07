@@ -7,6 +7,7 @@ import { usePathname } from 'next/navigation';
 import { useAuthStore, useUIStore } from '@/store';
 import { useQuery } from '@tanstack/react-query';
 import { opportunitiesApi } from '@/lib/api';
+import usePermissions, { PERMISSIONS } from '@/hooks/usePermissions';
 import {
   LayoutDashboard,
   Lightbulb,
@@ -21,11 +22,23 @@ import {
   Bell,
   ChevronLeft,
   ChevronRight,
+  ChevronDown,
   ShieldAlert,
   MessageSquare,
   HelpCircle,
   ExternalLink,
+  FileText,
+  Building2,
+  Shield,
 } from 'lucide-react';
+
+const API_URL = process.env.NEXT_PUBLIC_API_URL;
+
+interface Pharmacy {
+  pharmacy_id: string;
+  pharmacy_name: string;
+  client_name: string;
+}
 
 export default function DashboardLayout({
   children,
@@ -34,10 +47,26 @@ export default function DashboardLayout({
 }) {
   const router = useRouter();
   const pathname = usePathname();
-  const { user, isAuthenticated, logout, _hasHydrated } = useAuthStore();
+  const { user, isAuthenticated, logout, _hasHydrated, setAuth } = useAuthStore();
   const { sidebarOpen, toggleSidebar } = useUIStore();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [pharmacySwitcherOpen, setPharmacySwitcherOpen] = useState(false);
+  const [switchingPharmacy, setSwitchingPharmacy] = useState(false);
+
+  const isSuperAdmin = user?.role === 'super_admin';
+  const isImpersonating = typeof window !== 'undefined' && localStorage.getItem('therxos_impersonating') === 'true';
+
+  // Get user permissions - MUST be called before any early returns (React hooks rule)
+  const {
+    can,
+    roleInfo,
+    canViewAnalytics,
+    canViewPatientDetails,
+    canUploadData,
+    canManageSettings,
+    canViewAuditRisks,
+  } = usePermissions();
 
   // Fetch opportunity counts for sidebar badge
   const { data: oppData } = useQuery({
@@ -47,7 +76,76 @@ export default function DashboardLayout({
     refetchInterval: 60000, // Refresh every minute
   });
 
+  // Fetch pharmacies for super_admin switcher
+  const { data: pharmaciesData } = useQuery({
+    queryKey: ['admin-pharmacies'],
+    queryFn: async () => {
+      const token = localStorage.getItem('therxos_token');
+      const res = await fetch(`${API_URL}/api/admin/pharmacies`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) throw new Error('Failed to fetch pharmacies');
+      return res.json();
+    },
+    enabled: isSuperAdmin || isImpersonating,
+  });
+
+  const pharmacies: Pharmacy[] = pharmaciesData?.pharmacies || [];
+
   const notSubmittedCount = oppData?.counts?.new?.count || 0;
+
+  // Switch to a different pharmacy (impersonate)
+  async function switchPharmacy(pharmacyId: string) {
+    if (switchingPharmacy) return;
+    setSwitchingPharmacy(true);
+    setPharmacySwitcherOpen(false);
+
+    try {
+      // Get original token if impersonating, otherwise use current
+      const originalToken = localStorage.getItem('therxos_original_token') || localStorage.getItem('therxos_token');
+
+      const res = await fetch(`${API_URL}/api/admin/impersonate`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${originalToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ pharmacy_id: pharmacyId }),
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        localStorage.setItem('therxos_token', data.token);
+        localStorage.setItem('therxos_impersonating', 'true');
+        if (!localStorage.getItem('therxos_original_token')) {
+          localStorage.setItem('therxos_original_token', originalToken || '');
+        }
+
+        // Update auth store and reload
+        setAuth(data.user, data.token);
+        window.location.href = '/dashboard';
+      } else {
+        const error = await res.json();
+        alert('Failed to switch pharmacy: ' + (error.error || 'Unknown error'));
+        setSwitchingPharmacy(false);
+      }
+    } catch (err) {
+      console.error('Switch pharmacy failed:', err);
+      alert('Failed to switch pharmacy');
+      setSwitchingPharmacy(false);
+    }
+  }
+
+  // Return to super admin view
+  function exitImpersonation() {
+    const originalToken = localStorage.getItem('therxos_original_token');
+    if (originalToken) {
+      localStorage.setItem('therxos_token', originalToken);
+      localStorage.removeItem('therxos_impersonating');
+      localStorage.removeItem('therxos_original_token');
+      window.location.href = '/admin';
+    }
+  }
 
   // Demo notifications
   const notifications = [
@@ -78,20 +176,22 @@ export default function DashboardLayout({
     router.push('/login');
   };
 
+  // Navigation items with permission checks
   const navigation = [
-    { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
-    { name: 'Opportunities', href: '/dashboard/opportunities', icon: Lightbulb, badge: notSubmittedCount },
-    { name: 'Audit Risks', href: '/dashboard/audit', icon: ShieldAlert, badge: 0 },
-    { name: 'Patients', href: '/dashboard/patients', icon: Users },
-    { name: 'Analytics', href: '/dashboard/analytics', icon: BarChart3 },
-    { name: 'Data Upload', href: '/dashboard/upload', icon: Upload },
-  ];
+    { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard, show: true },
+    { name: 'Opportunities', href: '/dashboard/opportunities', icon: Lightbulb, badge: notSubmittedCount, show: true },
+    { name: 'Audit Risks', href: '/dashboard/audit', icon: ShieldAlert, badge: 0, show: canViewAuditRisks },
+    { name: 'Patients', href: '/dashboard/patients', icon: Users, show: canViewPatientDetails },
+    { name: 'Analytics', href: '/dashboard/analytics', icon: BarChart3, show: canViewAnalytics },
+    { name: 'Reports', href: '/dashboard/reports', icon: FileText, show: canViewAnalytics },
+    { name: 'Data Upload', href: '/dashboard/upload', icon: Upload, show: canUploadData },
+  ].filter(item => item.show);
 
   const secondaryNav = [
-    { name: 'Settings', href: '/dashboard/settings', icon: Settings },
-    { name: 'Suggestions', href: '/dashboard/suggestions', icon: MessageSquare },
-    { name: 'Help & Contact', href: '/dashboard/help', icon: HelpCircle },
-  ];
+    { name: 'Settings', href: '/dashboard/settings', icon: Settings, show: canManageSettings },
+    { name: 'Suggestions', href: '/dashboard/suggestions', icon: MessageSquare, show: true },
+    { name: 'Help & Contact', href: '/dashboard/help', icon: HelpCircle, show: true },
+  ].filter(item => item.show);
 
   const sidebarWidth = sidebarCollapsed ? 'w-16' : 'w-60';
   const mainMargin = sidebarCollapsed ? 'lg:pl-16' : 'lg:pl-60';
@@ -243,17 +343,17 @@ export default function DashboardLayout({
           <div className="pt-4" style={{ borderTop: '1px solid var(--navy-600)' }}>
             <div className={`flex items-center gap-3 ${sidebarCollapsed ? 'justify-center' : 'px-2'}`}>
               <div className="avatar w-9 h-9 text-sm flex-shrink-0">
-                {user.firstName[0]}{user.lastName[0]}
+                {user?.firstName?.[0]}{user?.lastName?.[0]}
               </div>
               {!sidebarCollapsed && (
                 <>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-semibold truncate">
-                      {user.firstName} {user.lastName}
+                      {user?.firstName} {user?.lastName}
                     </p>
-                    <p className="text-xs capitalize" style={{ color: 'var(--slate-400)' }}>
-                      {user.role}
-                    </p>
+                    <span className={`text-xs px-2 py-0.5 rounded-full ${roleInfo?.color || ''}`}>
+                      {roleInfo?.name || ''}
+                    </span>
                   </div>
                   <button
                     onClick={handleLogout}
@@ -277,7 +377,7 @@ export default function DashboardLayout({
           className="sticky top-0 z-30 h-16 flex items-center justify-between px-4 lg:px-8"
           style={{ background: 'var(--navy-800)', borderBottom: '1px solid var(--navy-600)' }}
         >
-          <div className="flex items-center gap-6">
+          <div className="flex items-center gap-4">
             <button
               onClick={toggleSidebar}
               className="lg:hidden icon-btn"
@@ -285,10 +385,92 @@ export default function DashboardLayout({
               <Menu className="w-5 h-5" />
             </button>
 
-            <h1 className="text-xl font-bold hidden sm:block">Dashboard</h1>
+            {/* Pharmacy Switcher for Super Admin */}
+            {(isSuperAdmin || isImpersonating) && (
+              <div className="relative">
+                <button
+                  onClick={() => setPharmacySwitcherOpen(!pharmacySwitcherOpen)}
+                  className="flex items-center gap-2 px-3 py-2 rounded-lg transition-colors"
+                  style={{
+                    background: isImpersonating ? 'var(--amber-500)' : 'var(--navy-700)',
+                    border: '1px solid var(--navy-600)',
+                    color: isImpersonating ? 'var(--navy-900)' : 'var(--slate-200)'
+                  }}
+                  disabled={switchingPharmacy}
+                >
+                  <Building2 className="w-4 h-4" />
+                  <span className="text-sm font-medium max-w-[150px] truncate">
+                    {switchingPharmacy ? 'Switching...' : user?.pharmacyName || 'Select Pharmacy'}
+                  </span>
+                  <ChevronDown className={`w-4 h-4 transition-transform ${pharmacySwitcherOpen ? 'rotate-180' : ''}`} />
+                </button>
+
+                {/* Pharmacy dropdown */}
+                {pharmacySwitcherOpen && (
+                  <>
+                    <div className="fixed inset-0 z-40" onClick={() => setPharmacySwitcherOpen(false)} />
+                    <div
+                      className="absolute left-0 mt-2 w-72 rounded-lg shadow-xl z-50 overflow-hidden"
+                      style={{ background: 'var(--navy-800)', border: '1px solid var(--navy-600)' }}
+                    >
+                      {/* Super Admin Dashboard - Top Option */}
+                      <a
+                        href="/admin"
+                        className="flex items-center gap-3 px-4 py-3 hover:bg-[var(--navy-700)] transition-colors"
+                        style={{ borderBottom: '1px solid var(--navy-600)', background: 'var(--navy-900)' }}
+                      >
+                        <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: 'var(--red-500)' }}>
+                          <Shield className="w-4 h-4 text-white" />
+                        </div>
+                        <div>
+                          <p className="text-sm font-semibold text-white">Super Admin Dashboard</p>
+                          <p className="text-xs" style={{ color: 'var(--slate-400)' }}>View all pharmacy stats</p>
+                        </div>
+                      </a>
+
+                      <div className="p-3" style={{ borderBottom: '1px solid var(--navy-600)' }}>
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-semibold uppercase" style={{ color: 'var(--slate-400)' }}>
+                            Switch Pharmacy
+                          </span>
+                          {isImpersonating && (
+                            <button
+                              onClick={exitImpersonation}
+                              className="text-xs px-2 py-1 rounded bg-red-500/20 text-red-400 hover:bg-red-500/30"
+                            >
+                              Exit View
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                      <div className="max-h-64 overflow-y-auto">
+                        {pharmacies.map((pharmacy) => (
+                          <button
+                            key={pharmacy.pharmacy_id}
+                            onClick={() => switchPharmacy(pharmacy.pharmacy_id)}
+                            className={`w-full text-left px-4 py-3 hover:bg-[var(--navy-700)] transition-colors ${
+                              pharmacy.pharmacy_name === user?.pharmacyName ? 'bg-[var(--teal-500)]/10 border-l-2 border-[var(--teal-500)]' : ''
+                            }`}
+                            style={{ borderBottom: '1px solid var(--navy-700)' }}
+                          >
+                            <p className="text-sm font-medium text-white">{pharmacy.pharmacy_name}</p>
+                            <p className="text-xs" style={{ color: 'var(--slate-400)' }}>{pharmacy.client_name}</p>
+                          </button>
+                        ))}
+                        {pharmacies.length === 0 && (
+                          <div className="p-4 text-center text-sm" style={{ color: 'var(--slate-400)' }}>
+                            No pharmacies available
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
 
             {/* Sync status */}
-            <div className="flex items-center gap-2 text-xs" style={{ color: 'var(--slate-400)' }}>
+            <div className="hidden sm:flex items-center gap-2 text-xs" style={{ color: 'var(--slate-400)' }}>
               <div className="sync-dot" />
               <span>Last sync: 2 min ago</span>
             </div>

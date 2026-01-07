@@ -21,15 +21,14 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
-// Handle auth errors
+// Handle auth errors - clear token and let state management handle redirect
 api.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401 || error.response?.status === 403) {
       if (typeof window !== 'undefined') {
         localStorage.removeItem('therxos_token');
-        localStorage.removeItem('therxos_user');
-        window.location.href = '/login';
+        localStorage.removeItem('therxos-auth'); // Clear Zustand persisted state
       }
     }
     return Promise.reject(error);
@@ -104,12 +103,14 @@ export const analyticsApi = {
 
 // Ingestion API
 export const ingestionApi = {
-  uploadCSV: (file: File, pharmacyId?: string, sourceEmail?: string) => {
+  uploadCSV: (file: File, options?: { pharmacyId?: string; sourceEmail?: string; runAutoComplete?: boolean; runScan?: boolean }) => {
     const formData = new FormData();
     formData.append('file', file);
-    if (pharmacyId) formData.append('pharmacyId', pharmacyId);
-    if (sourceEmail) formData.append('sourceEmail', sourceEmail);
-    
+    if (options?.pharmacyId) formData.append('pharmacyId', options.pharmacyId);
+    if (options?.sourceEmail) formData.append('sourceEmail', options.sourceEmail);
+    if (options?.runAutoComplete) formData.append('runAutoComplete', 'true');
+    if (options?.runScan) formData.append('runScan', 'true');
+
     return api.post('/ingest/csv', formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
     });

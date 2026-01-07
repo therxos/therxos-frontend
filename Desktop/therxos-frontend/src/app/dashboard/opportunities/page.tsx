@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useAuthStore } from '@/store';
 import {
   Search,
   ChevronDown,
@@ -102,14 +103,19 @@ function getInitials(str: string) {
   return str.slice(0, 2).toUpperCase();
 }
 
-function formatPatientName(firstName?: string, lastName?: string, hash?: string) {
+function formatPatientName(firstName?: string, lastName?: string, hash?: string, isDemo?: boolean) {
   if (firstName && lastName) {
+    // Show full name for demo account (Marvel heroes)
+    if (isDemo) {
+      return `${firstName} ${lastName}`;
+    }
+    // Masked format for real accounts (HIPAA)
     const last3 = lastName.slice(0, 3).toUpperCase();
     const first3 = firstName.slice(0, 3).toUpperCase();
     return `${last3},${first3}`;
   }
   if (lastName) {
-    return lastName.slice(0, 6).toUpperCase();
+    return isDemo ? lastName : lastName.slice(0, 6).toUpperCase();
   }
   return hash?.slice(0, 8) || 'Unknown';
 }
@@ -252,11 +258,13 @@ function SidePanel({
   groupItem,
   onClose,
   onStatusChange,
+  isDemo,
 }: {
   opportunity: Opportunity | null;
   groupItem: GroupedItem | null;
   onClose: () => void;
   onStatusChange: (id: string, status: string) => void;
+  isDemo?: boolean;
 }) {
   if (!opportunity || !groupItem) return null;
   
@@ -283,7 +291,7 @@ function SidePanel({
             </div>
             <div>
               <div className="font-semibold text-white">
-                {formatPatientName(groupItem.first_name, groupItem.last_name, groupItem.label)}
+                {formatPatientName(groupItem.first_name, groupItem.last_name, groupItem.label, isDemo)}
               </div>
               <div className="text-sm text-slate-400">DOB: {formatDate(groupItem.date_of_birth || '')}</div>
             </div>
@@ -416,6 +424,9 @@ function SidePanel({
 
 // Main Component
 export default function OpportunitiesPage() {
+  const user = useAuthStore((state) => state.user);
+  const isDemo = user?.email === 'demo@therxos.com';
+  
   const [opportunities, setOpportunities] = useState<Opportunity[]>([]);
   const [groupedItems, setGroupedItems] = useState<GroupedItem[]>([]);
   const [stats, setStats] = useState<Stats>({
@@ -649,57 +660,50 @@ export default function OpportunitiesPage() {
 
   return (
     <div className="min-h-screen bg-[#0a1628]">
-      {/* Top Bar */}
-      <div className="sticky top-0 z-30 bg-[#0d2137] border-b border-[#1e3a5f]">
-        <div className="px-8 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <h1 className="text-xl font-bold text-white">Opportunity Dashboard</h1>
-            <div className="flex items-center gap-3 text-sm">
-              <span className="text-slate-300">{stats.total} opportunities</span>
-              <span className="text-slate-500">•</span>
-              <span className="text-emerald-400 font-medium">{formatCurrency(stats.total_annual)} annual</span>
-              <span className="text-slate-500">•</span>
-              <span className="text-[#14b8a6] font-medium">{formatCurrency(stats.total_annual / 12)}/mo</span>
-              <span className="text-slate-500">•</span>
-              <span className="text-amber-400 font-medium">Captured: {formatCurrency(stats.captured_annual)}</span>
+      {/* Top Bar - Rounded Card */}
+      <div className="px-8 pt-6">
+        <div className="bg-[#0d2137] border border-[#1e3a5f] rounded-xl">
+          <div className="px-6 py-4 flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <h1 className="text-xl font-bold text-white">Opportunity Dashboard</h1>
+              <div className="flex items-center gap-3 text-sm">
+                <span className="text-slate-300">{stats.total} opportunities</span>
+                <span className="text-slate-500">•</span>
+                <span className="text-emerald-400 font-medium">{formatCurrency(stats.total_annual)} annual</span>
+                <span className="text-slate-500">•</span>
+                <span className="text-[#14b8a6] font-medium">{formatCurrency(stats.total_annual / 12)}/mo</span>
+                <span className="text-slate-500">•</span>
+                <span className="text-amber-400 font-medium">Captured: {formatCurrency(stats.captured_annual)}</span>
+              </div>
             </div>
-          </div>
-          <div className="flex items-center gap-4">
-            <div className="flex items-center gap-2 text-xs text-slate-500">
-              <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse" />
-              Last synced: {lastSync.toLocaleTimeString()}
-            </div>
-            <button onClick={fetchData} className="flex items-center gap-2 px-3 py-2 bg-[#1e3a5f] hover:bg-[#2d4a6f] text-white rounded-lg text-sm">
-              <RefreshCw className="w-4 h-4" /> Refresh
-            </button>
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
-              <input
-                type="text"
-                placeholder="Search patients, drugs, prescribers..."
-                value={search}
-                onChange={e => setSearch(e.target.value)}
-                className="pl-10 pr-4 py-2 w-72 bg-[#1e3a5f] border border-[#2d4a6f] rounded-lg text-sm text-white placeholder-slate-500 focus:outline-none focus:border-[#14b8a6]"
-              />
+            <div className="flex items-center gap-4">
+              <div className="flex items-center gap-2 text-xs text-slate-500">
+                <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse" />
+                Last synced: {lastSync.toLocaleTimeString()}
+              </div>
+              <button onClick={fetchData} className="flex items-center gap-2 px-3 py-2 bg-[#1e3a5f] hover:bg-[#2d4a6f] text-white rounded-lg text-sm">
+                <RefreshCw className="w-4 h-4" /> Refresh
+              </button>
             </div>
           </div>
         </div>
       </div>
 
-      {/* Stats Cards - Clickable */}
+      {/* Stats Cards - Clickable - Now in a rounded card */}
       <div className="px-8 py-6">
-        <div className="grid grid-cols-4 gap-6">
-          {[
-            { key: 'all', label: 'TOTAL OPPORTUNITIES', value: stats.total, annual: stats.total_annual, color: 'teal', borderColor: 'border-t-[#14b8a6]' },
-            { key: 'not_submitted', label: 'NOT SUBMITTED', value: stats.not_submitted, annual: stats.not_submitted_annual, color: 'amber', borderColor: 'border-t-amber-500' },
-            { key: 'submitted', label: 'SUBMITTED', value: stats.submitted, annual: stats.submitted_annual, color: 'blue', borderColor: 'border-t-blue-500' },
-            { key: 'captured', label: 'CAPTURED', value: stats.captured, annual: stats.captured_annual, color: 'green', borderColor: 'border-t-emerald-500' },
-          ].map(card => (
-            <div 
-              key={card.key} 
-              onClick={() => handleStatClick(card.key)}
-              className={`bg-[#0d2137] border border-[#1e3a5f] ${card.borderColor} border-t-[3px] rounded-xl p-6 cursor-pointer hover:bg-[#1e3a5f]/30 transition-colors ${filter === card.key ? 'ring-2 ring-[#14b8a6]' : ''}`}
-            >
+        <div className="bg-[#0d2137] border border-[#1e3a5f] rounded-xl p-6">
+          <div className="grid grid-cols-4 gap-6">
+            {[
+              { key: 'all', label: 'TOTAL OPPORTUNITIES', value: stats.total, annual: stats.total_annual, color: 'teal', borderColor: 'border-t-[#14b8a6]' },
+              { key: 'not_submitted', label: 'NOT SUBMITTED', value: stats.not_submitted, annual: stats.not_submitted_annual, color: 'amber', borderColor: 'border-t-amber-500' },
+              { key: 'submitted', label: 'SUBMITTED', value: stats.submitted, annual: stats.submitted_annual, color: 'blue', borderColor: 'border-t-blue-500' },
+              { key: 'captured', label: 'CAPTURED', value: stats.captured, annual: stats.captured_annual, color: 'green', borderColor: 'border-t-emerald-500' },
+            ].map(card => (
+              <div 
+                key={card.key} 
+                onClick={() => handleStatClick(card.key)}
+                className={`bg-[#0a1628] border border-[#1e3a5f] ${card.borderColor} border-t-[3px] rounded-xl p-6 cursor-pointer hover:bg-[#1e3a5f]/30 transition-colors ${filter === card.key ? 'ring-2 ring-[#14b8a6]' : ''}`}
+              >
               <div className="text-xs text-slate-400 uppercase tracking-wider">{card.label}</div>
               <div className={`text-4xl font-bold mt-2 ${
                 card.color === 'teal' ? 'text-[#14b8a6]' :
@@ -716,6 +720,7 @@ export default function OpportunitiesPage() {
               </div>
             </div>
           ))}
+          </div>
         </div>
       </div>
 
@@ -820,7 +825,7 @@ export default function OpportunitiesPage() {
                       <div className="flex items-center gap-2">
                         <span className="font-semibold text-white">
                           {groupBy === 'patient' 
-                            ? formatPatientName(group.first_name, group.last_name, group.label)
+                            ? formatPatientName(group.first_name, group.last_name, group.label, isDemo)
                             : group.label}
                         </span>
                         {groupBy === 'patient' && group.opportunities[0] && (
@@ -870,7 +875,7 @@ export default function OpportunitiesPage() {
                               {groupBy !== 'patient' && (
                                 <td className="px-5 py-3">
                                   <div className="font-medium text-white">
-                                    {formatPatientName(opp.patient_first_name, opp.patient_last_name, opp.patient_hash)}
+                                    {formatPatientName(opp.patient_first_name, opp.patient_last_name, opp.patient_hash, isDemo)}
                                   </div>
                                   <InsuranceTags opp={opp} size="xs" />
                                 </td>
@@ -931,6 +936,7 @@ export default function OpportunitiesPage() {
             groupItem={selectedGroup}
             onClose={() => { setSelectedOpp(null); setSelectedGroup(null); }}
             onStatusChange={updateStatus}
+            isDemo={isDemo}
           />
         </>
       )}

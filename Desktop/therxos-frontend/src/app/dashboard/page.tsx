@@ -34,13 +34,16 @@ function formatShortCurrency(value: number) {
   return formatCurrency(value);
 }
 
-function formatPatientName(firstName?: string, lastName?: string, hash?: string) {
+function formatPatientName(firstName?: string, lastName?: string, hash?: string, isDemo?: boolean) {
   if (firstName && lastName) {
+    if (isDemo) {
+      return `${firstName} ${lastName}`;
+    }
     const last3 = lastName.slice(0, 3).toUpperCase();
     const first3 = firstName.slice(0, 3).toUpperCase();
     return `${last3},${first3}`;
   }
-  if (lastName) return lastName.slice(0, 6).toUpperCase();
+  if (lastName) return isDemo ? lastName : lastName.slice(0, 6).toUpperCase();
   return hash?.slice(0, 8) || 'Unknown';
 }
 
@@ -132,25 +135,22 @@ function OpportunityTypeRow({
 export default function DashboardPage() {
   const router = useRouter();
   const user = useAuthStore((state) => state.user);
-  const isDemo = user?.userId === 'demo-user-001';
+  const isDemo = user?.email === 'demo@therxos.com';
 
-  // Fetch real data
+  // Fetch real data (demo account now has real superhero data)
   const { data: oppData } = useQuery({
     queryKey: ['all-opportunities'],
     queryFn: () => opportunitiesApi.getAll({ limit: 2000 }).then((r) => r.data),
-    enabled: !isDemo,
   });
 
   const { data: dashboardData, isLoading } = useQuery({
     queryKey: ['dashboard'],
     queryFn: () => analyticsApi.dashboard(30).then((r) => r.data),
-    enabled: !isDemo,
   });
 
   const { data: performanceData } = useQuery({
     queryKey: ['performance'],
     queryFn: () => analyticsApi.performance(30).then((r) => r.data),
-    enabled: !isDemo,
   });
 
   // Process opportunities for type breakdown and top patients
@@ -223,15 +223,7 @@ export default function DashboardPage() {
   }, 0);
   const capturedMonthly = capturedAnnual / 12;
 
-  const stats = isDemo ? {
-    pending_opportunities: 12,
-    pending_annual: 4250,
-    pending_monthly: 354,
-    captured_annual: 0,
-    captured_monthly: 0,
-    total_patients: 342,
-    patients_with_opps: 89,
-  } : {
+  const stats = {
     pending_opportunities: pendingOpps,
     pending_annual: pendingAnnual,
     pending_monthly: pendingMonthly,
@@ -263,7 +255,7 @@ export default function DashboardPage() {
     router.push(`/dashboard/opportunities?type=${type}`);
   };
 
-  if (isLoading && !isDemo) {
+  if (isLoading) {
     return (
       <div className="flex items-center justify-center h-64">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[var(--teal-500)]" />
@@ -447,7 +439,7 @@ export default function DashboardPage() {
                         style={{ color: 'var(--teal-500)' }}
                       >
                         <div className="font-semibold">
-                          {formatPatientName(patient.first_name, patient.last_name, patient.patient_hash)}
+                          {formatPatientName(patient.first_name, patient.last_name, patient.patient_hash, isDemo)}
                         </div>
                         {patient.date_of_birth && (
                           <div className="text-xs mt-0.5" style={{ color: 'var(--slate-400)' }}>

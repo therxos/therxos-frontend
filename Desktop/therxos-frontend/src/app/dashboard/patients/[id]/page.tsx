@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
+import { useAuthStore } from '@/store';
 import {
   ArrowLeft,
   Pill,
@@ -57,7 +58,10 @@ function formatDate(date: string): string {
   return new Date(date).toLocaleDateString('en-US');
 }
 
-function formatPatientName(first?: string, last?: string): string {
+function formatPatientName(first?: string, last?: string, isDemo?: boolean): string {
+  if (isDemo && first && last) {
+    return `${first} ${last}`;
+  }
   const f = (first || '').toUpperCase().slice(0, 3);
   const l = (last || '').toUpperCase().slice(0, 3);
   return f && l ? `${l},${f}` : l || 'UNKNOWN';
@@ -79,6 +83,8 @@ export default function PatientProfilePage() {
   const params = useParams();
   const router = useRouter();
   const patientId = params.id as string;
+  const user = useAuthStore((state) => state.user);
+  const isDemo = user?.email === 'demo@therxos.com';
   const [patient, setPatient] = useState<Patient | null>(null);
   const [prescriptions, setPrescriptions] = useState<Prescription[]>([]);
   const [opportunities, setOpportunities] = useState<Opportunity[]>([]);
@@ -115,7 +121,7 @@ export default function PatientProfilePage() {
       <div className="flex items-center gap-4 mb-8">
         <button onClick={() => router.back()} className="p-2 hover:bg-[#1e3a5f] rounded-lg"><ArrowLeft className="w-5 h-5 text-slate-400" /></button>
         <div className="w-14 h-14 rounded-full bg-[#14b8a6]/20 flex items-center justify-center"><span className="text-lg font-bold text-[#14b8a6]">{(patient.last_name || '?').slice(0,2).toUpperCase()}</span></div>
-        <div><h1 className="text-2xl font-bold text-white">{formatPatientName(patient.first_name, patient.last_name)}</h1><p className="text-slate-400">DOB: {formatDate(patient.date_of_birth)}</p></div>
+        <div><h1 className="text-2xl font-bold text-white">{formatPatientName(patient.first_name, patient.last_name, isDemo)}</h1><p className="text-slate-400">DOB: {formatDate(patient.date_of_birth)}</p></div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">

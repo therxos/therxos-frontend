@@ -30,6 +30,9 @@ export default function UploadPage() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [uploadStatus, setUploadStatus] = useState<'idle' | 'uploading' | 'success' | 'error'>('idle');
   const [uploadMessage, setUploadMessage] = useState('');
+  const [runAutoComplete, setRunAutoComplete] = useState(true);
+  const [runScan, setRunScan] = useState(false);
+  const [uploadResults, setUploadResults] = useState<any>(null);
 
   const { data: ingestionStatus } = useQuery({
     queryKey: ['ingestion-status'],
@@ -38,10 +41,23 @@ export default function UploadPage() {
   });
 
   const uploadMutation = useMutation({
-    mutationFn: (file: File) => ingestionApi.uploadCSV(file),
+    mutationFn: (file: File) => ingestionApi.uploadCSV(file, {
+      runAutoComplete: runAutoComplete,
+      runScan: runScan
+    }),
     onSuccess: (data) => {
       setUploadStatus('success');
-      setUploadMessage(`Successfully processed ${data.data?.recordsProcessed || 0} records`);
+      const results = data.data;
+      setUploadResults(results);
+
+      let message = `Successfully processed ${results?.recordsProcessed || 0} records`;
+      if (results?.autoComplete?.completed > 0) {
+        message += ` • ${results.autoComplete.completed} opportunities auto-completed`;
+      }
+      if (results?.scan?.opportunitiesCreated > 0) {
+        message += ` • ${results.scan.opportunitiesCreated} new opportunities found`;
+      }
+      setUploadMessage(message);
       setSelectedFile(null);
     },
     onError: (error: any) => {
@@ -64,12 +80,13 @@ export default function UploadPage() {
     e.preventDefault();
     e.stopPropagation();
     setDragActive(false);
-    
+
     if (e.dataTransfer.files && e.dataTransfer.files[0]) {
       const file = e.dataTransfer.files[0];
       if (file.type === 'text/csv' || file.name.endsWith('.csv')) {
         setSelectedFile(file);
         setUploadStatus('idle');
+        setUploadResults(null);
       } else {
         setUploadStatus('error');
         setUploadMessage('Please upload a CSV file');
@@ -81,6 +98,7 @@ export default function UploadPage() {
     if (e.target.files && e.target.files[0]) {
       setSelectedFile(e.target.files[0]);
       setUploadStatus('idle');
+      setUploadResults(null);
     }
   };
 
@@ -144,6 +162,30 @@ export default function UploadPage() {
                 </button>
               </div>
               
+              {/* Processing Options */}
+              <div className="flex flex-wrap gap-4 justify-center mb-4">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={runAutoComplete}
+                    onChange={(e) => setRunAutoComplete(e.target.checked)}
+                    className="w-4 h-4 rounded"
+                    style={{ accentColor: 'var(--teal-500)' }}
+                  />
+                  <span className="text-sm">Auto-complete matching opportunities</span>
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={runScan}
+                    onChange={(e) => setRunScan(e.target.checked)}
+                    className="w-4 h-4 rounded"
+                    style={{ accentColor: 'var(--teal-500)' }}
+                  />
+                  <span className="text-sm">Scan for new opportunities</span>
+                </label>
+              </div>
+
               <button
                 onClick={handleUpload}
                 disabled={uploadStatus === 'uploading'}
@@ -184,9 +226,27 @@ export default function UploadPage() {
 
         {/* Status Messages */}
         {uploadStatus === 'success' && (
-          <div className="mt-4 p-4 rounded-lg flex items-center gap-3" style={{ background: 'var(--green-100)' }}>
-            <CheckCircle className="w-5 h-5" style={{ color: '#166534' }} />
-            <span style={{ color: '#166534' }}>{uploadMessage}</span>
+          <div className="mt-4 p-4 rounded-lg" style={{ background: 'var(--green-100)' }}>
+            <div className="flex items-center gap-3 mb-2">
+              <CheckCircle className="w-5 h-5" style={{ color: '#166534' }} />
+              <span className="font-medium" style={{ color: '#166534' }}>{uploadMessage}</span>
+            </div>
+            {uploadResults && (
+              <div className="text-sm mt-3 space-y-1" style={{ color: '#166534' }}>
+                {uploadResults.prescriptionsCreated > 0 && (
+                  <p>• {uploadResults.prescriptionsCreated} new prescriptions added</p>
+                )}
+                {uploadResults.patientsCreated > 0 && (
+                  <p>• {uploadResults.patientsCreated} new patients created</p>
+                )}
+                {uploadResults.autoComplete && (
+                  <p>• {uploadResults.autoComplete.completed || 0} opportunities auto-completed from matching fills</p>
+                )}
+                {uploadResults.scan && uploadResults.scan.opportunitiesCreated > 0 && (
+                  <p>• {uploadResults.scan.opportunitiesCreated} new opportunities identified</p>
+                )}
+              </div>
+            )}
           </div>
         )}
         
