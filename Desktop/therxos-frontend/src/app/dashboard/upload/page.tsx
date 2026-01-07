@@ -105,7 +105,13 @@ export default function UploadPage() {
 
   const handleUpload = async () => {
     if (!selectedFile) return;
-    
+
+    if (!user?.pharmacyId) {
+      setUploadStatus('error');
+      setUploadMessage('Session expired. Please log out and log back in.');
+      return;
+    }
+
     if (isDemo) {
       setUploadStatus('uploading');
       setTimeout(() => {
