@@ -42,6 +42,7 @@ export default function UploadPage() {
 
   const uploadMutation = useMutation({
     mutationFn: (file: File) => ingestionApi.uploadCSV(file, {
+      pharmacyId: user?.pharmacyId,
       runAutoComplete: runAutoComplete,
       runScan: runScan
     }),
