@@ -23,6 +23,10 @@ import {
   RefreshCw,
   Zap,
   ExternalLink,
+  XCircle,
+  Flag,
+  Trash2,
+  RotateCcw,
 } from 'lucide-react';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL;
@@ -54,6 +58,27 @@ interface PlatformStats {
   arr: number;
 }
 
+interface DidntWorkOpp {
+  opportunity_id: string;
+  opportunity_type: string;
+  trigger_group: string;
+  current_drug_name: string;
+  recommended_drug_name: string;
+  potential_margin_gain: number;
+  annual_margin_gain: number;
+  staff_notes: string;
+  updated_at: string;
+  pharmacy_name: string;
+  pharmacy_id: string;
+  insurance_bin: string;
+  insurance_group: string;
+  plan_name: string;
+  patient_first_name: string;
+  patient_last_name: string;
+  affected_count: number;
+  affected_value: number;
+}
+
 export default function SuperAdminPage() {
   const router = useRouter();
   const { user, _hasHydrated, setAuth } = useAuthStore();
@@ -67,6 +92,9 @@ export default function SuperAdminPage() {
   const [gmailStatus, setGmailStatus] = useState<{ connected: boolean; lastUpdated: string | null } | null>(null);
   const [pollingPharmacy, setPollingPharmacy] = useState<string | null>(null);
   const [pollResult, setPollResult] = useState<any>(null);
+  const [didntWorkQueue, setDidntWorkQueue] = useState<DidntWorkOpp[]>([]);
+  const [processingOpp, setProcessingOpp] = useState<string | null>(null);
+  const [showDidntWorkQueue, setShowDidntWorkQueue] = useState(true);
 
   useEffect(() => {
     // Wait for hydration before checking role
@@ -107,10 +135,130 @@ export default function SuperAdminPage() {
 
       // Fetch Gmail status
       fetchGmailStatus();
+
+      // Fetch didn't work queue
+      fetchDidntWorkQueue();
     } catch (err) {
       console.error('Failed to fetch admin data:', err);
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function fetchDidntWorkQueue() {
+    try {
+      const token = localStorage.getItem('therxos_token');
+      const res = await fetch(`${API_URL}/api/admin/didnt-work-queue`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setDidntWorkQueue(data.opportunities || []);
+      }
+    } catch (err) {
+      console.error('Failed to fetch didnt-work queue:', err);
+    }
+  }
+
+  async function handleExcludeGroup(opp: DidntWorkOpp) {
+    if (!confirm(`This will deny ALL ${opp.affected_count} opportunities for "${opp.opportunity_type}" on insurance group "${opp.insurance_group}". Continue?`)) {
+      return;
+    }
+    setProcessingOpp(opp.opportunity_id);
+    try {
+      const token = localStorage.getItem('therxos_token');
+      const res = await fetch(`${API_URL}/api/admin/exclude-group`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          opportunityType: opp.opportunity_type,
+          insuranceGroup: opp.insurance_group,
+          insuranceBin: opp.insurance_bin,
+          reason: `Excluded: ${opp.opportunity_type} doesn't work on ${opp.insurance_group}`,
+          opportunityId: opp.opportunity_id,
+        }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        alert(`${data.excluded} opportunities excluded for ${opp.opportunity_type} on ${opp.insurance_group}`);
+        fetchDidntWorkQueue();
+      } else {
+        const error = await res.json();
+        alert('Error: ' + (error.error || 'Unknown error'));
+      }
+    } catch (err) {
+      console.error('Exclude failed:', err);
+      alert('Failed to exclude group');
+    } finally {
+      setProcessingOpp(null);
+    }
+  }
+
+  async function handleFlagGroup(opp: DidntWorkOpp) {
+    if (!confirm(`This will flag ALL ${opp.affected_count} opportunities for "${opp.opportunity_type}" on insurance group "${opp.insurance_group}" until you fix them. Continue?`)) {
+      return;
+    }
+    setProcessingOpp(opp.opportunity_id);
+    try {
+      const token = localStorage.getItem('therxos_token');
+      const res = await fetch(`${API_URL}/api/admin/flag-group`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          opportunityType: opp.opportunity_type,
+          insuranceGroup: opp.insurance_group,
+          opportunityId: opp.opportunity_id,
+        }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        alert(`${data.flagged} opportunities flagged for ${opp.opportunity_type} on ${opp.insurance_group}`);
+        fetchDidntWorkQueue();
+      } else {
+        const error = await res.json();
+        alert('Error: ' + (error.error || 'Unknown error'));
+      }
+    } catch (err) {
+      console.error('Flag failed:', err);
+      alert('Failed to flag group');
+    } finally {
+      setProcessingOpp(null);
+    }
+  }
+
+  async function handleResolveOpp(opp: DidntWorkOpp, action: 'deny' | 'reopen') {
+    setProcessingOpp(opp.opportunity_id);
+    try {
+      const token = localStorage.getItem('therxos_token');
+      const res = await fetch(`${API_URL}/api/admin/resolve-didnt-work`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          opportunityId: opp.opportunity_id,
+          action,
+          reason: action === 'deny' ? 'Resolved by super admin' : null,
+        }),
+      });
+      if (res.ok) {
+        fetchDidntWorkQueue();
+      } else {
+        const error = await res.json();
+        alert('Error: ' + (error.error || 'Unknown error'));
+      }
+    } catch (err) {
+      console.error('Resolve failed:', err);
+      alert('Failed to resolve opportunity');
+    } finally {
+      setProcessingOpp(null);
     }
   }
 
@@ -533,6 +681,127 @@ export default function SuperAdminPage() {
           </div>
         )}
       </div>
+
+      {/* Didn't Work Queue */}
+      {didntWorkQueue.length > 0 && (
+        <div className="bg-[#0d2137] border border-red-500/30 rounded-xl p-6 mb-8">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-lg bg-red-500/20 flex items-center justify-center">
+                <XCircle className="w-5 h-5 text-red-400" />
+              </div>
+              <div>
+                <h2 className="text-lg font-semibold text-white">Didn&apos;t Work Queue</h2>
+                <p className="text-sm text-slate-400">
+                  {didntWorkQueue.length} opportunities need attention
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={() => setShowDidntWorkQueue(!showDidntWorkQueue)}
+              className="flex items-center gap-2 px-3 py-1.5 text-sm text-slate-400 hover:text-white transition-colors"
+            >
+              {showDidntWorkQueue ? 'Hide' : 'Show'}
+              <ChevronDown className={`w-4 h-4 transition-transform ${showDidntWorkQueue ? 'rotate-180' : ''}`} />
+            </button>
+          </div>
+
+          {showDidntWorkQueue && (
+            <div className="space-y-3">
+              {didntWorkQueue.map((opp) => (
+                <div
+                  key={opp.opportunity_id}
+                  className="bg-[#0a1628] rounded-lg p-4 border border-[#1e3a5f]"
+                >
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-2">
+                        <span className="px-2 py-0.5 bg-red-500/20 text-red-400 text-xs rounded font-medium">
+                          {opp.opportunity_type}
+                        </span>
+                        <span className="text-xs text-slate-500">•</span>
+                        <span className="text-xs text-slate-400">{opp.pharmacy_name}</span>
+                      </div>
+                      <p className="text-sm text-white mb-1">
+                        {opp.current_drug_name} → {opp.recommended_drug_name}
+                      </p>
+                      <p className="text-xs text-slate-400 mb-2">
+                        Patient: {opp.patient_first_name} {opp.patient_last_name}
+                      </p>
+                      <div className="flex items-center gap-4 text-xs">
+                        <div>
+                          <span className="text-slate-500">BIN:</span>{' '}
+                          <span className="text-amber-400 font-mono">{opp.insurance_bin || 'N/A'}</span>
+                        </div>
+                        <div>
+                          <span className="text-slate-500">GROUP:</span>{' '}
+                          <span className="text-amber-400 font-mono">{opp.insurance_group || 'N/A'}</span>
+                        </div>
+                        <div>
+                          <span className="text-slate-500">Plan:</span>{' '}
+                          <span className="text-slate-300">{opp.plan_name || 'Unknown'}</span>
+                        </div>
+                      </div>
+                      {opp.staff_notes && (
+                        <p className="text-xs text-slate-500 mt-2 italic">
+                          Note: {opp.staff_notes}
+                        </p>
+                      )}
+                      <div className="flex items-center gap-4 mt-3 pt-3 border-t border-[#1e3a5f]">
+                        <div className="text-xs">
+                          <span className="text-slate-500">Same trigger+group:</span>{' '}
+                          <span className="text-teal-400 font-semibold">{opp.affected_count}</span>
+                          <span className="text-slate-500"> opps worth </span>
+                          <span className="text-emerald-400 font-semibold">${Math.round(opp.affected_value).toLocaleString()}</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex flex-col gap-2">
+                      <button
+                        onClick={() => handleExcludeGroup(opp)}
+                        disabled={processingOpp === opp.opportunity_id}
+                        className="flex items-center gap-1.5 px-3 py-1.5 bg-red-500/20 hover:bg-red-500/30 text-red-400 text-xs font-medium rounded transition-colors disabled:opacity-50"
+                        title="Deny ALL opportunities for this trigger on this insurance group"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                        Exclude Group
+                      </button>
+                      <button
+                        onClick={() => handleFlagGroup(opp)}
+                        disabled={processingOpp === opp.opportunity_id}
+                        className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-500/20 hover:bg-purple-500/30 text-purple-400 text-xs font-medium rounded transition-colors disabled:opacity-50"
+                        title="Flag all for this trigger+group until fixed"
+                      >
+                        <Flag className="w-3.5 h-3.5" />
+                        Flag Group
+                      </button>
+                      <button
+                        onClick={() => handleResolveOpp(opp, 'deny')}
+                        disabled={processingOpp === opp.opportunity_id}
+                        className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-500/20 hover:bg-slate-500/30 text-slate-400 text-xs font-medium rounded transition-colors disabled:opacity-50"
+                        title="Just deny this one opportunity"
+                      >
+                        <XCircle className="w-3.5 h-3.5" />
+                        Deny This One
+                      </button>
+                      <button
+                        onClick={() => handleResolveOpp(opp, 'reopen')}
+                        disabled={processingOpp === opp.opportunity_id}
+                        className="flex items-center gap-1.5 px-3 py-1.5 bg-teal-500/20 hover:bg-teal-500/30 text-teal-400 text-xs font-medium rounded transition-colors disabled:opacity-50"
+                        title="Reopen this opportunity"
+                      >
+                        <RotateCcw className="w-3.5 h-3.5" />
+                        Reopen
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Search */}
       <div className="mb-6">
