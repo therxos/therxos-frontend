@@ -103,6 +103,9 @@ export const analyticsApi = {
 
 // Settings API
 export const settingsApi = {
+  getAvailableTriggers: () =>
+    api.get('/settings/triggers'),
+
   getPharmacySettings: (pharmacyId: string) =>
     api.get(`/settings/pharmacy/${pharmacyId}`),
 

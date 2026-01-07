@@ -21,7 +21,10 @@ import {
   X,
   Loader2,
   Mail,
-  Copy
+  Copy,
+  Zap,
+  ChevronDown,
+  ChevronRight
 } from 'lucide-react';
 
 const OPPORTUNITY_TYPES = {
@@ -87,6 +90,9 @@ export default function SettingsPage() {
   const [newPrescriberDea, setNewPrescriberDea] = useState('');
   const [newPrescriberReason, setNewPrescriberReason] = useState('');
 
+  // Triggers state
+  const [expandedCategories, setExpandedCategories] = useState<string[]>([]);
+
   // Fetch pharmacy settings
   const { data: pharmacySettings, isLoading: settingsLoading } = useQuery({
     queryKey: ['pharmacy-settings', user?.pharmacyId],
@@ -105,6 +111,13 @@ export default function SettingsPage() {
   const { data: pharmacyUsers, isLoading: usersLoading } = useQuery({
     queryKey: ['pharmacy-users', user?.pharmacyId],
     queryFn: () => settingsApi.getPharmacyUsers(user!.pharmacyId).then(r => r.data),
+    enabled: !!user?.pharmacyId && isOwnerOrAdmin
+  });
+
+  // Fetch available triggers
+  const { data: triggersData, isLoading: triggersLoading } = useQuery({
+    queryKey: ['available-triggers'],
+    queryFn: () => settingsApi.getAvailableTriggers().then(r => r.data),
     enabled: !!user?.pharmacyId && isOwnerOrAdmin
   });
 
@@ -256,11 +269,42 @@ export default function SettingsPage() {
     navigator.clipboard.writeText(text);
   };
 
+  const handleToggleTrigger = (triggerId: string, enabled: boolean) => {
+    const currentDisabled = pharmacySettings?.disabledTriggers || [];
+    let newDisabled;
+    if (enabled) {
+      // Remove from disabled list
+      newDisabled = currentDisabled.filter((id: string) => id !== triggerId);
+    } else {
+      // Add to disabled list
+      newDisabled = [...currentDisabled, triggerId];
+    }
+    const newSettings = {
+      ...pharmacySettings,
+      disabledTriggers: newDisabled
+    };
+    updateSettingsMutation.mutate(newSettings);
+  };
+
+  const toggleCategory = (category: string) => {
+    setExpandedCategories(prev =>
+      prev.includes(category)
+        ? prev.filter(c => c !== category)
+        : [...prev, category]
+    );
+  };
+
+  const isTriggerEnabled = (triggerId: string) => {
+    const disabledTriggers = pharmacySettings?.disabledTriggers || [];
+    return !disabledTriggers.includes(triggerId);
+  };
+
   const tabs = [
     { id: 'profile', label: 'Profile', icon: User },
     { id: 'pharmacy', label: 'Pharmacy', icon: Building2 },
     ...(isOwnerOrAdmin ? [
       { id: 'opportunities', label: 'Opportunities', icon: Lightbulb },
+      { id: 'triggers', label: 'Triggers', icon: Zap },
       { id: 'prescribers', label: 'Prescribers', icon: UserX },
       { id: 'team', label: 'Team', icon: Users }
     ] : []),
@@ -381,6 +425,86 @@ export default function SettingsPage() {
                   </div>
                 </label>
               ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Triggers Tab (Owner/Admin only) */}
+      {activeTab === 'triggers' && isOwnerOrAdmin && (
+        <div className="card p-6">
+          <h2 className="text-lg font-semibold mb-2">Opportunity Triggers</h2>
+          <p className="text-sm mb-6" style={{ color: 'var(--slate-400)' }}>
+            Enable or disable specific opportunity triggers for your pharmacy. Disabled triggers will not generate new opportunities.
+          </p>
+
+          {triggersLoading || settingsLoading ? (
+            <div className="flex items-center gap-2" style={{ color: 'var(--slate-400)' }}>
+              <Loader2 className="w-4 h-4 animate-spin" /> Loading triggers...
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {triggersData?.categories?.map((category: string) => {
+                const triggers = triggersData.grouped[category] || [];
+                const isExpanded = expandedCategories.includes(category);
+                const enabledCount = triggers.filter((t: any) => isTriggerEnabled(t.triggerId)).length;
+
+                return (
+                  <div key={category} className="rounded-lg overflow-hidden" style={{ background: 'var(--navy-700)' }}>
+                    <button
+                      onClick={() => toggleCategory(category)}
+                      className="w-full flex items-center justify-between p-4 hover:bg-[var(--navy-600)] transition-colors"
+                    >
+                      <div className="flex items-center gap-3">
+                        {isExpanded ? (
+                          <ChevronDown className="w-5 h-5" style={{ color: 'var(--teal-500)' }} />
+                        ) : (
+                          <ChevronRight className="w-5 h-5" style={{ color: 'var(--slate-400)' }} />
+                        )}
+                        <span className="font-medium">{category}</span>
+                      </div>
+                      <span className="text-sm" style={{ color: 'var(--slate-400)' }}>
+                        {enabledCount} / {triggers.length} enabled
+                      </span>
+                    </button>
+
+                    {isExpanded && (
+                      <div className="border-t border-[var(--navy-600)]">
+                        {triggers.map((trigger: any) => (
+                          <label
+                            key={trigger.triggerId}
+                            className="flex items-start gap-4 p-4 cursor-pointer hover:bg-[var(--navy-600)] border-b border-[var(--navy-600)] last:border-b-0"
+                          >
+                            <input
+                              type="checkbox"
+                              checked={isTriggerEnabled(trigger.triggerId)}
+                              onChange={(e) => handleToggleTrigger(trigger.triggerId, e.target.checked)}
+                              className="w-5 h-5 mt-0.5 rounded accent-[var(--teal-500)]"
+                              disabled={updateSettingsMutation.isPending}
+                            />
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2">
+                                <p className="font-medium">{trigger.displayName}</p>
+                                {trigger.priority === 'HIGH' && (
+                                  <span className="badge badge-amber text-xs">High Priority</span>
+                                )}
+                              </div>
+                              {trigger.recommendedMed && (
+                                <p className="text-sm mt-1" style={{ color: 'var(--slate-400)' }}>
+                                  Recommends: {trigger.recommendedMed}
+                                </p>
+                              )}
+                              <p className="text-xs mt-1 font-mono" style={{ color: 'var(--slate-500)' }}>
+                                {trigger.triggerId}
+                              </p>
+                            </div>
+                          </label>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           )}
         </div>
