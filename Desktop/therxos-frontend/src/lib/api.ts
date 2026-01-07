@@ -101,6 +101,43 @@ export const analyticsApi = {
   ingestionStatus: () => api.get('/analytics/ingestion-status'),
 };
 
+// Settings API
+export const settingsApi = {
+  getPharmacySettings: (pharmacyId: string) =>
+    api.get(`/settings/pharmacy/${pharmacyId}`),
+
+  updatePharmacySettings: (pharmacyId: string, settings: any) =>
+    api.put(`/settings/pharmacy/${pharmacyId}`, { settings }),
+
+  getExcludedPrescribers: (pharmacyId: string) =>
+    api.get(`/settings/pharmacy/${pharmacyId}/excluded-prescribers`),
+
+  addExcludedPrescriber: (pharmacyId: string, data: {
+    prescriberName: string;
+    prescriberNpi?: string;
+    prescriberDea?: string;
+    reason?: string;
+  }) => api.post(`/settings/pharmacy/${pharmacyId}/excluded-prescribers`, data),
+
+  removeExcludedPrescriber: (pharmacyId: string, id: string) =>
+    api.delete(`/settings/pharmacy/${pharmacyId}/excluded-prescribers/${id}`),
+
+  getPharmacyUsers: (pharmacyId: string) =>
+    api.get(`/settings/pharmacy/${pharmacyId}/users`),
+
+  createUser: (pharmacyId: string, data: {
+    email: string;
+    firstName: string;
+    lastName: string;
+    role: string;
+  }) => api.post(`/settings/pharmacy/${pharmacyId}/users`, data),
+
+  updateUser: (pharmacyId: string, userId: string, data: {
+    role?: string;
+    isActive?: boolean;
+  }) => api.patch(`/settings/pharmacy/${pharmacyId}/users/${userId}`, data),
+};
+
 // Ingestion API
 export const ingestionApi = {
   uploadCSV: (file: File, options?: { pharmacyId?: string; sourceEmail?: string; runAutoComplete?: boolean; runScan?: boolean }) => {
