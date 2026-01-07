@@ -30,6 +30,7 @@ import {
   FileText,
   Building2,
   Shield,
+  Flag,
 } from 'lucide-react';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL;
@@ -92,7 +93,8 @@ export default function DashboardLayout({
 
   const pharmacies: Pharmacy[] = pharmaciesData?.pharmacies || [];
 
-  const notSubmittedCount = oppData?.counts?.new?.count || 0;
+  const notSubmittedCount = oppData?.counts?.['Not Submitted']?.count || oppData?.counts?.new?.count || 0;
+  const flaggedCount = oppData?.counts?.Flagged?.count || 0;
 
   // Switch to a different pharmacy (impersonate)
   async function switchPharmacy(pharmacyId: string) {
@@ -180,6 +182,7 @@ export default function DashboardLayout({
   const navigation = [
     { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard, show: true },
     { name: 'Opportunities', href: '/dashboard/opportunities', icon: Lightbulb, badge: notSubmittedCount, show: true },
+    { name: 'Flagged', href: '/dashboard/opportunities?filter=flagged', icon: Flag, badge: flaggedCount, badgeColor: 'purple', show: true },
     { name: 'Audit Risks', href: '/dashboard/audit', icon: ShieldAlert, badge: 0, show: canViewAuditRisks },
     { name: 'Patients', href: '/dashboard/patients', icon: Users, show: canViewPatientDetails },
     { name: 'Analytics', href: '/dashboard/analytics', icon: BarChart3, show: canViewAnalytics },
@@ -280,10 +283,10 @@ export default function DashboardLayout({
                     <item.icon className="w-5 h-5 flex-shrink-0" />
                     {!sidebarCollapsed && <span className="flex-1">{item.name}</span>}
                     {!sidebarCollapsed && item.badge !== undefined && item.badge > 0 && (
-                      <span 
+                      <span
                         className="text-xs font-semibold px-2 py-0.5 rounded-full"
-                        style={{ 
-                          background: isActive ? 'var(--navy-900)' : 'var(--red-500)',
+                        style={{
+                          background: isActive ? 'var(--navy-900)' : (item as any).badgeColor === 'purple' ? 'rgb(147, 51, 234)' : 'var(--red-500)',
                           color: isActive ? 'var(--teal-500)' : '#ffffff'
                         }}
                       >
@@ -291,9 +294,9 @@ export default function DashboardLayout({
                       </span>
                     )}
                     {sidebarCollapsed && item.badge !== undefined && item.badge > 0 && (
-                      <span 
+                      <span
                         className="absolute top-0 right-0 w-2 h-2 rounded-full"
-                        style={{ background: 'var(--red-500)' }}
+                        style={{ background: (item as any).badgeColor === 'purple' ? 'rgb(147, 51, 234)' : 'var(--red-500)' }}
                       />
                     )}
                   </Link>

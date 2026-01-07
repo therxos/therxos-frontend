@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useAuthStore } from '@/store';
 import {
   Search,
@@ -65,6 +65,8 @@ interface Stats {
   submitted: number;
   captured: number;
   didnt_work: number;
+  flagged: number;
+  denied: number;
   total_annual: number;
   not_submitted_annual: number;
   submitted_annual: number;
@@ -167,10 +169,12 @@ function InsuranceTags({ opp, size = 'sm' }: { opp: Opportunity; size?: 'sm' | '
   );
 }
 
-// Status Dropdown
+// Status Dropdown with portal positioning
 function StatusDropdown({ status, onChange }: { status: string; onChange: (s: string) => void }) {
   const [open, setOpen] = useState(false);
-  
+  const [position, setPosition] = useState({ top: 0, left: 0, flipUp: false });
+  const buttonRef = React.useRef<HTMLButtonElement>(null);
+
   const statuses = [
     { value: 'Not Submitted', label: 'Not Submitted', color: 'bg-amber-500' },
     { value: 'Submitted', label: 'Submitted', color: 'bg-blue-500' },
@@ -178,23 +182,45 @@ function StatusDropdown({ status, onChange }: { status: string; onChange: (s: st
     { value: 'Completed', label: 'Completed', color: 'bg-green-500' },
     { value: 'Denied', label: 'Denied', color: 'bg-slate-500' },
     { value: "Didn't Work", label: "Didn't Work", color: 'bg-red-500' },
+    { value: 'Flagged', label: 'Flag for Review', color: 'bg-purple-500' },
   ];
-  
+
   const current = statuses.find(s => s.value === status) || statuses[0];
-  
+
+  const handleOpen = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (buttonRef.current) {
+      const rect = buttonRef.current.getBoundingClientRect();
+      const dropdownHeight = statuses.length * 36 + 8; // Approximate height
+      const spaceBelow = window.innerHeight - rect.bottom;
+      const flipUp = spaceBelow < dropdownHeight && rect.top > dropdownHeight;
+
+      setPosition({
+        top: flipUp ? rect.top - dropdownHeight : rect.bottom + 4,
+        left: rect.right - 144, // 144 = w-36 = 9rem
+        flipUp
+      });
+    }
+    setOpen(!open);
+  };
+
   return (
     <div className="relative">
       <button
-        onClick={(e) => { e.stopPropagation(); setOpen(!open); }}
+        ref={buttonRef}
+        onClick={handleOpen}
         className={`${current.color} text-white px-3 py-1 rounded text-xs font-medium flex items-center gap-1`}
       >
         {current.label}
-        <ChevronDown className="w-3 h-3" />
+        <ChevronDown className={`w-3 h-3 transition-transform ${open && position.flipUp ? 'rotate-180' : ''}`} />
       </button>
       {open && (
         <>
-          <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
-          <div className="absolute right-0 mt-1 w-36 bg-[#0d2137] rounded-lg shadow-xl border border-[#1e3a5f] z-50 overflow-hidden">
+          <div className="fixed inset-0 z-[100]" onClick={() => setOpen(false)} />
+          <div
+            className="fixed w-36 bg-[#0d2137] rounded-lg shadow-xl border border-[#1e3a5f] z-[101] overflow-hidden"
+            style={{ top: position.top, left: position.left }}
+          >
             {statuses.map(s => (
               <button
                 key={s.value}
@@ -430,11 +456,13 @@ export default function OpportunitiesPage() {
   const [opportunities, setOpportunities] = useState<Opportunity[]>([]);
   const [groupedItems, setGroupedItems] = useState<GroupedItem[]>([]);
   const [stats, setStats] = useState<Stats>({
-    total: 0, not_submitted: 0, submitted: 0, captured: 0, didnt_work: 0,
+    total: 0, not_submitted: 0, submitted: 0, captured: 0, didnt_work: 0, flagged: 0, denied: 0,
     total_annual: 0, not_submitted_annual: 0, submitted_annual: 0, captured_annual: 0,
   });
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('all');
+  const [statusFilter, setStatusFilter] = useState<string | null>(null);
+  const [showDenied, setShowDenied] = useState(false);
   const [typeFilter, setTypeFilter] = useState<string | null>(null);
   const [groupBy, setGroupBy] = useState('patient');
   const [search, setSearch] = useState('');
@@ -444,14 +472,18 @@ export default function OpportunitiesPage() {
   const [notesModal, setNotesModal] = useState<Opportunity | null>(null);
   const [lastSync, setLastSync] = useState(new Date());
 
-  // Check URL for type filter
+  // Check URL for type/filter params
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const params = new URLSearchParams(window.location.search);
       const type = params.get('type');
+      const filterParam = params.get('filter');
       if (type) {
         setTypeFilter(type);
         setGroupBy('category');
+      }
+      if (filterParam === 'flagged') {
+        setFilter('flagged');
       }
     }
   }, []);
@@ -471,14 +503,17 @@ export default function OpportunitiesPage() {
       const opps: Opportunity[] = data.opportunities || [];
       setOpportunities(opps);
 
-      // Calculate stats
+      // Calculate stats - exclude Denied and Flagged from totals
+      const activeOpps = opps.filter(o => o.status !== 'Denied' && o.status !== 'Flagged');
       const calcStats: Stats = {
-        total: opps.length,
+        total: activeOpps.length,
         not_submitted: opps.filter(o => o.status === 'Not Submitted').length,
         submitted: opps.filter(o => o.status === 'Submitted').length,
         captured: opps.filter(o => o.status === 'Completed' || o.status === 'Approved').length,
         didnt_work: opps.filter(o => o.status === "Didn't Work").length,
-        total_annual: opps.reduce((s, o) => s + getAnnualValue(o), 0),
+        flagged: opps.filter(o => o.status === 'Flagged').length,
+        denied: opps.filter(o => o.status === 'Denied').length,
+        total_annual: activeOpps.reduce((s, o) => s + getAnnualValue(o), 0),
         not_submitted_annual: opps.filter(o => o.status === 'Not Submitted').reduce((s, o) => s + getAnnualValue(o), 0),
         submitted_annual: opps.filter(o => o.status === 'Submitted').reduce((s, o) => s + getAnnualValue(o), 0),
         captured_annual: opps.filter(o => o.status === 'Completed' || o.status === 'Approved').reduce((s, o) => s + getAnnualValue(o), 0),
@@ -567,13 +602,16 @@ export default function OpportunitiesPage() {
       setOpportunities(prev => prev.map(o => o.opportunity_id === id ? { ...o, status } : o));
       // Recalculate stats
       const opps = opportunities.map(o => o.opportunity_id === id ? { ...o, status } : o);
+      const activeOpps = opps.filter(o => o.status !== 'Denied' && o.status !== 'Flagged');
       setStats({
-        total: opps.length,
+        total: activeOpps.length,
         not_submitted: opps.filter(o => o.status === 'Not Submitted').length,
         submitted: opps.filter(o => o.status === 'Submitted').length,
         captured: opps.filter(o => o.status === 'Completed' || o.status === 'Approved').length,
         didnt_work: opps.filter(o => o.status === "Didn't Work").length,
-        total_annual: opps.reduce((s, o) => s + getAnnualValue(o), 0),
+        flagged: opps.filter(o => o.status === 'Flagged').length,
+        denied: opps.filter(o => o.status === 'Denied').length,
+        total_annual: activeOpps.reduce((s, o) => s + getAnnualValue(o), 0),
         not_submitted_annual: opps.filter(o => o.status === 'Not Submitted').reduce((s, o) => s + getAnnualValue(o), 0),
         submitted_annual: opps.filter(o => o.status === 'Submitted').reduce((s, o) => s + getAnnualValue(o), 0),
         captured_annual: opps.filter(o => o.status === 'Completed' || o.status === 'Approved').reduce((s, o) => s + getAnnualValue(o), 0),
@@ -597,10 +635,18 @@ export default function OpportunitiesPage() {
   const filtered = groupedItems.map(g => ({
     ...g,
     opportunities: g.opportunities.filter(o => {
+      // Hide Denied by default unless showDenied is true or specifically filtering for them
+      if (o.status === 'Denied' && !showDenied && statusFilter !== 'Denied') return false;
+      // Hide Flagged from main view - they show in the Flagged queue
+      if (o.status === 'Flagged' && filter !== 'flagged' && statusFilter !== 'Flagged') return false;
       // Status filter
       if (filter === 'not_submitted' && o.status !== 'Not Submitted') return false;
       if (filter === 'submitted' && o.status !== 'Submitted') return false;
       if (filter === 'captured' && o.status !== 'Completed' && o.status !== 'Approved') return false;
+      if (filter === 'flagged' && o.status !== 'Flagged') return false;
+      if (filter === 'didnt_work' && o.status !== "Didn't Work") return false;
+      // Specific status filter
+      if (statusFilter && o.status !== statusFilter) return false;
       // Type filter from URL
       if (typeFilter && o.opportunity_type !== typeFilter) return false;
       // Search filter
@@ -733,13 +779,14 @@ export default function OpportunitiesPage() {
               { key: 'not_submitted', label: 'Not Submitted' },
               { key: 'submitted', label: 'Submitted' },
               { key: 'captured', label: 'Captured' },
+              { key: 'flagged', label: `Flagged (${stats.flagged})`, color: 'purple' },
             ].map(f => (
               <button
                 key={f.key}
-                onClick={() => setFilter(f.key)}
+                onClick={() => { setFilter(f.key); setStatusFilter(null); }}
                 className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
                   filter === f.key
-                    ? 'bg-[#14b8a6] text-[#0a1628]'
+                    ? f.color === 'purple' ? 'bg-purple-500 text-white' : 'bg-[#14b8a6] text-[#0a1628]'
                     : 'text-slate-400 hover:text-white'
                 }`}
               >
@@ -747,6 +794,31 @@ export default function OpportunitiesPage() {
               </button>
             ))}
           </div>
+          {/* Status dropdown filter */}
+          <select
+            value={statusFilter || ''}
+            onChange={(e) => { setStatusFilter(e.target.value || null); setFilter('all'); }}
+            className="bg-[#0d2137] border border-[#1e3a5f] rounded-lg px-3 py-2 text-sm text-white"
+          >
+            <option value="">All Statuses</option>
+            <option value="Not Submitted">Not Submitted ({stats.not_submitted})</option>
+            <option value="Submitted">Submitted ({stats.submitted})</option>
+            <option value="Approved">Approved</option>
+            <option value="Completed">Completed</option>
+            <option value="Didn't Work">Didn't Work ({stats.didnt_work})</option>
+            <option value="Flagged">Flagged ({stats.flagged})</option>
+            <option value="Denied">Denied ({stats.denied})</option>
+          </select>
+          {/* Show Denied toggle */}
+          <label className="flex items-center gap-2 text-sm text-slate-400 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={showDenied}
+              onChange={(e) => setShowDenied(e.target.checked)}
+              className="w-4 h-4 rounded accent-[#14b8a6]"
+            />
+            Show Denied
+          </label>
           {typeFilter && (
             <div className="flex items-center gap-2 ml-2">
               <span className="px-3 py-1.5 bg-purple-500/20 text-purple-400 rounded-lg text-sm font-medium">
