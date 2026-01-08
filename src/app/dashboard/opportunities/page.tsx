@@ -594,15 +594,22 @@ export default function OpportunitiesPage() {
   async function updateStatus(id: string, status: string) {
     try {
       const token = localStorage.getItem('therxos_token');
-      await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/opportunities/${id}`, {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/opportunities/${id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({ status }),
       });
+
+      if (!res.ok) {
+        const error = await res.json();
+        alert(`Failed to update status: ${error.error || 'Unknown error'}`);
+        return;
+      }
+
       setOpportunities(prev => prev.map(o => o.opportunity_id === id ? { ...o, status } : o));
       // Recalculate stats
       const opps = opportunities.map(o => o.opportunity_id === id ? { ...o, status } : o);
-      const activeOpps = opps.filter(o => o.status !== 'Denied' && o.status !== 'Flagged');
+      const activeOpps = opps.filter(o => o.status !== 'Denied' && o.status !== 'Flagged' && o.status !== "Didn't Work");
       setStats({
         total: activeOpps.length,
         not_submitted: opps.filter(o => o.status === 'Not Submitted').length,
@@ -616,7 +623,10 @@ export default function OpportunitiesPage() {
         submitted_annual: opps.filter(o => o.status === 'Submitted').reduce((s, o) => s + getAnnualValue(o), 0),
         captured_annual: opps.filter(o => o.status === 'Completed' || o.status === 'Approved').reduce((s, o) => s + getAnnualValue(o), 0),
       });
-    } catch (e) { console.error(e); }
+    } catch (e) {
+      console.error(e);
+      alert('Failed to update status. Please try again.');
+    }
   }
 
   async function updateNotes(id: string, notes: string) {
@@ -639,6 +649,8 @@ export default function OpportunitiesPage() {
       if (o.status === 'Denied' && !showDenied && statusFilter !== 'Denied') return false;
       // Hide Flagged from main view - they show in the Flagged queue
       if (o.status === 'Flagged' && filter !== 'flagged' && statusFilter !== 'Flagged') return false;
+      // Hide "Didn't Work" from main view - they go to super admin queue
+      if (o.status === "Didn't Work" && filter !== 'didnt_work' && statusFilter !== "Didn't Work") return false;
       // Status filter
       if (filter === 'not_submitted' && o.status !== 'Not Submitted') return false;
       if (filter === 'submitted' && o.status !== 'Submitted') return false;

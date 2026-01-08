@@ -102,15 +102,23 @@ export default function FlaggedQueuePage() {
     setProcessing(id);
     try {
       const token = localStorage.getItem('therxos_token');
-      await fetch(`${API_URL}/api/opportunities/${id}`, {
+      const res = await fetch(`${API_URL}/api/opportunities/${id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({ status: newStatus }),
       });
+
+      if (!res.ok) {
+        const error = await res.json();
+        alert(`Failed to update status: ${error.error || 'Unknown error'}`);
+        return;
+      }
+
       // Remove from list since it's no longer flagged
       setOpportunities(prev => prev.filter(o => o.opportunity_id !== id));
     } catch (e) {
       console.error('Failed to update status:', e);
+      alert('Failed to update status. Please try again.');
     } finally {
       setProcessing(null);
     }
