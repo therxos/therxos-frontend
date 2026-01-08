@@ -1,0 +1,79 @@
+'use client';
+
+import Link from 'next/link';
+import { useEffect, useState } from 'react';
+
+const API_URL = process.env.NEXT_PUBLIC_API_URL ?? '';
+
+type HealthResponse = { status: string; timestamp: string };
+
+export default function Home() {
+  const [apiStatus, setApiStatus] = useState<'idle' | 'ok' | 'error'>('idle');
+  const [timestamp, setTimestamp] = useState('');
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+  const check = async () => {
+    try {
+      console.log('Fetching from:', `${API_URL}/health`);
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+
+      const res = await fetch(`${API_URL}/health`, {
+        signal: controller.signal,
+      });
+      clearTimeout(timeoutId);
+
+      console.log('Response status:', res.status);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = (await res.json()) as HealthResponse;
+      console.log('Health data:', data);
+      setApiStatus('ok');
+      setTimestamp(data.timestamp);
+    } catch (e: any) {
+      console.error('Fetch error:', e);
+      setApiStatus('error');
+      setError(e.message ?? 'Unknown error');
+    }
+  };
+  if (API_URL) check();
+}, []);
+
+  return (
+    <main className="min-h-screen bg-slate-950 text-slate-50 flex items-center justify-center">
+      <div className="w-full max-w-xl px-6 py-8 rounded-2xl bg-slate-900 border border-slate-800">
+        <h1 className="text-2xl font-semibold mb-2">TheRxOS V2</h1>
+        <p className="text-sm text-slate-400 mb-6">
+          Multi-tenant opportunity engine. Backend is deployed on Railway and wired to Supabase.
+        </p>
+
+        <div className="mb-6 text-sm">
+          <p className="mb-1">
+            API base URL:{' '}
+            <span className="font-mono text-xs text-slate-200">{API_URL}</span>
+          </p>
+          <p className="mt-1 text-xs text-slate-400">
+            Status:{' '}
+            {apiStatus === 'ok'
+              ? 'Online'
+              : apiStatus === 'error'
+              ? `Error – ${error}`
+              : 'Checking...'}
+          </p>
+          {timestamp && (
+            <p className="mt-1 text-xs text-slate-400">
+              Last health check: {timestamp}
+            </p>
+          )}
+        </div>
+
+        <Link
+          href="/dashboard"
+          className="inline-flex items-center px-4 py-2 rounded-md bg-emerald-500 text-sm font-medium text-slate-950 hover:bg-emerald-400"
+        >
+          Open Dashboard
+        </Link>
+      </div>
+    </main>
+  );
+}

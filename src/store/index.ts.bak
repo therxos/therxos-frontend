@@ -1,0 +1,25 @@
+import { create } from 'zustand';
+
+interface User {
+  id: string;
+  firstName: string;
+  pharmacyName: string;
+  email: string;
+}
+
+interface AuthStore {
+  user: User | null;
+  setUser: (user: User | null) => void;
+  logout: () => void;
+}
+
+export const useAuthStore = create<AuthStore>((set) => ({
+  user: {
+    id: '1',
+    firstName: 'Stan',
+    pharmacyName: 'PharmacyStan LLC',
+    email: 'stan@pharmacystan.com',
+  },
+  setUser: (user) => set({ user }),
+  logout: () => set({ user: null }),
+}));
