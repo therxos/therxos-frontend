@@ -166,15 +166,21 @@ export default function SuperAdminPage() {
   async function fetchDidntWorkQueue() {
     try {
       const token = localStorage.getItem('therxos_token');
+      console.log('[DW Queue] Fetching with token:', token ? token.substring(0, 20) + '...' : 'MISSING');
       const res = await fetch(`${API_URL}/api/admin/didnt-work-queue`, {
         headers: { Authorization: `Bearer ${token}` },
       });
+      console.log('[DW Queue] Response status:', res.status);
       if (res.ok) {
         const data = await res.json();
+        console.log('[DW Queue] Got', data.opportunities?.length || 0, 'items');
         setDidntWorkQueue(data.opportunities || []);
+      } else {
+        const error = await res.json().catch(() => ({}));
+        console.error('[DW Queue] Error response:', res.status, error);
       }
     } catch (err) {
-      console.error('Failed to fetch didnt-work queue:', err);
+      console.error('[DW Queue] Fetch failed:', err);
     }
   }
 
