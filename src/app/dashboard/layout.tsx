@@ -54,9 +54,13 @@ export default function DashboardLayout({
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [pharmacySwitcherOpen, setPharmacySwitcherOpen] = useState(false);
   const [switchingPharmacy, setSwitchingPharmacy] = useState(false);
+  const [isImpersonating, setIsImpersonating] = useState(false);
 
   const isSuperAdmin = user?.role === 'super_admin';
-  const isImpersonating = typeof window !== 'undefined' && localStorage.getItem('therxos_impersonating') === 'true';
+  // Check impersonation status after hydration
+  useEffect(() => {
+    setIsImpersonating(localStorage.getItem('therxos_impersonating') === 'true');
+  }, []);
 
   // Get user permissions - MUST be called before any early returns (React hooks rule)
   const {

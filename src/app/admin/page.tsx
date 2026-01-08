@@ -701,7 +701,7 @@ export default function SuperAdminPage() {
       </div>
 
       {/* Didn't Work Queue */}
-      {didntWorkQueue.length > 0 && (
+      {/* Didn't Work Queue - always show */ true && (
         <div className="bg-[#0d2137] border border-red-500/30 rounded-xl p-6 mb-8">
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-3">
@@ -726,6 +726,9 @@ export default function SuperAdminPage() {
 
           {showDidntWorkQueue && (
             <div className="space-y-3">
+              {didntWorkQueue.length === 0 && (
+                <div className="text-center py-8 text-slate-400">No items in queue. Check console for fetch status.</div>
+              )}
               {didntWorkQueue.map((opp) => (
                 <div
                   key={opp.opportunity_id}
