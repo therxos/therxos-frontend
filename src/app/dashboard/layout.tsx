@@ -182,7 +182,7 @@ export default function DashboardLayout({
   const navigation = [
     { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard, show: true },
     { name: 'Opportunities', href: '/dashboard/opportunities', icon: Lightbulb, badge: notSubmittedCount, show: true },
-    { name: 'Flagged', href: '/dashboard/opportunities?filter=flagged', icon: Flag, badge: flaggedCount, badgeColor: 'purple', show: true },
+    { name: 'Flagged', href: '/dashboard/flagged', icon: Flag, badge: flaggedCount, badgeColor: 'purple', show: true },
     { name: 'Audit Risks', href: '/dashboard/audit', icon: ShieldAlert, badge: 0, show: canViewAuditRisks },
     { name: 'Patients', href: '/dashboard/patients', icon: Users, show: canViewPatientDetails },
     { name: 'Analytics', href: '/dashboard/analytics', icon: BarChart3, show: canViewAnalytics },
