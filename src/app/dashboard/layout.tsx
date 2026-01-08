@@ -145,6 +145,8 @@ export default function DashboardLayout({
       localStorage.setItem('therxos_token', originalToken);
       localStorage.removeItem('therxos_impersonating');
       localStorage.removeItem('therxos_original_token');
+      // Clear persisted Zustand auth so it re-fetches from token
+      localStorage.removeItem('therxos-auth');
       window.location.href = '/admin';
     }
   }
@@ -359,10 +361,10 @@ export default function DashboardLayout({
                     </span>
                   </div>
                   <button
-                    onClick={handleLogout}
+                    onClick={isImpersonating ? exitImpersonation : handleLogout}
                     className="p-2 rounded-lg hover:bg-[var(--navy-700)] transition-colors"
-                    style={{ color: 'var(--slate-400)' }}
-                    title="Sign out"
+                    style={{ color: isImpersonating ? 'var(--amber-400)' : 'var(--slate-400)' }}
+                    title={isImpersonating ? 'Exit impersonation' : 'Sign out'}
                   >
                     <LogOut className="w-4 h-4" />
                   </button>

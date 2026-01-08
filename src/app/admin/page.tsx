@@ -100,6 +100,24 @@ export default function SuperAdminPage() {
     // Wait for hydration before checking role
     if (!_hasHydrated) return;
     
+    // If no user but we have a token, fetch user data
+    const token = localStorage.getItem('therxos_token');
+    if (!user && token) {
+      fetch(`${API_URL}/api/auth/me`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+        .then(res => res.json())
+        .then(data => {
+          if (data.user) {
+            setAuth(data.user, token);
+          } else {
+            router.push('/login');
+          }
+        })
+        .catch(() => router.push('/login'));
+      return;
+    }
+    
     // Check if user is super admin
     if (user?.role !== 'super_admin') {
       router.push('/dashboard');
