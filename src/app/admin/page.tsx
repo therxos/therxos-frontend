@@ -27,6 +27,16 @@ import {
   Flag,
   Trash2,
   RotateCcw,
+  Crosshair,
+  Shield,
+  Plus,
+  Pencil,
+  Copy,
+  ToggleLeft,
+  ToggleRight,
+  X,
+  ScanLine,
+  Loader2,
 } from 'lucide-react';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL;
@@ -79,6 +89,51 @@ interface DidntWorkOpp {
   affected_value: number;
 }
 
+interface Trigger {
+  trigger_id: string;
+  trigger_code: string;
+  display_name: string;
+  trigger_type: 'therapeutic_interchange' | 'missing_therapy' | 'ndc_optimization';
+  category: string | null;
+  detection_keywords: string[];
+  exclude_keywords: string[];
+  if_has_keywords: string[];
+  if_not_has_keywords: string[];
+  recommended_drug: string | null;
+  recommended_ndc: string | null;
+  action_instructions: string | null;
+  clinical_rationale: string | null;
+  priority: 'low' | 'medium' | 'high' | 'critical';
+  annual_fills: number;
+  default_gp_value: number | null;
+  is_enabled: boolean;
+  created_at: string;
+  bin_values: { bin: string; gp_value: number; is_excluded: boolean }[];
+}
+
+interface AuditRule {
+  rule_id: string;
+  rule_code: string;
+  rule_name: string;
+  rule_description: string | null;
+  rule_type: 'quantity_mismatch' | 'days_supply_mismatch' | 'daw_violation' | 'sig_quantity_mismatch' | 'high_gp_risk';
+  drug_keywords: string[] | null;
+  ndc_pattern: string | null;
+  expected_quantity: number | null;
+  min_quantity: number | null;
+  max_quantity: number | null;
+  quantity_tolerance: number;
+  min_days_supply: number | null;
+  max_days_supply: number | null;
+  allowed_daw_codes: string[] | null;
+  has_generic_available: boolean | null;
+  gp_threshold: number;
+  severity: 'critical' | 'warning' | 'info';
+  audit_risk_score: number | null;
+  is_enabled: boolean;
+  created_at: string;
+}
+
 export default function SuperAdminPage() {
   const router = useRouter();
   const { user, _hasHydrated, setAuth } = useAuthStore();
@@ -95,6 +150,25 @@ export default function SuperAdminPage() {
   const [didntWorkQueue, setDidntWorkQueue] = useState<DidntWorkOpp[]>([]);
   const [processingOpp, setProcessingOpp] = useState<string | null>(null);
   const [showDidntWorkQueue, setShowDidntWorkQueue] = useState(true);
+
+  // Trigger Management
+  const [triggers, setTriggers] = useState<Trigger[]>([]);
+  const [showTriggers, setShowTriggers] = useState(true);
+  const [triggerFilter, setTriggerFilter] = useState<string>('all');
+  const [editingTrigger, setEditingTrigger] = useState<Trigger | null>(null);
+  const [triggerModalOpen, setTriggerModalOpen] = useState(false);
+  const [savingTrigger, setSavingTrigger] = useState(false);
+
+  // Audit Rules
+  const [auditRules, setAuditRules] = useState<AuditRule[]>([]);
+  const [showAuditRules, setShowAuditRules] = useState(true);
+  const [editingAuditRule, setEditingAuditRule] = useState<AuditRule | null>(null);
+  const [auditRuleModalOpen, setAuditRuleModalOpen] = useState(false);
+  const [savingAuditRule, setSavingAuditRule] = useState(false);
+
+  // Rescan
+  const [rescanning, setRescanning] = useState<string | null>(null);
+  const [rescanResult, setRescanResult] = useState<any>(null);
 
   useEffect(() => {
     // Wait for hydration before checking role
@@ -156,6 +230,10 @@ export default function SuperAdminPage() {
 
       // Fetch didn't work queue
       fetchDidntWorkQueue();
+
+      // Fetch triggers and audit rules
+      fetchTriggers();
+      fetchAuditRules();
     } catch (err) {
       console.error('Failed to fetch admin data:', err);
     } finally {
@@ -298,6 +376,213 @@ export default function SuperAdminPage() {
       }
     } catch (err) {
       console.error('Failed to fetch Gmail status:', err);
+    }
+  }
+
+  async function fetchTriggers() {
+    try {
+      const token = localStorage.getItem('therxos_token');
+      const res = await fetch(`${API_URL}/api/admin/triggers`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setTriggers(data.triggers || []);
+      }
+    } catch (err) {
+      console.error('Failed to fetch triggers:', err);
+    }
+  }
+
+  async function toggleTrigger(triggerId: string, enabled: boolean) {
+    try {
+      const token = localStorage.getItem('therxos_token');
+      const res = await fetch(`${API_URL}/api/admin/triggers/${triggerId}/toggle`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ is_enabled: enabled }),
+      });
+      if (res.ok) {
+        setTriggers(triggers.map(t =>
+          t.trigger_id === triggerId ? { ...t, is_enabled: enabled } : t
+        ));
+      }
+    } catch (err) {
+      console.error('Failed to toggle trigger:', err);
+    }
+  }
+
+  async function saveTrigger(trigger: Partial<Trigger>) {
+    setSavingTrigger(true);
+    try {
+      const token = localStorage.getItem('therxos_token');
+      const isNew = !trigger.trigger_id;
+      const url = isNew
+        ? `${API_URL}/api/admin/triggers`
+        : `${API_URL}/api/admin/triggers/${trigger.trigger_id}`;
+
+      const res = await fetch(url, {
+        method: isNew ? 'POST' : 'PUT',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(trigger),
+      });
+
+      if (res.ok) {
+        fetchTriggers();
+        setTriggerModalOpen(false);
+        setEditingTrigger(null);
+      } else {
+        const error = await res.json();
+        alert('Error: ' + (error.error || 'Unknown error'));
+      }
+    } catch (err) {
+      console.error('Failed to save trigger:', err);
+      alert('Failed to save trigger');
+    } finally {
+      setSavingTrigger(false);
+    }
+  }
+
+  async function deleteTrigger(triggerId: string) {
+    if (!confirm('Are you sure you want to delete this trigger?')) return;
+    try {
+      const token = localStorage.getItem('therxos_token');
+      const res = await fetch(`${API_URL}/api/admin/triggers/${triggerId}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        setTriggers(triggers.filter(t => t.trigger_id !== triggerId));
+      }
+    } catch (err) {
+      console.error('Failed to delete trigger:', err);
+    }
+  }
+
+  async function fetchAuditRules() {
+    try {
+      const token = localStorage.getItem('therxos_token');
+      const res = await fetch(`${API_URL}/api/admin/audit-rules`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setAuditRules(data.rules || []);
+      }
+    } catch (err) {
+      console.error('Failed to fetch audit rules:', err);
+    }
+  }
+
+  async function toggleAuditRule(ruleId: string, enabled: boolean) {
+    try {
+      const token = localStorage.getItem('therxos_token');
+      const res = await fetch(`${API_URL}/api/admin/audit-rules/${ruleId}/toggle`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ is_enabled: enabled }),
+      });
+      if (res.ok) {
+        setAuditRules(auditRules.map(r =>
+          r.rule_id === ruleId ? { ...r, is_enabled: enabled } : r
+        ));
+      }
+    } catch (err) {
+      console.error('Failed to toggle audit rule:', err);
+    }
+  }
+
+  async function saveAuditRule(rule: Partial<AuditRule>) {
+    setSavingAuditRule(true);
+    try {
+      const token = localStorage.getItem('therxos_token');
+      const isNew = !rule.rule_id;
+      const url = isNew
+        ? `${API_URL}/api/admin/audit-rules`
+        : `${API_URL}/api/admin/audit-rules/${rule.rule_id}`;
+
+      const res = await fetch(url, {
+        method: isNew ? 'POST' : 'PUT',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(rule),
+      });
+
+      if (res.ok) {
+        fetchAuditRules();
+        setAuditRuleModalOpen(false);
+        setEditingAuditRule(null);
+      } else {
+        const error = await res.json();
+        alert('Error: ' + (error.error || 'Unknown error'));
+      }
+    } catch (err) {
+      console.error('Failed to save audit rule:', err);
+      alert('Failed to save audit rule');
+    } finally {
+      setSavingAuditRule(false);
+    }
+  }
+
+  async function deleteAuditRule(ruleId: string) {
+    if (!confirm('Are you sure you want to delete this audit rule?')) return;
+    try {
+      const token = localStorage.getItem('therxos_token');
+      const res = await fetch(`${API_URL}/api/admin/audit-rules/${ruleId}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        setAuditRules(auditRules.filter(r => r.rule_id !== ruleId));
+      }
+    } catch (err) {
+      console.error('Failed to delete audit rule:', err);
+    }
+  }
+
+  const filteredTriggers = triggers.filter(t =>
+    triggerFilter === 'all' || t.trigger_type === triggerFilter
+  );
+
+  async function rescanPharmacy(pharmacyId: string, scanType: 'all' | 'opportunities' | 'audit' = 'all') {
+    setRescanning(pharmacyId);
+    setRescanResult(null);
+    try {
+      const token = localStorage.getItem('therxos_token');
+      const res = await fetch(`${API_URL}/api/admin/pharmacies/${pharmacyId}/rescan`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ scanType }),
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        setRescanResult(data);
+        // Refresh the pharmacy data
+        fetchData();
+      } else {
+        const error = await res.json();
+        alert('Rescan failed: ' + (error.error || 'Unknown error'));
+      }
+    } catch (err) {
+      console.error('Failed to rescan pharmacy:', err);
+      alert('Failed to rescan pharmacy');
+    } finally {
+      setRescanning(null);
     }
   }
 
@@ -830,6 +1115,290 @@ export default function SuperAdminPage() {
         </div>
       )}
 
+      {/* Trigger Management Section */}
+      <div className="bg-[#0d2137] border border-teal-500/30 rounded-xl p-6 mb-8">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-lg bg-teal-500/20 flex items-center justify-center">
+              <Crosshair className="w-5 h-5 text-teal-400" />
+            </div>
+            <div>
+              <h2 className="text-lg font-semibold text-white">Trigger Management</h2>
+              <p className="text-sm text-slate-400">
+                {triggers.length} triggers ({triggers.filter(t => t.is_enabled).length} enabled)
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-3">
+            <select
+              value={triggerFilter}
+              onChange={(e) => setTriggerFilter(e.target.value)}
+              className="px-3 py-1.5 bg-[#0a1628] border border-[#1e3a5f] rounded-lg text-sm text-white focus:outline-none focus:border-teal-500"
+            >
+              <option value="all">All Types</option>
+              <option value="therapeutic_interchange">Therapeutic Interchange</option>
+              <option value="missing_therapy">Missing Therapy</option>
+              <option value="ndc_optimization">NDC Optimization</option>
+            </select>
+            <button
+              onClick={() => {
+                setEditingTrigger(null);
+                setTriggerModalOpen(true);
+              }}
+              className="flex items-center gap-2 px-4 py-2 bg-teal-500 hover:bg-teal-600 text-white rounded-lg text-sm font-medium transition-colors"
+            >
+              <Plus className="w-4 h-4" />
+              New Trigger
+            </button>
+            <button
+              onClick={() => setShowTriggers(!showTriggers)}
+              className="flex items-center gap-2 px-3 py-1.5 text-sm text-slate-400 hover:text-white transition-colors"
+            >
+              {showTriggers ? 'Hide' : 'Show'}
+              <ChevronDown className={`w-4 h-4 transition-transform ${showTriggers ? 'rotate-180' : ''}`} />
+            </button>
+          </div>
+        </div>
+
+        {showTriggers && (
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className="border-b border-[#1e3a5f]">
+                  <th className="text-left text-xs font-semibold text-slate-400 uppercase tracking-wider px-4 py-3">Name</th>
+                  <th className="text-left text-xs font-semibold text-slate-400 uppercase tracking-wider px-4 py-3">Type</th>
+                  <th className="text-left text-xs font-semibold text-slate-400 uppercase tracking-wider px-4 py-3">Detection</th>
+                  <th className="text-center text-xs font-semibold text-slate-400 uppercase tracking-wider px-4 py-3">Default GP</th>
+                  <th className="text-center text-xs font-semibold text-slate-400 uppercase tracking-wider px-4 py-3">BINs</th>
+                  <th className="text-center text-xs font-semibold text-slate-400 uppercase tracking-wider px-4 py-3">Status</th>
+                  <th className="text-center text-xs font-semibold text-slate-400 uppercase tracking-wider px-4 py-3">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredTriggers.map((trigger) => (
+                  <tr key={trigger.trigger_id} className="border-b border-[#1e3a5f]/50 hover:bg-[#1e3a5f]/30">
+                    <td className="px-4 py-3">
+                      <p className="text-sm font-medium text-white">{trigger.display_name}</p>
+                      <p className="text-xs text-slate-500 font-mono">{trigger.trigger_code}</p>
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className={`px-2 py-1 rounded text-xs font-medium ${
+                        trigger.trigger_type === 'therapeutic_interchange'
+                          ? 'bg-blue-500/20 text-blue-400'
+                          : trigger.trigger_type === 'missing_therapy'
+                          ? 'bg-purple-500/20 text-purple-400'
+                          : 'bg-amber-500/20 text-amber-400'
+                      }`}>
+                        {trigger.trigger_type.replace(/_/g, ' ')}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="max-w-48 truncate text-xs text-slate-300">
+                        {trigger.detection_keywords?.slice(0, 3).join(', ')}
+                        {(trigger.detection_keywords?.length || 0) > 3 && '...'}
+                      </div>
+                    </td>
+                    <td className="px-4 py-3 text-center">
+                      <span className="text-sm text-emerald-400">
+                        {trigger.default_gp_value ? `$${trigger.default_gp_value}` : '-'}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-center">
+                      <span className="text-xs text-slate-400">
+                        {trigger.bin_values?.length || 0}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-center">
+                      <button
+                        onClick={() => toggleTrigger(trigger.trigger_id, !trigger.is_enabled)}
+                        className={`p-1 rounded transition-colors ${
+                          trigger.is_enabled
+                            ? 'text-emerald-400 hover:bg-emerald-500/20'
+                            : 'text-slate-500 hover:bg-slate-500/20'
+                        }`}
+                      >
+                        {trigger.is_enabled ? (
+                          <ToggleRight className="w-6 h-6" />
+                        ) : (
+                          <ToggleLeft className="w-6 h-6" />
+                        )}
+                      </button>
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center justify-center gap-1">
+                        <button
+                          onClick={() => {
+                            setEditingTrigger(trigger);
+                            setTriggerModalOpen(true);
+                          }}
+                          className="p-1.5 hover:bg-[#1e3a5f] rounded text-slate-400 hover:text-white transition-colors"
+                          title="Edit"
+                        >
+                          <Pencil className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() => {
+                            const copy = { ...trigger, trigger_id: '', trigger_code: trigger.trigger_code + '_copy' };
+                            setEditingTrigger(copy as Trigger);
+                            setTriggerModalOpen(true);
+                          }}
+                          className="p-1.5 hover:bg-[#1e3a5f] rounded text-slate-400 hover:text-white transition-colors"
+                          title="Duplicate"
+                        >
+                          <Copy className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() => deleteTrigger(trigger.trigger_id)}
+                          className="p-1.5 hover:bg-red-500/20 rounded text-slate-400 hover:text-red-400 transition-colors"
+                          title="Delete"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {filteredTriggers.length === 0 && (
+              <div className="text-center py-8 text-slate-400">No triggers found</div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Audit Rules Section */}
+      <div className="bg-[#0d2137] border border-amber-500/30 rounded-xl p-6 mb-8">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-lg bg-amber-500/20 flex items-center justify-center">
+              <Shield className="w-5 h-5 text-amber-400" />
+            </div>
+            <div>
+              <h2 className="text-lg font-semibold text-white">Audit Rules</h2>
+              <p className="text-sm text-slate-400">
+                {auditRules.length} rules ({auditRules.filter(r => r.is_enabled).length} enabled)
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => {
+                setEditingAuditRule(null);
+                setAuditRuleModalOpen(true);
+              }}
+              className="flex items-center gap-2 px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-lg text-sm font-medium transition-colors"
+            >
+              <Plus className="w-4 h-4" />
+              New Rule
+            </button>
+            <button
+              onClick={() => setShowAuditRules(!showAuditRules)}
+              className="flex items-center gap-2 px-3 py-1.5 text-sm text-slate-400 hover:text-white transition-colors"
+            >
+              {showAuditRules ? 'Hide' : 'Show'}
+              <ChevronDown className={`w-4 h-4 transition-transform ${showAuditRules ? 'rotate-180' : ''}`} />
+            </button>
+          </div>
+        </div>
+
+        {showAuditRules && (
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className="border-b border-[#1e3a5f]">
+                  <th className="text-left text-xs font-semibold text-slate-400 uppercase tracking-wider px-4 py-3">Rule</th>
+                  <th className="text-left text-xs font-semibold text-slate-400 uppercase tracking-wider px-4 py-3">Type</th>
+                  <th className="text-left text-xs font-semibold text-slate-400 uppercase tracking-wider px-4 py-3">Drug Target</th>
+                  <th className="text-center text-xs font-semibold text-slate-400 uppercase tracking-wider px-4 py-3">Severity</th>
+                  <th className="text-center text-xs font-semibold text-slate-400 uppercase tracking-wider px-4 py-3">Status</th>
+                  <th className="text-center text-xs font-semibold text-slate-400 uppercase tracking-wider px-4 py-3">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {auditRules.map((rule) => (
+                  <tr key={rule.rule_id} className="border-b border-[#1e3a5f]/50 hover:bg-[#1e3a5f]/30">
+                    <td className="px-4 py-3">
+                      <p className="text-sm font-medium text-white">{rule.rule_name}</p>
+                      <p className="text-xs text-slate-500 font-mono">{rule.rule_code}</p>
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className={`px-2 py-1 rounded text-xs font-medium ${
+                        rule.rule_type === 'quantity_mismatch'
+                          ? 'bg-blue-500/20 text-blue-400'
+                          : rule.rule_type === 'daw_violation'
+                          ? 'bg-purple-500/20 text-purple-400'
+                          : rule.rule_type === 'high_gp_risk'
+                          ? 'bg-red-500/20 text-red-400'
+                          : 'bg-slate-500/20 text-slate-400'
+                      }`}>
+                        {rule.rule_type.replace(/_/g, ' ')}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="max-w-40 truncate text-xs text-slate-300">
+                        {rule.drug_keywords?.length ? rule.drug_keywords.join(', ') : 'All drugs'}
+                      </div>
+                    </td>
+                    <td className="px-4 py-3 text-center">
+                      <span className={`px-2 py-1 rounded text-xs font-medium ${
+                        rule.severity === 'critical'
+                          ? 'bg-red-500/20 text-red-400'
+                          : rule.severity === 'warning'
+                          ? 'bg-amber-500/20 text-amber-400'
+                          : 'bg-slate-500/20 text-slate-400'
+                      }`}>
+                        {rule.severity}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-center">
+                      <button
+                        onClick={() => toggleAuditRule(rule.rule_id, !rule.is_enabled)}
+                        className={`p-1 rounded transition-colors ${
+                          rule.is_enabled
+                            ? 'text-emerald-400 hover:bg-emerald-500/20'
+                            : 'text-slate-500 hover:bg-slate-500/20'
+                        }`}
+                      >
+                        {rule.is_enabled ? (
+                          <ToggleRight className="w-6 h-6" />
+                        ) : (
+                          <ToggleLeft className="w-6 h-6" />
+                        )}
+                      </button>
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center justify-center gap-1">
+                        <button
+                          onClick={() => {
+                            setEditingAuditRule(rule);
+                            setAuditRuleModalOpen(true);
+                          }}
+                          className="p-1.5 hover:bg-[#1e3a5f] rounded text-slate-400 hover:text-white transition-colors"
+                          title="Edit"
+                        >
+                          <Pencil className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() => deleteAuditRule(rule.rule_id)}
+                          className="p-1.5 hover:bg-red-500/20 rounded text-slate-400 hover:text-red-400 transition-colors"
+                          title="Delete"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {auditRules.length === 0 && (
+              <div className="text-center py-8 text-slate-400">No audit rules found. Run the migration to add default rules.</div>
+            )}
+          </div>
+        )}
+      </div>
+
       {/* Search */}
       <div className="mb-6">
         <div className="relative max-w-md">
@@ -975,11 +1544,596 @@ export default function SuperAdminPage() {
                   <LogIn className="w-4 h-4" />
                   Login as Pharmacy Admin
                 </button>
+
+                {/* Rescan Section */}
+                <div className="mt-4 pt-4 border-t border-[#1e3a5f]">
+                  <p className="text-xs text-slate-400 mb-3">Rescan for new opportunities & audit risks</p>
+                  <div className="grid grid-cols-3 gap-2">
+                    <button
+                      onClick={() => rescanPharmacy(selectedPharmacy.pharmacy_id, 'all')}
+                      disabled={rescanning === selectedPharmacy.pharmacy_id}
+                      className="py-2 px-3 bg-purple-500/20 hover:bg-purple-500/30 text-purple-400 text-sm font-medium rounded-lg flex items-center justify-center gap-1.5 transition-colors disabled:opacity-50"
+                    >
+                      {rescanning === selectedPharmacy.pharmacy_id ? (
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                      ) : (
+                        <ScanLine className="w-4 h-4" />
+                      )}
+                      Full Scan
+                    </button>
+                    <button
+                      onClick={() => rescanPharmacy(selectedPharmacy.pharmacy_id, 'opportunities')}
+                      disabled={rescanning === selectedPharmacy.pharmacy_id}
+                      className="py-2 px-3 bg-teal-500/20 hover:bg-teal-500/30 text-teal-400 text-sm font-medium rounded-lg flex items-center justify-center gap-1.5 transition-colors disabled:opacity-50"
+                    >
+                      <Crosshair className="w-4 h-4" />
+                      Opps Only
+                    </button>
+                    <button
+                      onClick={() => rescanPharmacy(selectedPharmacy.pharmacy_id, 'audit')}
+                      disabled={rescanning === selectedPharmacy.pharmacy_id}
+                      className="py-2 px-3 bg-amber-500/20 hover:bg-amber-500/30 text-amber-400 text-sm font-medium rounded-lg flex items-center justify-center gap-1.5 transition-colors disabled:opacity-50"
+                    >
+                      <Shield className="w-4 h-4" />
+                      Audit Only
+                    </button>
+                  </div>
+
+                  {/* Rescan Results */}
+                  {rescanResult && rescanResult.pharmacy === selectedPharmacy.pharmacy_name && (
+                    <div className="mt-3 p-3 bg-[#0a1628] rounded-lg">
+                      <p className="text-xs text-slate-400 mb-2">Scan Results:</p>
+                      <div className="grid grid-cols-2 gap-2 text-xs">
+                        <div>
+                          <span className="text-slate-500">Prescriptions:</span>{' '}
+                          <span className="text-white">{rescanResult.prescriptionsScanned.toLocaleString()}</span>
+                        </div>
+                        <div>
+                          <span className="text-slate-500">Patients:</span>{' '}
+                          <span className="text-white">{rescanResult.patientsScanned.toLocaleString()}</span>
+                        </div>
+                        <div>
+                          <span className="text-slate-500">New Opps:</span>{' '}
+                          <span className="text-emerald-400 font-semibold">{rescanResult.results.newOpportunities}</span>
+                          {rescanResult.results.skippedOpportunities > 0 && (
+                            <span className="text-slate-500"> ({rescanResult.results.skippedOpportunities} existing)</span>
+                          )}
+                        </div>
+                        <div>
+                          <span className="text-slate-500">Audit Flags:</span>{' '}
+                          <span className="text-amber-400 font-semibold">{rescanResult.results.newAuditFlags}</span>
+                          {rescanResult.results.skippedAuditFlags > 0 && (
+                            <span className="text-slate-500"> ({rescanResult.results.skippedAuditFlags} existing)</span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           </div>
         </>
       )}
+
+      {/* Trigger Edit Modal */}
+      {triggerModalOpen && (
+        <TriggerEditModal
+          trigger={editingTrigger}
+          onClose={() => {
+            setTriggerModalOpen(false);
+            setEditingTrigger(null);
+          }}
+          onSave={saveTrigger}
+          saving={savingTrigger}
+        />
+      )}
+
+      {/* Audit Rule Edit Modal */}
+      {auditRuleModalOpen && (
+        <AuditRuleEditModal
+          rule={editingAuditRule}
+          onClose={() => {
+            setAuditRuleModalOpen(false);
+            setEditingAuditRule(null);
+          }}
+          onSave={saveAuditRule}
+          saving={savingAuditRule}
+        />
+      )}
     </div>
+  );
+}
+
+// Trigger Edit Modal Component
+function TriggerEditModal({
+  trigger,
+  onClose,
+  onSave,
+  saving,
+}: {
+  trigger: Trigger | null;
+  onClose: () => void;
+  onSave: (trigger: Partial<Trigger>) => void;
+  saving: boolean;
+}) {
+  const [form, setForm] = useState({
+    trigger_code: trigger?.trigger_code || '',
+    display_name: trigger?.display_name || '',
+    trigger_type: trigger?.trigger_type || 'therapeutic_interchange' as const,
+    category: trigger?.category || '',
+    detection_keywords: trigger?.detection_keywords?.join(', ') || '',
+    exclude_keywords: trigger?.exclude_keywords?.join(', ') || '',
+    if_has_keywords: trigger?.if_has_keywords?.join(', ') || '',
+    if_not_has_keywords: trigger?.if_not_has_keywords?.join(', ') || '',
+    recommended_drug: trigger?.recommended_drug || '',
+    recommended_ndc: trigger?.recommended_ndc || '',
+    action_instructions: trigger?.action_instructions || '',
+    clinical_rationale: trigger?.clinical_rationale || '',
+    priority: trigger?.priority || 'medium' as const,
+    annual_fills: String(trigger?.annual_fills || 12),
+    default_gp_value: String(trigger?.default_gp_value || ''),
+    is_enabled: trigger?.is_enabled ?? true,
+  });
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    onSave({
+      ...(trigger?.trigger_id ? { trigger_id: trigger.trigger_id } : {}),
+      trigger_code: form.trigger_code,
+      display_name: form.display_name,
+      trigger_type: form.trigger_type as any,
+      category: form.category || null,
+      detection_keywords: form.detection_keywords.split(',').map(s => s.trim()).filter(Boolean),
+      exclude_keywords: form.exclude_keywords.split(',').map(s => s.trim()).filter(Boolean),
+      if_has_keywords: form.if_has_keywords.split(',').map(s => s.trim()).filter(Boolean),
+      if_not_has_keywords: form.if_not_has_keywords.split(',').map(s => s.trim()).filter(Boolean),
+      recommended_drug: form.recommended_drug || null,
+      recommended_ndc: form.recommended_ndc || null,
+      action_instructions: form.action_instructions || null,
+      clinical_rationale: form.clinical_rationale || null,
+      priority: form.priority as any,
+      annual_fills: parseInt(form.annual_fills) || 12,
+      default_gp_value: form.default_gp_value ? Number(form.default_gp_value) : null,
+      is_enabled: form.is_enabled,
+    });
+  };
+
+  return (
+    <>
+      <div className="fixed inset-0 bg-black/50 z-40" onClick={onClose} />
+      <div className="fixed inset-y-0 right-0 w-[600px] bg-[#0d2137] border-l border-[#1e3a5f] z-50 overflow-y-auto">
+        <div className="p-6">
+          <div className="flex items-center justify-between mb-6">
+            <h2 className="text-xl font-bold text-white">
+              {trigger?.trigger_id ? 'Edit Trigger' : 'New Trigger'}
+            </h2>
+            <button onClick={onClose} className="text-slate-400 hover:text-white">
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs text-slate-400 mb-1">Code</label>
+                <input
+                  type="text"
+                  value={form.trigger_code}
+                  onChange={(e) => setForm({ ...form, trigger_code: e.target.value.toUpperCase().replace(/\s+/g, '_') })}
+                  className="w-full px-3 py-2 bg-[#0a1628] border border-[#1e3a5f] rounded-lg text-white text-sm focus:outline-none focus:border-teal-500"
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-slate-400 mb-1">Type</label>
+                <select
+                  value={form.trigger_type}
+                  onChange={(e) => setForm({ ...form, trigger_type: e.target.value as 'therapeutic_interchange' | 'missing_therapy' | 'ndc_optimization' })}
+                  className="w-full px-3 py-2 bg-[#0a1628] border border-[#1e3a5f] rounded-lg text-white text-sm focus:outline-none focus:border-teal-500"
+                >
+                  <option value="therapeutic_interchange">Therapeutic Interchange</option>
+                  <option value="missing_therapy">Missing Therapy</option>
+                  <option value="ndc_optimization">NDC Optimization</option>
+                </select>
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs text-slate-400 mb-1">Display Name</label>
+              <input
+                type="text"
+                value={form.display_name}
+                onChange={(e) => setForm({ ...form, display_name: e.target.value })}
+                className="w-full px-3 py-2 bg-[#0a1628] border border-[#1e3a5f] rounded-lg text-white text-sm focus:outline-none focus:border-teal-500"
+                required
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs text-slate-400 mb-1">Detection Keywords (comma-separated)</label>
+              <textarea
+                value={form.detection_keywords}
+                onChange={(e) => setForm({ ...form, detection_keywords: e.target.value })}
+                className="w-full px-3 py-2 bg-[#0a1628] border border-[#1e3a5f] rounded-lg text-white text-sm focus:outline-none focus:border-teal-500"
+                rows={2}
+                placeholder="OZEMPIC, SEMAGLUTIDE, WEGOVY"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs text-slate-400 mb-1">Exclude Keywords (comma-separated)</label>
+              <textarea
+                value={form.exclude_keywords}
+                onChange={(e) => setForm({ ...form, exclude_keywords: e.target.value })}
+                className="w-full px-3 py-2 bg-[#0a1628] border border-[#1e3a5f] rounded-lg text-white text-sm focus:outline-none focus:border-teal-500"
+                rows={2}
+                placeholder="Keywords that exclude a match"
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs text-slate-400 mb-1">IF_HAS (require these)</label>
+                <input
+                  type="text"
+                  value={form.if_has_keywords}
+                  onChange={(e) => setForm({ ...form, if_has_keywords: e.target.value })}
+                  className="w-full px-3 py-2 bg-[#0a1628] border border-[#1e3a5f] rounded-lg text-white text-sm focus:outline-none focus:border-teal-500"
+                  placeholder="comma-separated"
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-slate-400 mb-1">IF_NOT_HAS (missing these)</label>
+                <input
+                  type="text"
+                  value={form.if_not_has_keywords}
+                  onChange={(e) => setForm({ ...form, if_not_has_keywords: e.target.value })}
+                  className="w-full px-3 py-2 bg-[#0a1628] border border-[#1e3a5f] rounded-lg text-white text-sm focus:outline-none focus:border-teal-500"
+                  placeholder="comma-separated"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs text-slate-400 mb-1">Recommended Drug</label>
+              <input
+                type="text"
+                value={form.recommended_drug}
+                onChange={(e) => setForm({ ...form, recommended_drug: e.target.value })}
+                className="w-full px-3 py-2 bg-[#0a1628] border border-[#1e3a5f] rounded-lg text-white text-sm focus:outline-none focus:border-teal-500"
+              />
+            </div>
+
+            <div className="grid grid-cols-3 gap-4">
+              <div>
+                <label className="block text-xs text-slate-400 mb-1">Default GP ($)</label>
+                <input
+                  type="number"
+                  value={form.default_gp_value}
+                  onChange={(e) => setForm({ ...form, default_gp_value: e.target.value })}
+                  className="w-full px-3 py-2 bg-[#0a1628] border border-[#1e3a5f] rounded-lg text-white text-sm focus:outline-none focus:border-teal-500"
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-slate-400 mb-1">Annual Fills</label>
+                <input
+                  type="number"
+                  value={form.annual_fills}
+                  onChange={(e) => setForm({ ...form, annual_fills: e.target.value })}
+                  className="w-full px-3 py-2 bg-[#0a1628] border border-[#1e3a5f] rounded-lg text-white text-sm focus:outline-none focus:border-teal-500"
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-slate-400 mb-1">Priority</label>
+                <select
+                  value={form.priority}
+                  onChange={(e) => setForm({ ...form, priority: e.target.value as 'low' | 'medium' | 'high' | 'critical' })}
+                  className="w-full px-3 py-2 bg-[#0a1628] border border-[#1e3a5f] rounded-lg text-white text-sm focus:outline-none focus:border-teal-500"
+                >
+                  <option value="low">Low</option>
+                  <option value="medium">Medium</option>
+                  <option value="high">High</option>
+                  <option value="critical">Critical</option>
+                </select>
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs text-slate-400 mb-1">Action Instructions</label>
+              <textarea
+                value={form.action_instructions}
+                onChange={(e) => setForm({ ...form, action_instructions: e.target.value })}
+                className="w-full px-3 py-2 bg-[#0a1628] border border-[#1e3a5f] rounded-lg text-white text-sm focus:outline-none focus:border-teal-500"
+                rows={2}
+              />
+            </div>
+
+            <div className="flex items-center gap-3">
+              <input
+                type="checkbox"
+                id="trigger_enabled"
+                checked={form.is_enabled}
+                onChange={(e) => setForm({ ...form, is_enabled: e.target.checked })}
+                className="w-4 h-4 rounded border-[#1e3a5f] bg-[#0a1628]"
+              />
+              <label htmlFor="trigger_enabled" className="text-sm text-white">
+                Enabled
+              </label>
+            </div>
+
+            <div className="flex gap-3 pt-4">
+              <button
+                type="button"
+                onClick={onClose}
+                className="flex-1 py-2 border border-[#1e3a5f] text-slate-400 rounded-lg hover:bg-[#1e3a5f] transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={saving}
+                className="flex-1 py-2 bg-teal-500 hover:bg-teal-600 text-white rounded-lg font-medium transition-colors disabled:opacity-50"
+              >
+                {saving ? 'Saving...' : 'Save Trigger'}
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </>
+  );
+}
+
+// Audit Rule Edit Modal Component
+function AuditRuleEditModal({
+  rule,
+  onClose,
+  onSave,
+  saving,
+}: {
+  rule: AuditRule | null;
+  onClose: () => void;
+  onSave: (rule: Partial<AuditRule>) => void;
+  saving: boolean;
+}) {
+  const [form, setForm] = useState({
+    rule_code: rule?.rule_code || '',
+    rule_name: rule?.rule_name || '',
+    rule_description: rule?.rule_description || '',
+    rule_type: rule?.rule_type || 'high_gp_risk' as const,
+    drug_keywords: rule?.drug_keywords?.join(', ') || '',
+    expected_quantity: String(rule?.expected_quantity ?? ''),
+    min_days_supply: String(rule?.min_days_supply ?? ''),
+    max_days_supply: String(rule?.max_days_supply ?? ''),
+    allowed_daw_codes: rule?.allowed_daw_codes?.join(', ') || '',
+    has_generic_available: rule?.has_generic_available ?? false,
+    gp_threshold: String(rule?.gp_threshold ?? 50),
+    severity: rule?.severity || 'warning' as const,
+    audit_risk_score: String(rule?.audit_risk_score ?? 5),
+    is_enabled: rule?.is_enabled ?? true,
+  });
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    onSave({
+      ...(rule?.rule_id ? { rule_id: rule.rule_id } : {}),
+      rule_code: form.rule_code,
+      rule_name: form.rule_name,
+      rule_description: form.rule_description || null,
+      rule_type: form.rule_type as any,
+      drug_keywords: form.drug_keywords.split(',').map(s => s.trim()).filter(Boolean),
+      expected_quantity: form.expected_quantity ? Number(form.expected_quantity) : null,
+      min_days_supply: form.min_days_supply ? Number(form.min_days_supply) : null,
+      max_days_supply: form.max_days_supply ? Number(form.max_days_supply) : null,
+      allowed_daw_codes: form.allowed_daw_codes.split(',').map(s => s.trim()).filter(Boolean),
+      has_generic_available: form.has_generic_available,
+      gp_threshold: Number(form.gp_threshold),
+      severity: form.severity as any,
+      audit_risk_score: form.audit_risk_score ? Number(form.audit_risk_score) : null,
+      is_enabled: form.is_enabled,
+    });
+  };
+
+  return (
+    <>
+      <div className="fixed inset-0 bg-black/50 z-40" onClick={onClose} />
+      <div className="fixed inset-y-0 right-0 w-[600px] bg-[#0d2137] border-l border-[#1e3a5f] z-50 overflow-y-auto">
+        <div className="p-6">
+          <div className="flex items-center justify-between mb-6">
+            <h2 className="text-xl font-bold text-white">
+              {rule?.rule_id ? 'Edit Audit Rule' : 'New Audit Rule'}
+            </h2>
+            <button onClick={onClose} className="text-slate-400 hover:text-white">
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs text-slate-400 mb-1">Code</label>
+                <input
+                  type="text"
+                  value={form.rule_code}
+                  onChange={(e) => setForm({ ...form, rule_code: e.target.value.toUpperCase().replace(/\s+/g, '_') })}
+                  className="w-full px-3 py-2 bg-[#0a1628] border border-[#1e3a5f] rounded-lg text-white text-sm focus:outline-none focus:border-teal-500"
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-slate-400 mb-1">Type</label>
+                <select
+                  value={form.rule_type}
+                  onChange={(e) => setForm({ ...form, rule_type: e.target.value as 'quantity_mismatch' | 'days_supply_mismatch' | 'daw_violation' | 'sig_quantity_mismatch' | 'high_gp_risk' })}
+                  className="w-full px-3 py-2 bg-[#0a1628] border border-[#1e3a5f] rounded-lg text-white text-sm focus:outline-none focus:border-teal-500"
+                >
+                  <option value="quantity_mismatch">Quantity Mismatch</option>
+                  <option value="days_supply_mismatch">Days Supply Mismatch</option>
+                  <option value="daw_violation">DAW Violation</option>
+                  <option value="sig_quantity_mismatch">SIG/Quantity Mismatch</option>
+                  <option value="high_gp_risk">High GP Risk</option>
+                </select>
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs text-slate-400 mb-1">Rule Name</label>
+              <input
+                type="text"
+                value={form.rule_name}
+                onChange={(e) => setForm({ ...form, rule_name: e.target.value })}
+                className="w-full px-3 py-2 bg-[#0a1628] border border-[#1e3a5f] rounded-lg text-white text-sm focus:outline-none focus:border-teal-500"
+                required
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs text-slate-400 mb-1">Description</label>
+              <textarea
+                value={form.rule_description}
+                onChange={(e) => setForm({ ...form, rule_description: e.target.value })}
+                className="w-full px-3 py-2 bg-[#0a1628] border border-[#1e3a5f] rounded-lg text-white text-sm focus:outline-none focus:border-teal-500"
+                rows={2}
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs text-slate-400 mb-1">Drug Keywords (comma-separated, leave empty for all drugs)</label>
+              <input
+                type="text"
+                value={form.drug_keywords}
+                onChange={(e) => setForm({ ...form, drug_keywords: e.target.value })}
+                className="w-full px-3 py-2 bg-[#0a1628] border border-[#1e3a5f] rounded-lg text-white text-sm focus:outline-none focus:border-teal-500"
+                placeholder="OZEMPIC, SYNTHROID"
+              />
+            </div>
+
+            <div className="grid grid-cols-3 gap-4">
+              <div>
+                <label className="block text-xs text-slate-400 mb-1">Expected Qty</label>
+                <input
+                  type="number"
+                  value={form.expected_quantity}
+                  onChange={(e) => setForm({ ...form, expected_quantity: e.target.value })}
+                  className="w-full px-3 py-2 bg-[#0a1628] border border-[#1e3a5f] rounded-lg text-white text-sm focus:outline-none focus:border-teal-500"
+                  placeholder="e.g. 3"
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-slate-400 mb-1">Min Days</label>
+                <input
+                  type="number"
+                  value={form.min_days_supply}
+                  onChange={(e) => setForm({ ...form, min_days_supply: e.target.value })}
+                  className="w-full px-3 py-2 bg-[#0a1628] border border-[#1e3a5f] rounded-lg text-white text-sm focus:outline-none focus:border-teal-500"
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-slate-400 mb-1">Max Days</label>
+                <input
+                  type="number"
+                  value={form.max_days_supply}
+                  onChange={(e) => setForm({ ...form, max_days_supply: e.target.value })}
+                  className="w-full px-3 py-2 bg-[#0a1628] border border-[#1e3a5f] rounded-lg text-white text-sm focus:outline-none focus:border-teal-500"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs text-slate-400 mb-1">Allowed DAW Codes (comma-separated)</label>
+                <input
+                  type="text"
+                  value={form.allowed_daw_codes}
+                  onChange={(e) => setForm({ ...form, allowed_daw_codes: e.target.value })}
+                  className="w-full px-3 py-2 bg-[#0a1628] border border-[#1e3a5f] rounded-lg text-white text-sm focus:outline-none focus:border-teal-500"
+                  placeholder="1, 2, 9"
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-slate-400 mb-1">GP Threshold ($)</label>
+                <input
+                  type="number"
+                  value={form.gp_threshold}
+                  onChange={(e) => setForm({ ...form, gp_threshold: e.target.value })}
+                  className="w-full px-3 py-2 bg-[#0a1628] border border-[#1e3a5f] rounded-lg text-white text-sm focus:outline-none focus:border-teal-500"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs text-slate-400 mb-1">Severity</label>
+                <select
+                  value={form.severity}
+                  onChange={(e) => setForm({ ...form, severity: e.target.value as 'critical' | 'warning' | 'info' })}
+                  className="w-full px-3 py-2 bg-[#0a1628] border border-[#1e3a5f] rounded-lg text-white text-sm focus:outline-none focus:border-teal-500"
+                >
+                  <option value="info">Info</option>
+                  <option value="warning">Warning</option>
+                  <option value="critical">Critical</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs text-slate-400 mb-1">Risk Score (1-10)</label>
+                <input
+                  type="number"
+                  min={1}
+                  max={10}
+                  value={form.audit_risk_score}
+                  onChange={(e) => setForm({ ...form, audit_risk_score: e.target.value })}
+                  className="w-full px-3 py-2 bg-[#0a1628] border border-[#1e3a5f] rounded-lg text-white text-sm focus:outline-none focus:border-teal-500"
+                />
+              </div>
+            </div>
+
+            <div className="flex items-center gap-6">
+              <div className="flex items-center gap-3">
+                <input
+                  type="checkbox"
+                  id="has_generic"
+                  checked={form.has_generic_available}
+                  onChange={(e) => setForm({ ...form, has_generic_available: e.target.checked })}
+                  className="w-4 h-4 rounded border-[#1e3a5f] bg-[#0a1628]"
+                />
+                <label htmlFor="has_generic" className="text-sm text-white">
+                  Has Generic Available
+                </label>
+              </div>
+              <div className="flex items-center gap-3">
+                <input
+                  type="checkbox"
+                  id="rule_enabled"
+                  checked={form.is_enabled}
+                  onChange={(e) => setForm({ ...form, is_enabled: e.target.checked })}
+                  className="w-4 h-4 rounded border-[#1e3a5f] bg-[#0a1628]"
+                />
+                <label htmlFor="rule_enabled" className="text-sm text-white">
+                  Enabled
+                </label>
+              </div>
+            </div>
+
+            <div className="flex gap-3 pt-4">
+              <button
+                type="button"
+                onClick={onClose}
+                className="flex-1 py-2 border border-[#1e3a5f] text-slate-400 rounded-lg hover:bg-[#1e3a5f] transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={saving}
+                className="flex-1 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-lg font-medium transition-colors disabled:opacity-50"
+              >
+                {saving ? 'Saving...' : 'Save Rule'}
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </>
   );
 }

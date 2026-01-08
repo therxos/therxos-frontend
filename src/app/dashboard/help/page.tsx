@@ -53,8 +53,8 @@ export default function HelpPage() {
         </a>
 
         {/* Phone */}
-        <a 
-          href="tel:+18005551234"
+        <a
+          href="tel:+13052050061"
           className="card p-6 hover:border-[var(--teal-500)] transition-colors group"
         >
           <div className="flex items-start gap-4">
@@ -64,7 +64,7 @@ export default function HelpPage() {
             <div>
               <h3 className="font-semibold text-white mb-1 group-hover:text-[var(--teal-400)]">Phone Support</h3>
               <p className="text-sm text-slate-400 mb-2">Available Mon-Fri, 9am-5pm EST.</p>
-              <span className="text-emerald-400 text-sm">(800) 555-1234</span>
+              <span className="text-emerald-400 text-sm">(305) 205-0061</span>
             </div>
           </div>
         </a>

@@ -1,10 +1,14 @@
 'use client';
 
 import { useState } from 'react';
-import { MessageSquare, Send, CheckCircle } from 'lucide-react';
+import { MessageSquare, Send, CheckCircle, Loader2 } from 'lucide-react';
+import { useAuthStore } from '@/store';
 
 export default function SuggestionsPage() {
   const [submitted, setSubmitted] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const { token } = useAuthStore();
   const [form, setForm] = useState({
     type: 'feedback',
     triggerDrug: '',
@@ -13,13 +17,34 @@ export default function SuggestionsPage() {
     message: '',
   });
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    // In production, this would send to your backend
-    console.log('Suggestion submitted:', form);
-    setSubmitted(true);
-    setTimeout(() => setSubmitted(false), 3000);
-    setForm({ type: 'feedback', triggerDrug: '', recommendedDrug: '', insurances: '', message: '' });
+    setError(null);
+    setSubmitting(true);
+
+    try {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/feedback`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify(form),
+      });
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || 'Failed to submit feedback');
+      }
+
+      setSubmitted(true);
+      setTimeout(() => setSubmitted(false), 3000);
+      setForm({ type: 'feedback', triggerDrug: '', recommendedDrug: '', insurances: '', message: '' });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to submit feedback');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -105,12 +130,28 @@ export default function SuggestionsPage() {
               />
             </div>
 
+            {error && (
+              <div className="p-3 bg-red-500/20 border border-red-500/50 rounded-lg text-red-400 text-sm">
+                {error}
+              </div>
+            )}
+
             <button
               type="submit"
-              className="w-full py-3 bg-[var(--teal-500)] hover:bg-[var(--teal-600)] text-[var(--navy-900)] rounded-lg font-semibold flex items-center justify-center gap-2 transition-colors"
+              disabled={submitting}
+              className="w-full py-3 bg-[var(--teal-500)] hover:bg-[var(--teal-600)] disabled:opacity-50 disabled:cursor-not-allowed text-[var(--navy-900)] rounded-lg font-semibold flex items-center justify-center gap-2 transition-colors"
             >
-              <Send className="w-4 h-4" />
-              Submit Feedback
+              {submitting ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Submitting...
+                </>
+              ) : (
+                <>
+                  <Send className="w-4 h-4" />
+                  Submit Feedback
+                </>
+              )}
             </button>
           </form>
         )}
