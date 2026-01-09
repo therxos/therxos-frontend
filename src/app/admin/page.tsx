@@ -170,6 +170,27 @@ export default function SuperAdminPage() {
   const [rescanning, setRescanning] = useState<string | null>(null);
   const [rescanResult, setRescanResult] = useState<any>(null);
 
+  // New Client Modal
+  const [newClientModalOpen, setNewClientModalOpen] = useState(false);
+  const [creatingClient, setCreatingClient] = useState(false);
+  const [newClientResult, setNewClientResult] = useState<{
+    success: boolean;
+    pharmacy?: { pharmacyId: string; pharmacyName: string };
+    credentials?: { email: string; temporaryPassword: string };
+    error?: string;
+  } | null>(null);
+  const [newClientForm, setNewClientForm] = useState({
+    clientName: '',
+    pharmacyName: '',
+    pharmacyNpi: '',
+    pharmacyNcpdp: '',
+    pharmacyState: '',
+    adminEmail: '',
+    adminFirstName: '',
+    adminLastName: '',
+    pmsSystem: '',
+  });
+
   useEffect(() => {
     // Wait for hydration before checking role
     if (!_hasHydrated) return;
@@ -239,6 +260,68 @@ export default function SuperAdminPage() {
     } finally {
       setLoading(false);
     }
+  }
+
+  async function createClient() {
+    if (!newClientForm.clientName || !newClientForm.adminEmail) {
+      alert('Client name and admin email are required');
+      return;
+    }
+
+    setCreatingClient(true);
+    setNewClientResult(null);
+
+    try {
+      const token = localStorage.getItem('therxos_token');
+      const res = await fetch(`${API_URL}/api/admin/clients`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(newClientForm),
+      });
+
+      const data = await res.json();
+
+      if (res.ok) {
+        setNewClientResult({
+          success: true,
+          pharmacy: data.pharmacy,
+          credentials: data.credentials,
+        });
+        // Refresh the pharmacies list
+        fetchData();
+      } else {
+        setNewClientResult({
+          success: false,
+          error: data.error || 'Failed to create client',
+        });
+      }
+    } catch (err) {
+      setNewClientResult({
+        success: false,
+        error: 'Network error - please try again',
+      });
+    } finally {
+      setCreatingClient(false);
+    }
+  }
+
+  function resetNewClientForm() {
+    setNewClientForm({
+      clientName: '',
+      pharmacyName: '',
+      pharmacyNpi: '',
+      pharmacyNcpdp: '',
+      pharmacyState: '',
+      adminEmail: '',
+      adminFirstName: '',
+      adminLastName: '',
+      pmsSystem: '',
+    });
+    setNewClientResult(null);
+    setNewClientModalOpen(false);
   }
 
   async function fetchDidntWorkQueue() {
@@ -1415,8 +1498,15 @@ export default function SuperAdminPage() {
 
       {/* Pharmacies Table */}
       <div className="bg-[#0d2137] border border-[#1e3a5f] rounded-xl overflow-hidden">
-        <div className="px-6 py-4 border-b border-[#1e3a5f]">
+        <div className="px-6 py-4 border-b border-[#1e3a5f] flex items-center justify-between">
           <h2 className="text-lg font-semibold text-white">All Pharmacies</h2>
+          <button
+            onClick={() => setNewClientModalOpen(true)}
+            className="flex items-center gap-2 px-4 py-2 bg-teal-500 hover:bg-teal-600 text-white font-medium rounded-lg transition-colors"
+          >
+            <Plus className="w-4 h-4" />
+            New Client
+          </button>
         </div>
         
         <div className="overflow-x-auto">
@@ -1640,6 +1730,233 @@ export default function SuperAdminPage() {
           onSave={saveAuditRule}
           saving={savingAuditRule}
         />
+      )}
+
+      {/* New Client Modal */}
+      {newClientModalOpen && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+          <div className="bg-[#0d2137] rounded-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto border border-[#1e3a5f]">
+            <div className="p-6 border-b border-[#1e3a5f] flex items-center justify-between">
+              <h2 className="text-xl font-semibold text-white">Add New Client</h2>
+              <button onClick={resetNewClientForm} className="text-slate-400 hover:text-white">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {!newClientResult?.success ? (
+              <div className="p-6 space-y-4">
+                {newClientResult?.error && (
+                  <div className="p-3 bg-red-500/20 border border-red-500/50 rounded-lg text-red-400 text-sm">
+                    {newClientResult.error}
+                  </div>
+                )}
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="col-span-2">
+                    <label className="block text-sm text-slate-400 mb-1">Client/Organization Name *</label>
+                    <input
+                      type="text"
+                      value={newClientForm.clientName}
+                      onChange={(e) => setNewClientForm({ ...newClientForm, clientName: e.target.value })}
+                      className="w-full px-3 py-2 bg-[#0a1628] border border-[#1e3a5f] rounded-lg text-white focus:outline-none focus:border-teal-500"
+                      placeholder="Acme Pharmacy"
+                    />
+                  </div>
+
+                  <div className="col-span-2">
+                    <label className="block text-sm text-slate-400 mb-1">Pharmacy Name (if different)</label>
+                    <input
+                      type="text"
+                      value={newClientForm.pharmacyName}
+                      onChange={(e) => setNewClientForm({ ...newClientForm, pharmacyName: e.target.value })}
+                      className="w-full px-3 py-2 bg-[#0a1628] border border-[#1e3a5f] rounded-lg text-white focus:outline-none focus:border-teal-500"
+                      placeholder="Leave blank to use client name"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm text-slate-400 mb-1">NPI</label>
+                    <input
+                      type="text"
+                      value={newClientForm.pharmacyNpi}
+                      onChange={(e) => setNewClientForm({ ...newClientForm, pharmacyNpi: e.target.value })}
+                      className="w-full px-3 py-2 bg-[#0a1628] border border-[#1e3a5f] rounded-lg text-white focus:outline-none focus:border-teal-500"
+                      placeholder="1234567890"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm text-slate-400 mb-1">NCPDP</label>
+                    <input
+                      type="text"
+                      value={newClientForm.pharmacyNcpdp}
+                      onChange={(e) => setNewClientForm({ ...newClientForm, pharmacyNcpdp: e.target.value })}
+                      className="w-full px-3 py-2 bg-[#0a1628] border border-[#1e3a5f] rounded-lg text-white focus:outline-none focus:border-teal-500"
+                      placeholder="1234567"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm text-slate-400 mb-1">State</label>
+                    <input
+                      type="text"
+                      value={newClientForm.pharmacyState}
+                      onChange={(e) => setNewClientForm({ ...newClientForm, pharmacyState: e.target.value })}
+                      className="w-full px-3 py-2 bg-[#0a1628] border border-[#1e3a5f] rounded-lg text-white focus:outline-none focus:border-teal-500"
+                      placeholder="CA"
+                      maxLength={2}
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm text-slate-400 mb-1">PMS System</label>
+                    <select
+                      value={newClientForm.pmsSystem}
+                      onChange={(e) => setNewClientForm({ ...newClientForm, pmsSystem: e.target.value })}
+                      className="w-full px-3 py-2 bg-[#0a1628] border border-[#1e3a5f] rounded-lg text-white focus:outline-none focus:border-teal-500"
+                    >
+                      <option value="">Select PMS...</option>
+                      <option value="PioneerRx">PioneerRx</option>
+                      <option value="Rx30">Rx30</option>
+                      <option value="PrimeRx">PrimeRx</option>
+                      <option value="BestRx">BestRx</option>
+                      <option value="ComputerRx">ComputerRx</option>
+                      <option value="Other">Other</option>
+                    </select>
+                  </div>
+                </div>
+
+                <hr className="border-[#1e3a5f] my-4" />
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="col-span-2">
+                    <label className="block text-sm text-slate-400 mb-1">Admin Email *</label>
+                    <input
+                      type="email"
+                      value={newClientForm.adminEmail}
+                      onChange={(e) => setNewClientForm({ ...newClientForm, adminEmail: e.target.value })}
+                      className="w-full px-3 py-2 bg-[#0a1628] border border-[#1e3a5f] rounded-lg text-white focus:outline-none focus:border-teal-500"
+                      placeholder="admin@pharmacy.com"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm text-slate-400 mb-1">Admin First Name</label>
+                    <input
+                      type="text"
+                      value={newClientForm.adminFirstName}
+                      onChange={(e) => setNewClientForm({ ...newClientForm, adminFirstName: e.target.value })}
+                      className="w-full px-3 py-2 bg-[#0a1628] border border-[#1e3a5f] rounded-lg text-white focus:outline-none focus:border-teal-500"
+                      placeholder="John"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm text-slate-400 mb-1">Admin Last Name</label>
+                    <input
+                      type="text"
+                      value={newClientForm.adminLastName}
+                      onChange={(e) => setNewClientForm({ ...newClientForm, adminLastName: e.target.value })}
+                      className="w-full px-3 py-2 bg-[#0a1628] border border-[#1e3a5f] rounded-lg text-white focus:outline-none focus:border-teal-500"
+                      placeholder="Doe"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex gap-3 pt-4">
+                  <button
+                    onClick={resetNewClientForm}
+                    className="flex-1 py-2 border border-[#1e3a5f] text-slate-400 rounded-lg hover:bg-[#1e3a5f]/50"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={createClient}
+                    disabled={creatingClient}
+                    className="flex-1 py-2 bg-teal-500 hover:bg-teal-600 text-white font-medium rounded-lg disabled:opacity-50 flex items-center justify-center gap-2"
+                  >
+                    {creatingClient ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        Creating...
+                      </>
+                    ) : (
+                      <>
+                        <Plus className="w-4 h-4" />
+                        Create Client
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="p-6 space-y-4">
+                <div className="p-4 bg-emerald-500/20 border border-emerald-500/50 rounded-lg">
+                  <div className="flex items-center gap-2 text-emerald-400 font-medium mb-2">
+                    <CheckCircle className="w-5 h-5" />
+                    Client Created Successfully!
+                  </div>
+                  <p className="text-slate-300 text-sm">
+                    {newClientResult.pharmacy?.pharmacyName} has been created and is ready for data upload.
+                  </p>
+                </div>
+
+                <div className="bg-[#0a1628] rounded-lg p-4 space-y-3">
+                  <h3 className="text-sm font-medium text-white">Login Credentials</h3>
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm text-slate-400">Email:</span>
+                      <div className="flex items-center gap-2">
+                        <code className="text-teal-400">{newClientResult.credentials?.email}</code>
+                        <button
+                          onClick={() => navigator.clipboard.writeText(newClientResult.credentials?.email || '')}
+                          className="text-slate-500 hover:text-white"
+                        >
+                          <Copy className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm text-slate-400">Temp Password:</span>
+                      <div className="flex items-center gap-2">
+                        <code className="text-amber-400">{newClientResult.credentials?.temporaryPassword}</code>
+                        <button
+                          onClick={() => navigator.clipboard.writeText(newClientResult.credentials?.temporaryPassword || '')}
+                          className="text-slate-500 hover:text-white"
+                        >
+                          <Copy className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                  <p className="text-xs text-slate-500 mt-2">
+                    User will be required to change password on first login.
+                  </p>
+                </div>
+
+                <div className="flex gap-3 pt-4">
+                  <button
+                    onClick={resetNewClientForm}
+                    className="flex-1 py-2 border border-[#1e3a5f] text-slate-400 rounded-lg hover:bg-[#1e3a5f]/50"
+                  >
+                    Close
+                  </button>
+                  <button
+                    onClick={() => {
+                      if (newClientResult.pharmacy?.pharmacyId) {
+                        impersonatePharmacy(newClientResult.pharmacy.pharmacyId);
+                      }
+                    }}
+                    className="flex-1 py-2 bg-teal-500 hover:bg-teal-600 text-white font-medium rounded-lg flex items-center justify-center gap-2"
+                  >
+                    <LogIn className="w-4 h-4" />
+                    Login & Upload Data
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
       )}
     </div>
   );
