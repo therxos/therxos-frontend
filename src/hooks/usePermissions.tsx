@@ -5,6 +5,7 @@ import { useAuthStore } from '@/store';
 
 export const ROLES = {
   SUPER_ADMIN: 'super_admin',
+  OWNER: 'owner',
   ADMIN: 'admin',
   PHARMACIST: 'pharmacist',
   TECHNICIAN: 'technician',
@@ -52,27 +53,31 @@ export const PERMISSIONS = {
 export type Permission = typeof PERMISSIONS[keyof typeof PERMISSIONS];
 
 // Default permissions by role
+const ADMIN_PERMISSIONS: Permission[] = [
+  PERMISSIONS.MANAGE_PHARMACY_USERS,
+  PERMISSIONS.MANAGE_PHARMACY_SETTINGS,
+  PERMISSIONS.MANAGE_BILLING,
+  PERMISSIONS.CONFIGURE_PERMISSIONS,
+  PERMISSIONS.VIEW_OPPORTUNITIES,
+  PERMISSIONS.ACTION_OPPORTUNITIES,
+  PERMISSIONS.DELETE_OPPORTUNITIES,
+  PERMISSIONS.SEND_FAX_DIRECTLY,
+  PERMISSIONS.APPROVE_FAX_REQUESTS,
+  PERMISSIONS.VIEW_PATIENTS,
+  PERMISSIONS.VIEW_PATIENT_DETAILS,
+  PERMISSIONS.EXPORT_PATIENT_DATA,
+  PERMISSIONS.VIEW_ANALYTICS,
+  PERMISSIONS.VIEW_FINANCIAL_DATA,
+  PERMISSIONS.UPLOAD_DATA,
+  PERMISSIONS.VIEW_AUDIT_RISKS,
+];
+
 const DEFAULT_ROLE_PERMISSIONS: Record<Role, Permission[]> = {
   [ROLES.SUPER_ADMIN]: Object.values(PERMISSIONS) as Permission[],
-  
-  [ROLES.ADMIN]: [
-    PERMISSIONS.MANAGE_PHARMACY_USERS,
-    PERMISSIONS.MANAGE_PHARMACY_SETTINGS,
-    PERMISSIONS.MANAGE_BILLING,
-    PERMISSIONS.CONFIGURE_PERMISSIONS,
-    PERMISSIONS.VIEW_OPPORTUNITIES,
-    PERMISSIONS.ACTION_OPPORTUNITIES,
-    PERMISSIONS.DELETE_OPPORTUNITIES,
-    PERMISSIONS.SEND_FAX_DIRECTLY,
-    PERMISSIONS.APPROVE_FAX_REQUESTS,
-    PERMISSIONS.VIEW_PATIENTS,
-    PERMISSIONS.VIEW_PATIENT_DETAILS,
-    PERMISSIONS.EXPORT_PATIENT_DATA,
-    PERMISSIONS.VIEW_ANALYTICS,
-    PERMISSIONS.VIEW_FINANCIAL_DATA,
-    PERMISSIONS.UPLOAD_DATA,
-    PERMISSIONS.VIEW_AUDIT_RISKS,
-  ],
+
+  [ROLES.OWNER]: ADMIN_PERMISSIONS,
+
+  [ROLES.ADMIN]: ADMIN_PERMISSIONS,
   
   [ROLES.PHARMACIST]: [
     PERMISSIONS.VIEW_OPPORTUNITIES,
@@ -103,9 +108,14 @@ export const ROLE_INFO: Record<Role, { name: string; description: string; color:
     description: 'Platform administrator with access to all pharmacies',
     color: 'text-red-400 bg-red-500/20',
   },
+  [ROLES.OWNER]: {
+    name: 'Owner',
+    description: 'Pharmacy owner with full access and user management',
+    color: 'text-purple-400 bg-purple-500/20',
+  },
   [ROLES.ADMIN]: {
     name: 'Administrator',
-    description: 'Pharmacy owner/manager with full access and user management',
+    description: 'Pharmacy manager with full access and user management',
     color: 'text-purple-400 bg-purple-500/20',
   },
   [ROLES.PHARMACIST]: {
@@ -161,7 +171,8 @@ export function usePermissions() {
     
     // Role checks
     isSuperAdmin: role === ROLES.SUPER_ADMIN,
-    isAdmin: role === ROLES.ADMIN || role === ROLES.SUPER_ADMIN,
+    isOwner: role === ROLES.OWNER,
+    isAdmin: role === ROLES.ADMIN || role === ROLES.OWNER || role === ROLES.SUPER_ADMIN,
     isPharmacist: role === ROLES.PHARMACIST,
     isTechnician: role === ROLES.TECHNICIAN,
     
