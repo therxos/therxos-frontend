@@ -1,8 +1,14 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { ShieldAlert, AlertTriangle, AlertCircle, Info, Check, X, Eye, Filter } from 'lucide-react';
+import { ShieldAlert, AlertTriangle, AlertCircle, Info, Check, X, Eye, Filter, Building2 } from 'lucide-react';
 import { useAuthStore } from '@/store';
+
+interface Pharmacy {
+  pharmacy_id: string;
+  pharmacy_name: string;
+  client_name: string;
+}
 
 interface AuditFlag {
   flag_id: string;
@@ -49,17 +55,56 @@ export default function AuditRisksPage() {
   });
   const [filter, setFilter] = useState<{ status: string; severity: string }>({ status: '', severity: '' });
   const [selectedFlag, setSelectedFlag] = useState<AuditFlag | null>(null);
-  const { token } = useAuthStore();
+  const [pharmacies, setPharmacies] = useState<Pharmacy[]>([]);
+  const [selectedPharmacyId, setSelectedPharmacyId] = useState<string>('');
+  const { token, user } = useAuthStore();
 
+  const isSuperAdmin = user?.role === 'super_admin';
+  const needsPharmacySelection = isSuperAdmin && !user?.pharmacyId;
+
+  // Fetch pharmacies list for super admins
   useEffect(() => {
-    fetchFlags();
-  }, [filter]);
+    if (needsPharmacySelection) {
+      fetchPharmacies();
+    }
+  }, [needsPharmacySelection]);
+
+  // Fetch flags when filter changes or pharmacy is selected
+  useEffect(() => {
+    if (!needsPharmacySelection || selectedPharmacyId) {
+      fetchFlags();
+    }
+  }, [filter, selectedPharmacyId, needsPharmacySelection]);
+
+  const fetchPharmacies = async () => {
+    try {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/admin/pharmacies`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setPharmacies(data.pharmacies || []);
+        // Auto-select first pharmacy if available
+        if (data.pharmacies?.length > 0) {
+          setSelectedPharmacyId(data.pharmacies[0].pharmacy_id);
+        }
+      }
+    } catch (error) {
+      console.error('Failed to fetch pharmacies:', error);
+    }
+  };
 
   const fetchFlags = async () => {
     try {
+      setLoading(true);
       const params = new URLSearchParams();
       if (filter.status) params.append('status', filter.status);
       if (filter.severity) params.append('severity', filter.severity);
+
+      // For super admins without a pharmacy, use selected pharmacy
+      if (needsPharmacySelection && selectedPharmacyId) {
+        params.append('pharmacyId', selectedPharmacyId);
+      }
 
       const response = await fetch(
         `${process.env.NEXT_PUBLIC_API_URL}/api/analytics/audit-flags?${params}`,
@@ -123,6 +168,22 @@ export default function AuditRisksPage() {
           <h1 className="text-2xl font-bold text-white mb-1">Audit Risks</h1>
           <p className="text-slate-400">Monitor claims that may attract PBM audit scrutiny</p>
         </div>
+        {needsPharmacySelection && pharmacies.length > 0 && (
+          <div className="flex items-center gap-2">
+            <Building2 className="w-4 h-4 text-slate-400" />
+            <select
+              value={selectedPharmacyId}
+              onChange={(e) => setSelectedPharmacyId(e.target.value)}
+              className="bg-[var(--navy-700)] border border-[var(--navy-600)] rounded-lg px-3 py-2 text-white text-sm"
+            >
+              {pharmacies.map((pharmacy) => (
+                <option key={pharmacy.pharmacy_id} value={pharmacy.pharmacy_id}>
+                  {pharmacy.pharmacy_name}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
       </div>
 
       {/* Stats Cards */}
