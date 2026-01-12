@@ -2120,7 +2120,7 @@ function TriggerEditModal({
   const fetchDiscoveredBins = async () => {
     setLoadingBins(true);
     try {
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('therxos_token');
       const res = await fetch(`${API_URL}/api/admin/bins?limit=50`, {
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -2137,7 +2137,7 @@ function TriggerEditModal({
   const fetchGroupsForBin = async (bin: string) => {
     setLoadingGroups(true);
     try {
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('therxos_token');
       const res = await fetch(`${API_URL}/api/admin/bins/${bin}/groups`, {
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -2156,7 +2156,7 @@ function TriggerEditModal({
     setVerifying(true);
     setVerifyResult(null);
     try {
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('therxos_token');
       const res = await fetch(`${API_URL}/api/admin/triggers/${trigger.trigger_id}/verify-coverage`, {
         method: 'POST',
         headers: {
@@ -2210,7 +2210,7 @@ function TriggerEditModal({
 
     setSavingBinValues(true);
     try {
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('therxos_token');
       const res = await fetch(`${API_URL}/api/admin/triggers/${trigger.trigger_id}/bin-values`, {
         method: 'POST',
         headers: {
@@ -2250,7 +2250,7 @@ function TriggerEditModal({
     }
 
     try {
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('therxos_token');
       const url = group
         ? `${API_URL}/api/admin/triggers/${trigger.trigger_id}/bin-values/${bin}?group=${encodeURIComponent(group)}`
         : `${API_URL}/api/admin/triggers/${trigger.trigger_id}/bin-values/${bin}?group=`;
@@ -2276,7 +2276,7 @@ function TriggerEditModal({
     }
 
     try {
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('therxos_token');
       const existingBv = binValues.find(bv => bv.bin === bin && bv.group === group);
       await fetch(`${API_URL}/api/admin/triggers/${trigger.trigger_id}/bin-values`, {
         method: 'POST',
