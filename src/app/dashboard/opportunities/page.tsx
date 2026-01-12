@@ -15,6 +15,8 @@ import {
   AlertCircle,
   Filter,
   StickyNote,
+  Download,
+  FileDown,
 } from 'lucide-react';
 
 // Types
@@ -240,17 +242,17 @@ function StatusDropdown({ status, onChange }: { status: string; onChange: (s: st
 }
 
 // Notes Modal
-function NotesModal({ 
-  opportunity, 
-  onClose, 
-  onSave 
-}: { 
-  opportunity: Opportunity; 
-  onClose: () => void; 
+function NotesModal({
+  opportunity,
+  onClose,
+  onSave
+}: {
+  opportunity: Opportunity;
+  onClose: () => void;
   onSave: (id: string, notes: string) => void;
 }) {
   const [notes, setNotes] = useState(opportunity.staff_notes || '');
-  
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       <div className="fixed inset-0 bg-black/50" onClick={onClose} />
@@ -266,12 +268,94 @@ function NotesModal({
           <button onClick={onClose} className="px-4 py-2 text-slate-400 hover:text-white text-sm">
             Cancel
           </button>
-          <button 
+          <button
             onClick={() => { onSave(opportunity.opportunity_id, notes); onClose(); }}
             className="px-4 py-2 bg-[#14b8a6] hover:bg-[#0d9488] text-[#0a1628] rounded-lg text-sm font-medium"
           >
             Save Notes
           </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Prescriber Warning Modal
+interface PrescriberWarningData {
+  prescriberName: string;
+  uniquePatientsActioned: number;
+  totalOppsActioned: number;
+  warnThreshold: number;
+  blockThreshold: number | null;
+  shouldBlock: boolean;
+}
+
+function PrescriberWarningModal({
+  warningData,
+  onClose,
+  onProceed,
+}: {
+  warningData: PrescriberWarningData;
+  onClose: () => void;
+  onProceed: () => void;
+}) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center">
+      <div className="fixed inset-0 bg-black/50" onClick={onClose} />
+      <div className="relative bg-[#0d2137] rounded-xl border border-amber-500/50 w-full max-w-lg p-6 shadow-2xl">
+        <div className="flex items-start gap-4">
+          <div className="flex-shrink-0 w-12 h-12 rounded-full bg-amber-500/20 flex items-center justify-center">
+            <AlertCircle className="w-6 h-6 text-amber-500" />
+          </div>
+          <div className="flex-1">
+            <h3 className="text-lg font-semibold text-amber-400 mb-2">
+              {warningData.shouldBlock ? 'Action Blocked' : 'High Volume Warning'}
+            </h3>
+            <p className="text-slate-300 mb-4">
+              You have actioned <span className="font-bold text-white">{warningData.uniquePatientsActioned}</span> unique patients
+              to <span className="font-bold text-[#14b8a6]">{warningData.prescriberName}</span>.
+            </p>
+            <div className="bg-[#1e3a5f] rounded-lg p-4 mb-4">
+              <div className="grid grid-cols-2 gap-4 text-sm">
+                <div>
+                  <div className="text-slate-500">Unique Patients</div>
+                  <div className="text-2xl font-bold text-amber-400">{warningData.uniquePatientsActioned}</div>
+                </div>
+                <div>
+                  <div className="text-slate-500">Total Opportunities</div>
+                  <div className="text-2xl font-bold text-white">{warningData.totalOppsActioned}</div>
+                </div>
+              </div>
+              <div className="mt-3 pt-3 border-t border-[#2d4a6f]">
+                <div className="text-xs text-slate-400">
+                  Warning threshold: {warningData.warnThreshold} patients
+                  {warningData.blockThreshold && ` | Block threshold: ${warningData.blockThreshold} patients`}
+                </div>
+              </div>
+            </div>
+            {warningData.shouldBlock ? (
+              <p className="text-red-400 text-sm mb-4">
+                This prescriber has reached the block threshold. Please contact your administrator to proceed.
+              </p>
+            ) : (
+              <p className="text-amber-400 text-sm mb-4">
+                Consider spacing out submissions to this prescriber to avoid overwhelming their office.
+              </p>
+            )}
+          </div>
+        </div>
+        <div className="flex justify-end gap-3 mt-4">
+          <button onClick={onClose} className="px-4 py-2 text-slate-400 hover:text-white text-sm">
+            Cancel
+          </button>
+          {!warningData.shouldBlock && (
+            <button
+              onClick={onProceed}
+              className="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-[#0a1628] rounded-lg text-sm font-medium"
+            >
+              Proceed Anyway
+            </button>
+          )}
         </div>
       </div>
     </div>
@@ -380,16 +464,26 @@ function SidePanel({
           <div className="bg-[#1e3a5f] rounded-lg p-4 grid grid-cols-2 gap-4">
             <div>
               <div className="text-xs text-slate-500">Per Fill GP</div>
-              <div className="text-lg font-semibold text-emerald-400">{formatCurrency(Number(opportunity.potential_margin_gain) || 0)}</div>
+              <div className="text-2xl font-bold text-emerald-400">{formatCurrency(Number(opportunity.potential_margin_gain) || 0)}</div>
+              <div className="text-xs text-slate-400 mt-1">First fill value</div>
             </div>
             <div>
-              <div className="text-xs text-slate-500">Annual Value</div>
-              <div className="text-lg font-semibold text-[#14b8a6]">{formatCurrency(getAnnualValue(opportunity))}</div>
+              <div className="text-xs text-slate-500">Monthly Value</div>
+              <div className="text-2xl font-bold text-[#14b8a6]">{formatCurrency(getAnnualValue(opportunity) / 12)}</div>
+              <div className="text-xs text-slate-400 mt-1">{formatCurrency(getAnnualValue(opportunity))}/year</div>
             </div>
-            <div className="col-span-2">
-              <div className="text-xs text-slate-500">Impact on GP/Rx</div>
-              <div className="text-lg font-semibold text-amber-400">
-                +{formatCurrency(getAnnualValue(opportunity) / 12 / 30)} per day
+            <div className="col-span-2 pt-2 border-t border-[#2d4a6f]">
+              <div className="text-xs text-slate-500 mb-1">Priority Score</div>
+              <div className="flex items-center gap-2">
+                <div className="flex-1 h-2 bg-[#0d2137] rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-gradient-to-r from-amber-500 to-emerald-500 rounded-full"
+                    style={{ width: `${Math.min(100, (Number(opportunity.potential_margin_gain) || 0) / 2)}%` }}
+                  />
+                </div>
+                <span className="text-sm font-medium text-white">
+                  {Number(opportunity.potential_margin_gain) >= 100 ? 'High' : Number(opportunity.potential_margin_gain) >= 50 ? 'Medium' : 'Low'}
+                </span>
               </div>
             </div>
           </div>
@@ -471,6 +565,7 @@ export default function OpportunitiesPage() {
   const [selectedGroup, setSelectedGroup] = useState<GroupedItem | null>(null);
   const [notesModal, setNotesModal] = useState<Opportunity | null>(null);
   const [lastSync, setLastSync] = useState(new Date());
+  const [prescriberWarning, setPrescriberWarning] = useState<{ data: PrescriberWarningData; pendingUpdate: { id: string; status: string } } | null>(null);
 
   // Check URL for type/filter params
   useEffect(() => {
@@ -591,7 +686,51 @@ export default function OpportunitiesPage() {
     }
   }
 
-  async function updateStatus(id: string, status: string) {
+  // Check prescriber warning before updating
+  async function checkPrescriberAndUpdate(id: string, status: string) {
+    // Only check for statuses that count as "actioned" to prescriber
+    const actionedStatuses = ['Submitted', 'Approved', 'Completed'];
+    if (!actionedStatuses.includes(status)) {
+      // No check needed, proceed directly
+      await performStatusUpdate(id, status);
+      return;
+    }
+
+    // Find the opportunity to get prescriber name
+    const opp = opportunities.find(o => o.opportunity_id === id);
+    if (!opp || !opp.prescriber_name) {
+      await performStatusUpdate(id, status);
+      return;
+    }
+
+    try {
+      const token = localStorage.getItem('therxos_token');
+      const res = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL}/api/opportunities/prescriber-stats/${encodeURIComponent(opp.prescriber_name)}`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+
+      if (res.ok) {
+        const data = await res.json();
+        if (data.shouldWarn || data.shouldBlock) {
+          // Show warning modal
+          setPrescriberWarning({
+            data: data as PrescriberWarningData,
+            pendingUpdate: { id, status }
+          });
+          return;
+        }
+      }
+    } catch (e) {
+      console.error('Failed to check prescriber stats:', e);
+    }
+
+    // No warning needed, proceed
+    await performStatusUpdate(id, status);
+  }
+
+  // Perform the actual status update
+  async function performStatusUpdate(id: string, status: string) {
     try {
       const token = localStorage.getItem('therxos_token');
       const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/opportunities/${id}`, {
@@ -629,6 +768,11 @@ export default function OpportunitiesPage() {
     }
   }
 
+  // Keep this for backward compatibility with components that use it directly
+  async function updateStatus(id: string, status: string) {
+    await checkPrescriberAndUpdate(id, status);
+  }
+
   async function updateNotes(id: string, notes: string) {
     try {
       const token = localStorage.getItem('therxos_token');
@@ -639,6 +783,116 @@ export default function OpportunitiesPage() {
       });
       setOpportunities(prev => prev.map(o => o.opportunity_id === id ? { ...o, staff_notes: notes } : o));
     } catch (e) { console.error(e); }
+  }
+
+  // Export to CSV
+  function exportToCSV() {
+    const allOpps = filtered.flatMap(g => g.opportunities);
+    const headers = ['Patient', 'Current Drug', 'Recommended Drug', 'Per Fill Value', 'Annual Value', 'Prescriber', 'Status', 'Insurance BIN', 'Insurance Group', 'Notes', 'Last Actioned'];
+    const rows = allOpps.map(opp => [
+      formatPatientName(opp.patient_first_name, opp.patient_last_name, opp.patient_hash, isDemo),
+      opp.current_drug_name || 'N/A',
+      opp.recommended_drug_name || 'N/A',
+      Number(opp.potential_margin_gain) || 0,
+      getAnnualValue(opp),
+      opp.prescriber_name || 'Unknown',
+      opp.status,
+      opp.insurance_bin || '',
+      opp.insurance_group || '',
+      (opp.staff_notes || '').replace(/"/g, '""'),
+      opp.actioned_at ? new Date(opp.actioned_at).toLocaleDateString() : ''
+    ]);
+
+    const csvContent = [
+      headers.join(','),
+      ...rows.map(row => row.map(cell => `"${cell}"`).join(','))
+    ].join('\n');
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = `opportunities_${new Date().toISOString().split('T')[0]}.csv`;
+    link.click();
+    URL.revokeObjectURL(link.href);
+  }
+
+  // Export to PDF (simple printable version)
+  function exportToPDF() {
+    const allOpps = filtered.flatMap(g => g.opportunities);
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) return;
+
+    const html = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>Opportunities Report - ${new Date().toLocaleDateString()}</title>
+        <style>
+          body { font-family: Arial, sans-serif; margin: 20px; color: #333; }
+          h1 { color: #0d9488; border-bottom: 2px solid #0d9488; padding-bottom: 10px; }
+          .summary { background: #f0f9ff; padding: 15px; border-radius: 8px; margin-bottom: 20px; }
+          .summary span { margin-right: 20px; }
+          table { width: 100%; border-collapse: collapse; margin-top: 20px; font-size: 12px; }
+          th { background: #0d9488; color: white; padding: 10px 8px; text-align: left; }
+          td { padding: 8px; border-bottom: 1px solid #e5e7eb; }
+          tr:nth-child(even) { background: #f9fafb; }
+          .value { color: #059669; font-weight: bold; }
+          .status { padding: 2px 8px; border-radius: 4px; font-size: 11px; }
+          .status-submitted { background: #dbeafe; color: #1e40af; }
+          .status-completed { background: #d1fae5; color: #065f46; }
+          .status-pending { background: #fef3c7; color: #92400e; }
+          @media print {
+            body { margin: 0; }
+            .no-print { display: none; }
+          }
+        </style>
+      </head>
+      <body>
+        <h1>TheRxOS Opportunities Report</h1>
+        <div class="summary">
+          <strong>Generated:</strong> ${new Date().toLocaleString()} &nbsp;|&nbsp;
+          <strong>Total Opportunities:</strong> ${allOpps.length} &nbsp;|&nbsp;
+          <strong>Total Annual Value:</strong> ${formatCurrency(allOpps.reduce((s, o) => s + getAnnualValue(o), 0))}
+        </div>
+        <table>
+          <thead>
+            <tr>
+              <th>Patient</th>
+              <th>Current Drug</th>
+              <th>Recommended</th>
+              <th>Per Fill</th>
+              <th>Annual</th>
+              <th>Prescriber</th>
+              <th>Status</th>
+              <th>BIN</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${allOpps.map(opp => `
+              <tr>
+                <td>${formatPatientName(opp.patient_first_name, opp.patient_last_name, opp.patient_hash, isDemo)}</td>
+                <td>${opp.current_drug_name || 'N/A'}</td>
+                <td>${opp.recommended_drug_name || 'N/A'}</td>
+                <td class="value">${formatCurrency(Number(opp.potential_margin_gain) || 0)}</td>
+                <td class="value">${formatCurrency(getAnnualValue(opp))}</td>
+                <td>${opp.prescriber_name || 'Unknown'}</td>
+                <td><span class="status status-${opp.status.toLowerCase().replace(/\s+/g, '-')}">${opp.status}</span></td>
+                <td>${opp.insurance_bin || '-'}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+        <p class="no-print" style="margin-top: 20px; text-align: center;">
+          <button onclick="window.print()" style="padding: 10px 20px; background: #0d9488; color: white; border: none; border-radius: 4px; cursor: pointer;">
+            Print / Save as PDF
+          </button>
+        </p>
+      </body>
+      </html>
+    `;
+
+    printWindow.document.write(html);
+    printWindow.document.close();
   }
 
   // Filter opportunities
@@ -739,9 +993,17 @@ export default function OpportunitiesPage() {
                 <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse" />
                 Last synced: {lastSync.toLocaleTimeString()}
               </div>
-              <button onClick={fetchData} className="flex items-center gap-2 px-3 py-2 bg-[#1e3a5f] hover:bg-[#2d4a6f] text-white rounded-lg text-sm">
-                <RefreshCw className="w-4 h-4" /> Refresh
-              </button>
+              <div className="flex items-center gap-2">
+                <button onClick={exportToCSV} className="flex items-center gap-2 px-3 py-2 bg-[#1e3a5f] hover:bg-[#2d4a6f] text-white rounded-lg text-sm" title="Export to CSV">
+                  <Download className="w-4 h-4" /> CSV
+                </button>
+                <button onClick={exportToPDF} className="flex items-center gap-2 px-3 py-2 bg-[#1e3a5f] hover:bg-[#2d4a6f] text-white rounded-lg text-sm" title="Export to PDF">
+                  <FileDown className="w-4 h-4" /> PDF
+                </button>
+                <button onClick={fetchData} className="flex items-center gap-2 px-3 py-2 bg-[#1e3a5f] hover:bg-[#2d4a6f] text-white rounded-lg text-sm">
+                  <RefreshCw className="w-4 h-4" /> Refresh
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -944,7 +1206,7 @@ export default function OpportunitiesPage() {
                           )}
                           <th className="text-left text-xs font-semibold text-slate-400 uppercase tracking-wider px-5 py-3">Opportunity</th>
                           <th className="text-left text-xs font-semibold text-slate-400 uppercase tracking-wider px-5 py-3">Action</th>
-                          <th className="text-left text-xs font-semibold text-slate-400 uppercase tracking-wider px-5 py-3">Value</th>
+                          <th className="text-left text-xs font-semibold text-slate-400 uppercase tracking-wider px-5 py-3">Per Fill / Annual</th>
                           <th className="text-left text-xs font-semibold text-slate-400 uppercase tracking-wider px-5 py-3">Prescriber</th>
                           <th className="text-left text-xs font-semibold text-slate-400 uppercase tracking-wider px-5 py-3">Status</th>
                           <th className="text-left text-xs font-semibold text-slate-400 uppercase tracking-wider px-5 py-3">Last Actioned</th>
@@ -974,7 +1236,10 @@ export default function OpportunitiesPage() {
                                 <div className="text-sm text-slate-400 max-w-xs truncate">{action || rationale}</div>
                               </td>
                               <td className="px-5 py-3">
-                                <div className="text-emerald-400 font-semibold">{formatCurrency(getAnnualValue(opp))}</div>
+                                <div>
+                                  <div className="text-emerald-400 font-semibold">{formatCurrency(Number(opp.potential_margin_gain) || 0)}</div>
+                                  <div className="text-xs text-slate-500">{formatCurrency(getAnnualValue(opp))}/yr</div>
+                                </div>
                               </td>
                               <td className="px-5 py-3">
                                 <div className="text-sm text-slate-300">{opp.prescriber_name || 'Unknown'}</div>
@@ -1037,6 +1302,19 @@ export default function OpportunitiesPage() {
           opportunity={notesModal}
           onClose={() => setNotesModal(null)}
           onSave={updateNotes}
+        />
+      )}
+
+      {/* Prescriber Warning Modal */}
+      {prescriberWarning && (
+        <PrescriberWarningModal
+          warningData={prescriberWarning.data}
+          onClose={() => setPrescriberWarning(null)}
+          onProceed={async () => {
+            const { id, status } = prescriberWarning.pendingUpdate;
+            setPrescriberWarning(null);
+            await performStatusUpdate(id, status);
+          }}
         />
       )}
     </div>

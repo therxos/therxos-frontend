@@ -15,6 +15,8 @@ import {
   ChevronRight,
   BarChart3,
   PieChart,
+  FileDown,
+  Printer,
 } from 'lucide-react';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL;
@@ -46,6 +48,18 @@ interface MonthlyStats {
     date: string;
     submitted: number;
     captured: number;
+  }[];
+  by_bin: {
+    bin: string;
+    count: number;
+    value: number;
+    captured: number;
+    captured_value: number;
+  }[];
+  weekly_activity: {
+    week_start: string;
+    actioned_count: number;
+    actioned_value: number;
   }[];
 }
 
@@ -156,13 +170,13 @@ export default function ReportsPage() {
 
   async function downloadReport() {
     const token = localStorage.getItem('therxos_token');
-    
+
     try {
       const res = await fetch(
         `${API_URL}/api/analytics/monthly/export?month=${selectedMonth + 1}&year=${selectedYear}&format=csv`,
         { headers: { Authorization: `Bearer ${token}` } }
       );
-      
+
       if (res.ok) {
         const blob = await res.blob();
         const url = window.URL.createObjectURL(blob);
@@ -175,6 +189,118 @@ export default function ReportsPage() {
     } catch (err) {
       console.error('Failed to download report:', err);
     }
+  }
+
+  function printReport() {
+    if (!stats) return;
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) return;
+
+    const html = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>TheRxOS Report - ${MONTHS[selectedMonth]} ${selectedYear}</title>
+        <style>
+          body { font-family: Arial, sans-serif; margin: 20px; color: #333; }
+          h1 { color: #0d9488; border-bottom: 2px solid #0d9488; padding-bottom: 10px; }
+          h2 { color: #0d9488; margin-top: 30px; border-bottom: 1px solid #e5e7eb; padding-bottom: 8px; }
+          .summary { display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px; margin-bottom: 30px; }
+          .summary-card { background: #f0f9ff; padding: 15px; border-radius: 8px; }
+          .summary-card .label { font-size: 12px; color: #666; text-transform: uppercase; }
+          .summary-card .value { font-size: 24px; font-weight: bold; margin-top: 5px; }
+          table { width: 100%; border-collapse: collapse; margin-top: 15px; font-size: 13px; }
+          th { background: #0d9488; color: white; padding: 10px 8px; text-align: left; }
+          td { padding: 8px; border-bottom: 1px solid #e5e7eb; }
+          tr:nth-child(even) { background: #f9fafb; }
+          .value-green { color: #059669; font-weight: bold; }
+          .value-amber { color: #d97706; font-weight: bold; }
+          @media print { body { margin: 0; } .no-print { display: none; } }
+        </style>
+      </head>
+      <body>
+        <h1>TheRxOS Monthly Report</h1>
+        <p style="color: #666; margin-bottom: 20px;">${MONTHS[selectedMonth]} ${selectedYear}</p>
+
+        <div class="summary">
+          <div class="summary-card">
+            <div class="label">Total Opportunities</div>
+            <div class="value">${stats.total_opportunities}</div>
+          </div>
+          <div class="summary-card">
+            <div class="label">Submitted</div>
+            <div class="value" style="color: #3b82f6;">${stats.submitted}</div>
+          </div>
+          <div class="summary-card">
+            <div class="label">Captured</div>
+            <div class="value" style="color: #10b981;">${stats.captured}</div>
+          </div>
+          <div class="summary-card">
+            <div class="label">Total Value</div>
+            <div class="value" style="color: #d97706;">${formatCurrency(stats.total_value)}</div>
+          </div>
+          <div class="summary-card">
+            <div class="label">Captured Value</div>
+            <div class="value" style="color: #10b981;">${formatCurrency(stats.captured_value)}</div>
+          </div>
+          <div class="summary-card">
+            <div class="label">Capture Rate</div>
+            <div class="value" style="color: #8b5cf6;">${formatPercent(stats.capture_rate)}</div>
+          </div>
+        </div>
+
+        <h2>By Status</h2>
+        <table>
+          <thead><tr><th>Status</th><th style="text-align:right">Count</th><th style="text-align:right">Value</th></tr></thead>
+          <tbody>
+            ${(stats.by_status || []).map(s => `<tr><td>${s.status}</td><td style="text-align:right">${s.count}</td><td style="text-align:right" class="value-green">${formatCurrency(s.value)}</td></tr>`).join('')}
+          </tbody>
+        </table>
+
+        <h2>By Opportunity Type</h2>
+        <table>
+          <thead><tr><th>Type</th><th style="text-align:right">Count</th><th style="text-align:right">Value</th><th style="text-align:right">Captured</th></tr></thead>
+          <tbody>
+            ${(stats.by_type || []).map(t => `<tr><td>${t.type.replace(/_/g, ' ')}</td><td style="text-align:right">${t.count}</td><td style="text-align:right" class="value-amber">${formatCurrency(t.value)}</td><td style="text-align:right" class="value-green">${t.captured}</td></tr>`).join('')}
+          </tbody>
+        </table>
+
+        <h2>By Insurance BIN</h2>
+        <table>
+          <thead><tr><th>BIN</th><th style="text-align:right">Count</th><th style="text-align:right">Value</th><th style="text-align:right">Captured</th><th style="text-align:right">Captured Value</th></tr></thead>
+          <tbody>
+            ${(stats.by_bin || []).map(b => `<tr><td>${b.bin}</td><td style="text-align:right">${b.count}</td><td style="text-align:right" class="value-amber">${formatCurrency(b.value)}</td><td style="text-align:right">${b.captured}</td><td style="text-align:right" class="value-green">${formatCurrency(b.captured_value)}</td></tr>`).join('')}
+          </tbody>
+        </table>
+
+        <h2>Weekly Activity</h2>
+        <table>
+          <thead><tr><th>Week</th><th style="text-align:right">Actioned</th><th style="text-align:right">Value</th></tr></thead>
+          <tbody>
+            ${(stats.weekly_activity || []).map(w => {
+              const weekStart = new Date(w.week_start);
+              const weekEnd = new Date(weekStart);
+              weekEnd.setDate(weekEnd.getDate() + 6);
+              return `<tr><td>${weekStart.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} - ${weekEnd.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</td><td style="text-align:right">${w.actioned_count}</td><td style="text-align:right" class="value-green">${formatCurrency(w.actioned_value)}</td></tr>`;
+            }).join('')}
+          </tbody>
+        </table>
+
+        <p class="no-print" style="margin-top: 30px; text-align: center;">
+          <button onclick="window.print()" style="padding: 12px 24px; background: #0d9488; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 14px;">
+            Print / Save as PDF
+          </button>
+        </p>
+
+        <p style="margin-top: 30px; text-align: center; color: #999; font-size: 12px;">
+          Generated by TheRxOS on ${new Date().toLocaleString()}
+        </p>
+      </body>
+      </html>
+    `;
+
+    printWindow.document.write(html);
+    printWindow.document.close();
   }
 
   const isCurrentMonth = selectedMonth === new Date().getMonth() && selectedYear === new Date().getFullYear();
@@ -234,14 +360,25 @@ export default function ReportsPage() {
             Compare to Previous
           </button>
 
-          {/* Download */}
-          <button
-            onClick={downloadReport}
-            className="flex items-center gap-2 px-4 py-2 bg-[#0d2137] border border-[#1e3a5f] rounded-xl text-slate-400 hover:text-white"
-          >
-            <Download className="w-4 h-4" />
-            Export CSV
-          </button>
+          {/* Export Options */}
+          <div className="flex items-center gap-2">
+            <button
+              onClick={downloadReport}
+              className="flex items-center gap-2 px-4 py-2 bg-[#0d2137] border border-[#1e3a5f] rounded-xl text-slate-400 hover:text-white"
+              title="Export to CSV"
+            >
+              <Download className="w-4 h-4" />
+              CSV
+            </button>
+            <button
+              onClick={printReport}
+              className="flex items-center gap-2 px-4 py-2 bg-[#0d2137] border border-[#1e3a5f] rounded-xl text-slate-400 hover:text-white"
+              title="Print or Save as PDF"
+            >
+              <Printer className="w-4 h-4" />
+              Print / PDF
+            </button>
+          </div>
         </div>
       </div>
 
@@ -380,13 +517,85 @@ export default function ReportsPage() {
         </div>
       </div>
 
+      {/* By BIN */}
+      <div className="mt-6 bg-[#0d2137] border border-[#1e3a5f] rounded-xl p-6">
+        <div className="flex items-center gap-2 mb-6">
+          <BarChart3 className="w-5 h-5 text-teal-400" />
+          <h2 className="text-lg font-semibold text-white">By Insurance BIN</h2>
+        </div>
+
+        {(stats?.by_bin || []).length === 0 ? (
+          <p className="text-slate-400 text-sm">No BIN data available for this period</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className="text-left text-xs text-slate-400 uppercase border-b border-[#1e3a5f]">
+                  <th className="pb-3 pr-4">BIN</th>
+                  <th className="pb-3 pr-4 text-right">Count</th>
+                  <th className="pb-3 pr-4 text-right">Value</th>
+                  <th className="pb-3 pr-4 text-right">Captured</th>
+                  <th className="pb-3 text-right">Captured Value</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(stats?.by_bin || []).map((item) => (
+                  <tr key={item.bin} className="border-b border-[#1e3a5f]/50">
+                    <td className="py-3 pr-4">
+                      <span className="px-2 py-1 bg-teal-500/20 text-teal-400 rounded text-sm font-medium">
+                        {item.bin}
+                      </span>
+                    </td>
+                    <td className="py-3 pr-4 text-right text-white font-medium">{item.count}</td>
+                    <td className="py-3 pr-4 text-right text-amber-400">{formatCurrency(item.value)}</td>
+                    <td className="py-3 pr-4 text-right text-emerald-400">{item.captured}</td>
+                    <td className="py-3 text-right text-emerald-400">{formatCurrency(item.captured_value)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {/* Weekly Activity by Actioned Date */}
+      <div className="mt-6 bg-[#0d2137] border border-[#1e3a5f] rounded-xl p-6">
+        <div className="flex items-center gap-2 mb-6">
+          <Calendar className="w-5 h-5 text-teal-400" />
+          <h2 className="text-lg font-semibold text-white">Weekly Activity (by Actioned Date)</h2>
+        </div>
+
+        {(stats?.weekly_activity || []).length === 0 ? (
+          <p className="text-slate-400 text-sm">No weekly activity data available for this period</p>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            {(stats?.weekly_activity || []).map((week) => {
+              const weekStart = new Date(week.week_start);
+              const weekEnd = new Date(weekStart);
+              weekEnd.setDate(weekEnd.getDate() + 6);
+
+              return (
+                <div key={week.week_start} className="bg-[#1e3a5f] rounded-lg p-4">
+                  <div className="text-xs text-slate-400 mb-2">
+                    {weekStart.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} - {weekEnd.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                  </div>
+                  <div className="text-2xl font-bold text-white">{week.actioned_count}</div>
+                  <div className="text-sm text-slate-400">opportunities actioned</div>
+                  <div className="text-lg font-semibold text-emerald-400 mt-2">{formatCurrency(week.actioned_value)}</div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
       {/* Daily Activity Chart */}
       <div className="mt-6 bg-[#0d2137] border border-[#1e3a5f] rounded-xl p-6">
         <div className="flex items-center gap-2 mb-6">
           <Calendar className="w-5 h-5 text-teal-400" />
           <h2 className="text-lg font-semibold text-white">Daily Activity</h2>
         </div>
-        
+
         <div className="h-48 flex items-end gap-1">
           {(stats?.daily_activity || []).map((day, i) => {
             const maxValue = Math.max(
@@ -395,14 +604,14 @@ export default function ReportsPage() {
             const total = day.submitted + day.captured;
             const height = (total / maxValue) * 100;
             const date = new Date(day.date);
-            
+
             return (
-              <div 
-                key={day.date} 
+              <div
+                key={day.date}
                 className="flex-1 flex flex-col items-center gap-1"
                 title={`${date.toLocaleDateString()}: ${day.submitted} submitted, ${day.captured} captured`}
               >
-                <div 
+                <div
                   className="w-full bg-gradient-to-t from-teal-500 to-emerald-500 rounded-t-sm hover:opacity-80 transition-opacity cursor-pointer"
                   style={{ height: `${height}%`, minHeight: total > 0 ? '4px' : '0' }}
                 />
@@ -413,7 +622,7 @@ export default function ReportsPage() {
             );
           })}
         </div>
-        
+
         <div className="flex items-center justify-center gap-6 mt-4 pt-4 border-t border-[#1e3a5f]">
           <div className="flex items-center gap-2">
             <div className="w-3 h-3 rounded-full bg-blue-500" />

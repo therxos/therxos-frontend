@@ -579,7 +579,78 @@ export default function SettingsPage() {
 
       {/* Prescribers Tab (Owner/Admin only) */}
       {activeTab === 'prescribers' && isOwnerOrAdmin && (
-        <div className="card p-6">
+        <div className="space-y-6">
+          {/* Prescriber Action Thresholds */}
+          <div className="card p-6">
+            <h2 className="text-lg font-semibold mb-2">Prescriber Action Thresholds</h2>
+            <p className="text-sm mb-6" style={{ color: 'var(--slate-400)' }}>
+              Set limits to warn or block staff when too many opportunities are sent to the same prescriber
+            </p>
+
+            {settingsLoading ? (
+              <div className="flex items-center gap-2" style={{ color: 'var(--slate-400)' }}>
+                <Loader2 className="w-4 h-4 animate-spin" /> Loading settings...
+              </div>
+            ) : (
+              <div className="space-y-4 max-w-md">
+                <div>
+                  <label className="block text-sm font-medium mb-2" style={{ color: 'var(--slate-300)' }}>
+                    Warning Threshold (unique patients)
+                  </label>
+                  <div className="flex items-center gap-3">
+                    <input
+                      type="number"
+                      min="1"
+                      max="100"
+                      value={pharmacySettings?.prescriberWarnThreshold || 15}
+                      onChange={(e) => {
+                        const value = parseInt(e.target.value) || 15;
+                        updateSettingsMutation.mutate({
+                          ...pharmacySettings,
+                          prescriberWarnThreshold: value
+                        });
+                      }}
+                      className="input w-24"
+                    />
+                    <span className="text-sm" style={{ color: 'var(--slate-400)' }}>
+                      Show warning after this many unique patients are sent to the same prescriber
+                    </span>
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-2" style={{ color: 'var(--slate-300)' }}>
+                    Block Threshold (unique patients)
+                  </label>
+                  <div className="flex items-center gap-3">
+                    <input
+                      type="number"
+                      min="0"
+                      max="200"
+                      value={pharmacySettings?.prescriberBlockThreshold || ''}
+                      placeholder="None"
+                      onChange={(e) => {
+                        const value = e.target.value ? parseInt(e.target.value) : null;
+                        updateSettingsMutation.mutate({
+                          ...pharmacySettings,
+                          prescriberBlockThreshold: value
+                        });
+                      }}
+                      className="input w-24"
+                    />
+                    <span className="text-sm" style={{ color: 'var(--slate-400)' }}>
+                      Block actions after this threshold (leave empty to disable blocking)
+                    </span>
+                  </div>
+                </div>
+                <p className="text-xs" style={{ color: 'var(--amber-400)' }}>
+                  These thresholds help prevent overwhelming prescriber offices with too many requests at once.
+                </p>
+              </div>
+            )}
+          </div>
+
+          {/* Excluded Prescribers */}
+          <div className="card p-6">
           <div className="flex items-center justify-between mb-6">
             <div>
               <h2 className="text-lg font-semibold">Excluded Prescribers</h2>
@@ -624,6 +695,7 @@ export default function SettingsPage() {
               ))}
             </div>
           )}
+          </div>
         </div>
       )}
 

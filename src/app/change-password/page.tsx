@@ -16,16 +16,14 @@ export default function ChangePasswordPage() {
   const router = useRouter();
   const { user, isAuthenticated, _hasHydrated, updateUser } = useAuthStore();
 
-  // Redirect if not authenticated or doesn't need to change password
+  const mustChange = user?.mustChangePassword;
+
+  // Redirect if not authenticated
   useEffect(() => {
-    if (_hasHydrated) {
-      if (!isAuthenticated) {
-        router.push('/login');
-      } else if (!user?.mustChangePassword) {
-        router.push('/dashboard');
-      }
+    if (_hasHydrated && !isAuthenticated) {
+      router.push('/login');
     }
-  }, [_hasHydrated, isAuthenticated, user, router]);
+  }, [_hasHydrated, isAuthenticated, router]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -86,12 +84,14 @@ export default function ChangePasswordPage() {
 
         {/* Change Password Card */}
         <div className="card p-8">
-          <div className="flex items-center gap-3 mb-6 p-4 rounded-lg" style={{ background: 'var(--amber-100)' }}>
-            <AlertCircle className="w-5 h-5 flex-shrink-0" style={{ color: '#92400e' }} />
-            <p className="text-sm" style={{ color: '#92400e' }}>
-              You must change your password before continuing.
-            </p>
-          </div>
+          {mustChange && (
+            <div className="flex items-center gap-3 mb-6 p-4 rounded-lg" style={{ background: 'var(--amber-100)' }}>
+              <AlertCircle className="w-5 h-5 flex-shrink-0" style={{ color: '#92400e' }} />
+              <p className="text-sm" style={{ color: '#92400e' }}>
+                You must change your password before continuing.
+              </p>
+            </div>
+          )}
 
           {error && (
             <div
