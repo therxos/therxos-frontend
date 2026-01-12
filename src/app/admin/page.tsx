@@ -197,6 +197,12 @@ export default function SuperAdminPage() {
   const [scanningTrigger, setScanningTrigger] = useState<string | null>(null);
   const [triggerScanResult, setTriggerScanResult] = useState<any>(null);
 
+  // Scan Modal
+  const [scanModalOpen, setScanModalOpen] = useState(false);
+  const [scanModalTrigger, setScanModalTrigger] = useState<{ id: string; code: string } | null>(null);
+  const [selectedScanPharmacies, setSelectedScanPharmacies] = useState<string[]>([]);
+  const [scanProgress, setScanProgress] = useState<{ current: number; total: number; results: any[] } | null>(null);
+
   // Audit Rules
   const [auditRules, setAuditRules] = useState<AuditRule[]>([]);
   const [showAuditRules, setShowAuditRules] = useState(true);
@@ -586,37 +592,81 @@ export default function SuperAdminPage() {
     }
   }
 
-  async function scanTrigger(triggerId: string, triggerCode: string) {
-    if (!selectedPharmacy) {
-      alert('Please select a pharmacy first to scan for this trigger');
-      return;
-    }
-    if (!confirm(`Scan for "${triggerCode}" opportunities in ${selectedPharmacy.pharmacy_name}?`)) return;
+  // Open scan modal for a trigger
+  function openScanModal(triggerId: string, triggerCode: string) {
+    setScanModalTrigger({ id: triggerId, code: triggerCode });
+    setSelectedScanPharmacies([]);
+    setScanProgress(null);
+    setScanModalOpen(true);
+  }
 
-    setScanningTrigger(triggerId);
-    try {
-      const token = localStorage.getItem('therxos_token');
-      const res = await fetch(`${API_URL}/api/admin/triggers/${triggerId}/scan`, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ pharmacyId: selectedPharmacy.pharmacy_id }),
-      });
+  // Run scan for selected pharmacies
+  async function runTriggerScan() {
+    if (!scanModalTrigger || selectedScanPharmacies.length === 0) return;
 
-      if (res.ok) {
-        const data = await res.json();
-        alert(`Scan complete!\nNew opportunities: ${data.totalNewOpportunities || 0}\nSkipped (duplicates): ${data.totalSkipped || 0}`);
-      } else {
-        const error = await res.json();
-        alert('Scan failed: ' + (error.error || 'Unknown error'));
+    const pharmaciesToScan = selectedScanPharmacies.includes('all')
+      ? pharmacies
+      : pharmacies.filter(p => selectedScanPharmacies.includes(p.pharmacy_id));
+
+    setScanProgress({ current: 0, total: pharmaciesToScan.length, results: [] });
+    setScanningTrigger(scanModalTrigger.id);
+
+    const token = localStorage.getItem('therxos_token');
+    const results: any[] = [];
+
+    for (let i = 0; i < pharmaciesToScan.length; i++) {
+      const pharmacy = pharmaciesToScan[i];
+      try {
+        const res = await fetch(`${API_URL}/api/admin/triggers/${scanModalTrigger.id}/scan`, {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ pharmacyId: pharmacy.pharmacy_id }),
+        });
+
+        if (res.ok) {
+          const data = await res.json();
+          results.push({
+            pharmacy: pharmacy.pharmacy_name,
+            success: true,
+            newOpportunities: data.totalNewOpportunities || 0,
+            skipped: data.totalSkipped || 0,
+          });
+        } else {
+          const error = await res.json();
+          results.push({
+            pharmacy: pharmacy.pharmacy_name,
+            success: false,
+            error: error.error || 'Unknown error',
+          });
+        }
+      } catch (err) {
+        results.push({
+          pharmacy: pharmacy.pharmacy_name,
+          success: false,
+          error: 'Network error',
+        });
       }
-    } catch (err) {
-      console.error('Failed to scan trigger:', err);
-      alert('Failed to scan trigger');
-    } finally {
-      setScanningTrigger(null);
+
+      setScanProgress({ current: i + 1, total: pharmaciesToScan.length, results: [...results] });
+    }
+
+    setScanningTrigger(null);
+  }
+
+  // Toggle pharmacy selection for scan
+  function toggleScanPharmacy(pharmacyId: string) {
+    if (pharmacyId === 'all') {
+      setSelectedScanPharmacies(prev => prev.includes('all') ? [] : ['all']);
+    } else {
+      setSelectedScanPharmacies(prev => {
+        const filtered = prev.filter(id => id !== 'all');
+        return filtered.includes(pharmacyId)
+          ? filtered.filter(id => id !== pharmacyId)
+          : [...filtered, pharmacyId];
+      });
     }
   }
 
@@ -1403,7 +1453,7 @@ export default function SuperAdminPage() {
                           <Copy className="w-4 h-4" />
                         </button>
                         <button
-                          onClick={() => scanTrigger(trigger.trigger_id, trigger.trigger_code)}
+                          onClick={() => openScanModal(trigger.trigger_id, trigger.trigger_code)}
                           disabled={scanningTrigger === trigger.trigger_id}
                           className="p-1.5 hover:bg-emerald-500/20 rounded text-slate-400 hover:text-emerald-400 transition-colors disabled:opacity-50"
                           title="Scan for this trigger"
@@ -1801,6 +1851,164 @@ export default function SuperAdminPage() {
           onSave={saveTrigger}
           saving={savingTrigger}
         />
+      )}
+
+      {/* Trigger Scan Modal */}
+      {scanModalOpen && scanModalTrigger && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+          <div className="bg-[#0d2137] border border-[#1e3a5f] rounded-xl w-full max-w-lg max-h-[80vh] overflow-hidden flex flex-col">
+            <div className="px-6 py-4 border-b border-[#1e3a5f] flex items-center justify-between">
+              <div>
+                <h2 className="text-lg font-bold text-white">Scan Trigger</h2>
+                <p className="text-sm text-slate-400">{scanModalTrigger.code}</p>
+              </div>
+              <button
+                onClick={() => {
+                  setScanModalOpen(false);
+                  setScanModalTrigger(null);
+                  setScanProgress(null);
+                }}
+                className="p-2 hover:bg-[#1e3a5f] rounded-lg text-slate-400 hover:text-white"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-6 overflow-y-auto flex-1">
+              {!scanProgress ? (
+                <>
+                  <p className="text-sm text-slate-400 mb-4">Select pharmacies to scan:</p>
+
+                  {/* All Pharmacies Option */}
+                  <label className="flex items-center gap-3 p-3 rounded-lg hover:bg-[#1e3a5f]/50 cursor-pointer border border-[#1e3a5f] mb-2">
+                    <input
+                      type="checkbox"
+                      checked={selectedScanPharmacies.includes('all')}
+                      onChange={() => toggleScanPharmacy('all')}
+                      className="w-4 h-4 rounded border-slate-600 text-teal-500 focus:ring-teal-500"
+                    />
+                    <div className="flex-1">
+                      <p className="font-medium text-white">All Pharmacies</p>
+                      <p className="text-xs text-slate-400">{pharmacies.length} pharmacies</p>
+                    </div>
+                  </label>
+
+                  <div className="border-t border-[#1e3a5f] my-4" />
+
+                  {/* Individual Pharmacies */}
+                  <div className="space-y-2 max-h-64 overflow-y-auto">
+                    {pharmacies.map(pharmacy => (
+                      <label
+                        key={pharmacy.pharmacy_id}
+                        className={`flex items-center gap-3 p-3 rounded-lg hover:bg-[#1e3a5f]/50 cursor-pointer border ${
+                          selectedScanPharmacies.includes(pharmacy.pharmacy_id) ? 'border-teal-500 bg-teal-500/10' : 'border-[#1e3a5f]'
+                        } ${selectedScanPharmacies.includes('all') ? 'opacity-50 pointer-events-none' : ''}`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={selectedScanPharmacies.includes('all') || selectedScanPharmacies.includes(pharmacy.pharmacy_id)}
+                          onChange={() => toggleScanPharmacy(pharmacy.pharmacy_id)}
+                          disabled={selectedScanPharmacies.includes('all')}
+                          className="w-4 h-4 rounded border-slate-600 text-teal-500 focus:ring-teal-500"
+                        />
+                        <div className="flex-1">
+                          <p className="font-medium text-white">{pharmacy.pharmacy_name}</p>
+                          <p className="text-xs text-slate-400">{pharmacy.patient_count?.toLocaleString() || 0} patients</p>
+                        </div>
+                      </label>
+                    ))}
+                  </div>
+                </>
+              ) : (
+                <>
+                  {/* Scan Progress */}
+                  <div className="mb-4">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-sm text-slate-400">Progress</span>
+                      <span className="text-sm text-white">{scanProgress.current} / {scanProgress.total}</span>
+                    </div>
+                    <div className="h-2 bg-[#1e3a5f] rounded-full overflow-hidden">
+                      <div
+                        className="h-full bg-teal-500 transition-all duration-300"
+                        style={{ width: `${(scanProgress.current / scanProgress.total) * 100}%` }}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Results */}
+                  <div className="space-y-2">
+                    {scanProgress.results.map((result, idx) => (
+                      <div
+                        key={idx}
+                        className={`p-3 rounded-lg border ${
+                          result.success ? 'border-emerald-500/30 bg-emerald-500/10' : 'border-red-500/30 bg-red-500/10'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="font-medium text-white">{result.pharmacy}</span>
+                          {result.success ? (
+                            <CheckCircle className="w-4 h-4 text-emerald-400" />
+                          ) : (
+                            <XCircle className="w-4 h-4 text-red-400" />
+                          )}
+                        </div>
+                        {result.success ? (
+                          <p className="text-sm text-slate-400 mt-1">
+                            {result.newOpportunities} new, {result.skipped} skipped
+                          </p>
+                        ) : (
+                          <p className="text-sm text-red-400 mt-1">{result.error}</p>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Summary when complete */}
+                  {scanProgress.current === scanProgress.total && (
+                    <div className="mt-4 p-4 bg-[#1e3a5f]/50 rounded-lg">
+                      <p className="text-sm text-slate-400">Scan Complete</p>
+                      <p className="text-lg font-bold text-emerald-400">
+                        {scanProgress.results.reduce((sum, r) => sum + (r.newOpportunities || 0), 0)} new opportunities created
+                      </p>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+
+            <div className="px-6 py-4 border-t border-[#1e3a5f] flex justify-end gap-3">
+              <button
+                onClick={() => {
+                  setScanModalOpen(false);
+                  setScanModalTrigger(null);
+                  setScanProgress(null);
+                }}
+                className="px-4 py-2 text-slate-400 hover:text-white"
+              >
+                {scanProgress ? 'Close' : 'Cancel'}
+              </button>
+              {!scanProgress && (
+                <button
+                  onClick={runTriggerScan}
+                  disabled={selectedScanPharmacies.length === 0 || scanningTrigger !== null}
+                  className="px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white rounded-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                >
+                  {scanningTrigger ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Scanning...
+                    </>
+                  ) : (
+                    <>
+                      <ScanLine className="w-4 h-4" />
+                      Start Scan
+                    </>
+                  )}
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Audit Rule Edit Modal */}
