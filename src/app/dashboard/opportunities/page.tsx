@@ -35,6 +35,7 @@ interface Opportunity {
   status: string;
   staff_notes?: string;
   created_at: string;
+  actioned_at?: string;
   patient_hash?: string;
   patient_first_name?: string;
   patient_last_name?: string;
