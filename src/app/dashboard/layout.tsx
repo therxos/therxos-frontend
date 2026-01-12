@@ -167,52 +167,18 @@ export default function DashboardLayout({
   }
 
   // Return to super admin view
-  async function exitImpersonation() {
+  function exitImpersonation() {
     const originalToken = localStorage.getItem('therxos_original_token');
     if (originalToken) {
-      try {
-        // Fetch the super admin user data with the original token
-        const res = await fetch(`${API_URL}/api/auth/me`, {
-          headers: { Authorization: `Bearer ${originalToken}` },
-        });
-
-        if (res.ok) {
-          const userData = await res.json();
-          // Restore super admin auth state
-          localStorage.setItem('therxos_token', originalToken);
-          localStorage.removeItem('therxos_impersonating');
-          localStorage.removeItem('therxos_original_token');
-          // Clear zustand persist to avoid stale state
-          localStorage.setItem('therxos-auth', JSON.stringify({
-            state: {
-              user: userData.user,
-              token: originalToken,
-              isAuthenticated: true,
-              permissionOverrides: {}
-            },
-            version: 0
-          }));
-          // Small delay to ensure localStorage is synced
-          await new Promise(resolve => setTimeout(resolve, 100));
-          // Navigate to admin
-          window.location.href = '/admin';
-        } else {
-          // Token expired or invalid, just clear and go to login
-          localStorage.removeItem('therxos_token');
-          localStorage.removeItem('therxos_impersonating');
-          localStorage.removeItem('therxos_original_token');
-          localStorage.removeItem('therxos-auth');
-          window.location.href = '/login';
-        }
-      } catch (err) {
-        console.error('Exit impersonation failed:', err);
-        // Fallback: clear everything and redirect
-        localStorage.removeItem('therxos_token');
-        localStorage.removeItem('therxos_impersonating');
-        localStorage.removeItem('therxos_original_token');
-        localStorage.removeItem('therxos-auth');
-        window.location.href = '/login';
-      }
+      // Restore original super admin token
+      localStorage.setItem('therxos_token', originalToken);
+      // Clear impersonation flags
+      localStorage.removeItem('therxos_impersonating');
+      localStorage.removeItem('therxos_original_token');
+      // Clear zustand auth storage - admin page will rehydrate from token
+      localStorage.removeItem('therxos-auth');
+      // Full page reload to admin panel
+      window.location.href = '/admin';
     }
   }
 
