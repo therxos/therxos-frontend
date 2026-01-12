@@ -3,6 +3,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { analyticsApi, opportunitiesApi } from '@/lib/api';
 import { useAuthStore } from '@/store';
+import { usePermissions } from '@/hooks/usePermissions';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
@@ -90,29 +91,31 @@ function StatCard({
   );
 }
 
-function OpportunityTypeRow({ 
-  icon: Icon, 
-  iconClass, 
-  label, 
+function OpportunityTypeRow({
+  icon: Icon,
+  iconClass,
+  label,
   type,
-  count, 
+  count,
   annualValue,
   monthlyValue,
   onClick,
-}: { 
-  icon: any; 
-  iconClass: string; 
+  showFinancials = true,
+}: {
+  icon: any;
+  iconClass: string;
   label: string;
   type: string;
-  count: number; 
+  count: number;
   annualValue: number;
   monthlyValue: number;
   onClick: () => void;
+  showFinancials?: boolean;
 }) {
   return (
-    <div 
+    <div
       onClick={onClick}
-      className="flex items-center justify-between py-3 cursor-pointer hover:bg-[var(--navy-700)] px-3 -mx-3 rounded-lg transition-colors" 
+      className="flex items-center justify-between py-3 cursor-pointer hover:bg-[var(--navy-700)] px-3 -mx-3 rounded-lg transition-colors"
       style={{ borderBottom: '1px solid var(--navy-600)' }}
     >
       <div className="flex items-center gap-3">
@@ -124,10 +127,12 @@ function OpportunityTypeRow({
           <p className="text-xs" style={{ color: 'var(--slate-400)' }}>{count} opportunities</p>
         </div>
       </div>
-      <div className="text-right">
-        <p className="font-bold text-[var(--green-500)]">{formatCurrency(annualValue)}<span className="text-xs font-normal text-slate-400">/yr</span></p>
-        <p className="text-xs" style={{ color: 'var(--slate-400)' }}>{formatShortCurrency(monthlyValue)}/mo</p>
-      </div>
+      {showFinancials && (
+        <div className="text-right">
+          <p className="font-bold text-[var(--green-500)]">{formatCurrency(annualValue)}<span className="text-xs font-normal text-slate-400">/yr</span></p>
+          <p className="text-xs" style={{ color: 'var(--slate-400)' }}>{formatShortCurrency(monthlyValue)}/mo</p>
+        </div>
+      )}
     </div>
   );
 }
@@ -135,6 +140,7 @@ function OpportunityTypeRow({
 export default function DashboardPage() {
   const router = useRouter();
   const user = useAuthStore((state) => state.user);
+  const { canViewFinancialData } = usePermissions();
   const isDemo = user?.email === 'demo@therxos.com';
 
   // Fetch real data (demo account now has real superhero data)
@@ -285,25 +291,29 @@ export default function DashboardPage() {
           <p className="text-xs" style={{ color: 'var(--slate-400)' }}>opportunities pending action</p>
         </div>
         
-        <div className="stat-card green p-6">
-          <p className="label-text mb-2">Potential Margin</p>
-          <p className="text-3xl font-bold mb-1" style={{ color: 'var(--green-500)' }}>
-            {formatCurrency(stats.pending_annual || 0)}
-          </p>
-          <p className="text-xs" style={{ color: 'var(--slate-400)' }}>
-            {formatShortCurrency(stats.pending_monthly || 0)}/mo annual opportunity
-          </p>
-        </div>
-        
-        <div className="stat-card amber p-6">
-          <p className="label-text mb-2">Captured Value</p>
-          <p className="text-3xl font-bold mb-1" style={{ color: 'var(--amber-500)' }}>
-            {formatCurrency(stats.captured_annual || 0)}
-          </p>
-          <p className="text-xs" style={{ color: 'var(--slate-400)' }}>
-            {formatShortCurrency(stats.captured_monthly || 0)}/mo realized
-          </p>
-        </div>
+        {canViewFinancialData && (
+          <div className="stat-card green p-6">
+            <p className="label-text mb-2">Potential Margin</p>
+            <p className="text-3xl font-bold mb-1" style={{ color: 'var(--green-500)' }}>
+              {formatCurrency(stats.pending_annual || 0)}
+            </p>
+            <p className="text-xs" style={{ color: 'var(--slate-400)' }}>
+              {formatShortCurrency(stats.pending_monthly || 0)}/mo annual opportunity
+            </p>
+          </div>
+        )}
+
+        {canViewFinancialData && (
+          <div className="stat-card amber p-6">
+            <p className="label-text mb-2">Captured Value</p>
+            <p className="text-3xl font-bold mb-1" style={{ color: 'var(--amber-500)' }}>
+              {formatCurrency(stats.captured_annual || 0)}
+            </p>
+            <p className="text-xs" style={{ color: 'var(--slate-400)' }}>
+              {formatShortCurrency(stats.captured_monthly || 0)}/mo realized
+            </p>
+          </div>
+        )}
         
         <div className="stat-card blue p-6">
           <p className="label-text mb-2">Patients</p>
@@ -348,6 +358,7 @@ export default function DashboardPage() {
                     annualValue={annualValue}
                     monthlyValue={monthlyValue}
                     onClick={() => handleTypeClick(item.opportunity_type)}
+                    showFinancials={canViewFinancialData}
                   />
                 );
               })
@@ -424,7 +435,9 @@ export default function DashboardPage() {
                 <th className="text-left text-xs font-semibold uppercase tracking-wider px-6 py-4" style={{ color: 'var(--slate-400)', width: '200px' }}>Patient</th>
                 <th className="text-left text-xs font-semibold uppercase tracking-wider px-6 py-4" style={{ color: 'var(--slate-400)', width: '250px' }}>Conditions</th>
                 <th className="text-center text-xs font-semibold uppercase tracking-wider px-6 py-4" style={{ color: 'var(--slate-400)', width: '120px' }}>Opportunities</th>
-                <th className="text-right text-xs font-semibold uppercase tracking-wider px-6 py-4" style={{ color: 'var(--slate-400)', width: '200px' }}>Potential Margin</th>
+                {canViewFinancialData && (
+                  <th className="text-right text-xs font-semibold uppercase tracking-wider px-6 py-4" style={{ color: 'var(--slate-400)', width: '200px' }}>Potential Margin</th>
+                )}
                 <th className="text-right text-xs font-semibold uppercase tracking-wider px-6 py-4" style={{ color: 'var(--slate-400)', width: '120px' }}>Last Visit</th>
               </tr>
             </thead>
@@ -460,10 +473,12 @@ export default function DashboardPage() {
                     <td className="px-6 py-4 text-center">
                       <span className="font-semibold text-white">{patient.opportunity_count}</span>
                     </td>
-                    <td className="px-6 py-4 text-right">
-                      <div className="text-emerald-400 font-semibold">{formatCurrency(patient.total_margin)}/yr</div>
-                      <div className="text-xs" style={{ color: 'var(--slate-400)' }}>{formatShortCurrency(patient.total_margin / 12)}/mo</div>
-                    </td>
+                    {canViewFinancialData && (
+                      <td className="px-6 py-4 text-right">
+                        <div className="text-emerald-400 font-semibold">{formatCurrency(patient.total_margin)}/yr</div>
+                        <div className="text-xs" style={{ color: 'var(--slate-400)' }}>{formatShortCurrency(patient.total_margin / 12)}/mo</div>
+                      </td>
+                    )}
                     <td className="px-6 py-4 text-right" style={{ color: 'var(--slate-400)' }}>
                       {patient.last_visit ? new Date(patient.last_visit).toLocaleDateString() : '-'}
                     </td>
@@ -471,7 +486,7 @@ export default function DashboardPage() {
                 ))
               ) : (
                 <tr>
-                  <td colSpan={5} className="text-center py-12" style={{ color: 'var(--slate-400)' }}>
+                  <td colSpan={canViewFinancialData ? 5 : 4} className="text-center py-12" style={{ color: 'var(--slate-400)' }}>
                     No patients with opportunities found
                   </td>
                 </tr>

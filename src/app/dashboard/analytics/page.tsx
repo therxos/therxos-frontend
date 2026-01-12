@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { usePermissions } from '@/hooks/usePermissions';
 import {
   TrendingUp,
   TrendingDown,
@@ -164,9 +165,23 @@ function BreakdownSection({
 }
 
 export default function AnalyticsPage() {
+  const { canViewFinancialData } = usePermissions();
   const [analytics, setAnalytics] = useState<AnalyticsData | null>(null);
   const [loading, setLoading] = useState(true);
   const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set(['bin']));
+
+  // If user doesn't have permission to view financial data, show access denied
+  if (!canViewFinancialData) {
+    return (
+      <div className="min-h-screen bg-[#0a1628] p-8 flex items-center justify-center">
+        <div className="bg-[#0d2137] border border-[#1e3a5f] rounded-xl p-8 text-center max-w-md">
+          <DollarSign className="w-12 h-12 text-slate-500 mx-auto mb-4" />
+          <h2 className="text-xl font-bold text-white mb-2">Access Restricted</h2>
+          <p className="text-slate-400">You don't have permission to view financial analytics. Please contact your administrator.</p>
+        </div>
+      </div>
+    );
+  }
 
   async function fetchAnalytics() {
     setLoading(true);

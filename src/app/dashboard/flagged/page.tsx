@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useAuthStore } from '@/store';
+import { usePermissions } from '@/hooks/usePermissions';
 import {
   Flag,
   ChevronDown,
@@ -70,6 +71,7 @@ function getAnnualValue(opp: Opportunity): number {
 
 export default function FlaggedQueuePage() {
   const { user } = useAuthStore();
+  const { canViewFinancialData } = usePermissions();
   const [opportunities, setOpportunities] = useState<Opportunity[]>([]);
   const [loading, setLoading] = useState(true);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
@@ -178,10 +180,12 @@ export default function FlaggedQueuePage() {
             </div>
           </div>
 
-          <div className="text-right">
-            <p className="text-sm text-slate-400">Total Value</p>
-            <p className="text-2xl font-bold text-purple-400">{formatCurrency(totalValue)}</p>
-          </div>
+          {canViewFinancialData && (
+            <div className="text-right">
+              <p className="text-sm text-slate-400">Total Value</p>
+              <p className="text-2xl font-bold text-purple-400">{formatCurrency(totalValue)}</p>
+            </div>
+          )}
         </div>
       </div>
 
@@ -243,10 +247,12 @@ export default function FlaggedQueuePage() {
                 </div>
 
                 {/* Value */}
-                <div className="text-right min-w-[100px]">
-                  <p className="text-lg font-semibold text-purple-400">{formatCurrency(getAnnualValue(opp))}</p>
-                  <p className="text-xs text-slate-400">annual</p>
-                </div>
+                {canViewFinancialData && (
+                  <div className="text-right min-w-[100px]">
+                    <p className="text-lg font-semibold text-purple-400">{formatCurrency(getAnnualValue(opp))}</p>
+                    <p className="text-xs text-slate-400">annual</p>
+                  </div>
+                )}
 
                 {/* Actions */}
                 <div className="flex items-center gap-2">

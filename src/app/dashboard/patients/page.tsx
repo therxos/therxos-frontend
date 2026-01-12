@@ -5,6 +5,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useSearchParams } from 'next/navigation';
 import { patientsApi } from '@/lib/api';
 import { useAuthStore } from '@/store';
+import { usePermissions } from '@/hooks/usePermissions';
 import Link from 'next/link';
 import { Search, Filter, Users, AlertCircle, ChevronRight } from 'lucide-react';
 
@@ -28,6 +29,7 @@ function formatCurrency(value: number) {
 
 export default function PatientsPage() {
   const user = useAuthStore((state) => state.user);
+  const { canViewFinancialData } = usePermissions();
   const searchParams = useSearchParams();
   const isDemo = user?.userId === 'demo-user-001';
   const [search, setSearch] = useState('');
@@ -114,7 +116,7 @@ export default function PatientsPage() {
                 <th>Conditions</th>
                 <th className="text-center">Med Sync</th>
                 <th className="text-right">Opportunities</th>
-                <th className="text-right">Potential Margin</th>
+                {canViewFinancialData && <th className="text-right">Potential Margin</th>}
                 <th className="text-right">Last Visit</th>
                 <th></th>
               </tr>
@@ -156,13 +158,15 @@ export default function PatientsPage() {
                       <span style={{ color: 'var(--slate-500)' }}>0</span>
                     )}
                   </td>
-                  <td className="text-right">
-                    {patient.total_margin > 0 ? (
-                      <span className="value-positive">{formatCurrency(patient.total_margin)}</span>
-                    ) : (
-                      <span style={{ color: 'var(--slate-500)' }}>—</span>
-                    )}
-                  </td>
+                  {canViewFinancialData && (
+                    <td className="text-right">
+                      {patient.total_margin > 0 ? (
+                        <span className="value-positive">{formatCurrency(patient.total_margin)}</span>
+                      ) : (
+                        <span style={{ color: 'var(--slate-500)' }}>—</span>
+                      )}
+                    </td>
+                  )}
                   <td className="text-right" style={{ color: 'var(--slate-400)' }}>
                     {patient.last_visit ? new Date(patient.last_visit).toLocaleDateString() : '—'}
                   </td>

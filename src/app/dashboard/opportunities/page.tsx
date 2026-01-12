@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { useAuthStore } from '@/store';
+import { usePermissions } from '@/hooks/usePermissions';
 import {
   Search,
   ChevronDown,
@@ -370,12 +371,14 @@ function SidePanel({
   onClose,
   onStatusChange,
   isDemo,
+  showFinancials = true,
 }: {
   opportunity: Opportunity | null;
   groupItem: GroupedItem | null;
   onClose: () => void;
   onStatusChange: (id: string, status: string) => void;
   isDemo?: boolean;
+  showFinancials?: boolean;
 }) {
   if (!opportunity || !groupItem) return null;
   
@@ -460,35 +463,37 @@ function SidePanel({
         </div>
         
         {/* Value */}
-        <div>
-          <div className="text-xs text-slate-500 uppercase tracking-wider mb-3">Value & Impact</div>
-          <div className="bg-[#1e3a5f] rounded-lg p-4 grid grid-cols-2 gap-4">
-            <div>
-              <div className="text-xs text-slate-500">Per Fill GP</div>
-              <div className="text-2xl font-bold text-emerald-400">{formatCurrency(Number(opportunity.potential_margin_gain) || 0)}</div>
-              <div className="text-xs text-slate-400 mt-1">First fill value</div>
-            </div>
-            <div>
-              <div className="text-xs text-slate-500">Monthly Value</div>
-              <div className="text-2xl font-bold text-[#14b8a6]">{formatCurrency(getAnnualValue(opportunity) / 12)}</div>
-              <div className="text-xs text-slate-400 mt-1">{formatCurrency(getAnnualValue(opportunity))}/year</div>
-            </div>
-            <div className="col-span-2 pt-2 border-t border-[#2d4a6f]">
-              <div className="text-xs text-slate-500 mb-1">Priority Score</div>
-              <div className="flex items-center gap-2">
-                <div className="flex-1 h-2 bg-[#0d2137] rounded-full overflow-hidden">
-                  <div
-                    className="h-full bg-gradient-to-r from-amber-500 to-emerald-500 rounded-full"
-                    style={{ width: `${Math.min(100, (Number(opportunity.potential_margin_gain) || 0) / 2)}%` }}
-                  />
+        {showFinancials && (
+          <div>
+            <div className="text-xs text-slate-500 uppercase tracking-wider mb-3">Value & Impact</div>
+            <div className="bg-[#1e3a5f] rounded-lg p-4 grid grid-cols-2 gap-4">
+              <div>
+                <div className="text-xs text-slate-500">Per Fill GP</div>
+                <div className="text-2xl font-bold text-emerald-400">{formatCurrency(Number(opportunity.potential_margin_gain) || 0)}</div>
+                <div className="text-xs text-slate-400 mt-1">First fill value</div>
+              </div>
+              <div>
+                <div className="text-xs text-slate-500">Monthly Value</div>
+                <div className="text-2xl font-bold text-[#14b8a6]">{formatCurrency(getAnnualValue(opportunity) / 12)}</div>
+                <div className="text-xs text-slate-400 mt-1">{formatCurrency(getAnnualValue(opportunity))}/year</div>
+              </div>
+              <div className="col-span-2 pt-2 border-t border-[#2d4a6f]">
+                <div className="text-xs text-slate-500 mb-1">Priority Score</div>
+                <div className="flex items-center gap-2">
+                  <div className="flex-1 h-2 bg-[#0d2137] rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-gradient-to-r from-amber-500 to-emerald-500 rounded-full"
+                      style={{ width: `${Math.min(100, (Number(opportunity.potential_margin_gain) || 0) / 2)}%` }}
+                    />
+                  </div>
+                  <span className="text-sm font-medium text-white">
+                    {Number(opportunity.potential_margin_gain) >= 100 ? 'High' : Number(opportunity.potential_margin_gain) >= 50 ? 'Medium' : 'Low'}
+                  </span>
                 </div>
-                <span className="text-sm font-medium text-white">
-                  {Number(opportunity.potential_margin_gain) >= 100 ? 'High' : Number(opportunity.potential_margin_gain) >= 50 ? 'Medium' : 'Low'}
-                </span>
               </div>
             </div>
           </div>
-        </div>
+        )}
         
         {/* Prescriber */}
         <div>
@@ -546,6 +551,7 @@ function SidePanel({
 // Main Component
 export default function OpportunitiesPage() {
   const user = useAuthStore((state) => state.user);
+  const { canViewFinancialData } = usePermissions();
   const isDemo = user?.email === 'demo@therxos.com';
   
   const [opportunities, setOpportunities] = useState<Opportunity[]>([]);
@@ -981,12 +987,16 @@ export default function OpportunitiesPage() {
               <h1 className="text-xl font-bold text-white">Opportunity Dashboard</h1>
               <div className="flex items-center gap-3 text-sm">
                 <span className="text-slate-300">{stats.total} opportunities</span>
-                <span className="text-slate-500">•</span>
-                <span className="text-emerald-400 font-medium">{formatCurrency(stats.total_annual)} annual</span>
-                <span className="text-slate-500">•</span>
-                <span className="text-[#14b8a6] font-medium">{formatCurrency(stats.total_annual / 12)}/mo</span>
-                <span className="text-slate-500">•</span>
-                <span className="text-amber-400 font-medium">Captured: {formatCurrency(stats.captured_annual)}</span>
+                {canViewFinancialData && (
+                  <>
+                    <span className="text-slate-500">•</span>
+                    <span className="text-emerald-400 font-medium">{formatCurrency(stats.total_annual)} annual</span>
+                    <span className="text-slate-500">•</span>
+                    <span className="text-[#14b8a6] font-medium">{formatCurrency(stats.total_annual / 12)}/mo</span>
+                    <span className="text-slate-500">•</span>
+                    <span className="text-amber-400 font-medium">Captured: {formatCurrency(stats.captured_annual)}</span>
+                  </>
+                )}
               </div>
             </div>
             <div className="flex items-center gap-4">
@@ -1031,14 +1041,16 @@ export default function OpportunitiesPage() {
                 card.color === 'amber' ? 'text-amber-400' :
                 card.color === 'blue' ? 'text-blue-400' : 'text-emerald-400'
               }`}>{card.value}</div>
-              <div className="flex gap-2 mt-3">
-                <span className="text-xs px-2 py-1 bg-[#1e3a5f] text-slate-300 rounded">
-                  {formatShortCurrency(card.annual)}/yr
-                </span>
-                <span className="text-xs px-2 py-1 bg-[#1e3a5f] text-slate-300 rounded">
-                  {formatShortCurrency(card.annual / 12)}/mo
-                </span>
-              </div>
+              {canViewFinancialData && (
+                <div className="flex gap-2 mt-3">
+                  <span className="text-xs px-2 py-1 bg-[#1e3a5f] text-slate-300 rounded">
+                    {formatShortCurrency(card.annual)}/yr
+                  </span>
+                  <span className="text-xs px-2 py-1 bg-[#1e3a5f] text-slate-300 rounded">
+                    {formatShortCurrency(card.annual / 12)}/mo
+                  </span>
+                </div>
+              )}
             </div>
           ))}
           </div>
@@ -1130,7 +1142,7 @@ export default function OpportunitiesPage() {
           </button>
         </div>
         <div className="text-sm text-slate-400">
-          {filteredCount} opportunities • <span className="text-[#14b8a6] font-medium">{formatCurrency(filteredValue)}</span> annual value
+          {filteredCount} opportunities{canViewFinancialData && <> • <span className="text-[#14b8a6] font-medium">{formatCurrency(filteredValue)}</span> annual value</>}
         </div>
       </div>
 
@@ -1189,7 +1201,9 @@ export default function OpportunitiesPage() {
                   </div>
                   <div className="flex items-center gap-8">
                     <div className="text-right">
-                      <div className="text-[#14b8a6] font-semibold">{formatCurrency(groupTotal)}</div>
+                      {canViewFinancialData && (
+                        <div className="text-[#14b8a6] font-semibold">{formatCurrency(groupTotal)}</div>
+                      )}
                       <div className="text-xs text-slate-400">{group.opportunities.length} opps • {capturedCount} captured</div>
                     </div>
                     {isExpanded ? <ChevronUp className="w-5 h-5 text-slate-400" /> : <ChevronDown className="w-5 h-5 text-slate-400" />}
@@ -1207,7 +1221,9 @@ export default function OpportunitiesPage() {
                           )}
                           <th className="text-left text-xs font-semibold text-slate-400 uppercase tracking-wider px-5 py-3">Opportunity</th>
                           <th className="text-left text-xs font-semibold text-slate-400 uppercase tracking-wider px-5 py-3">Action</th>
-                          <th className="text-left text-xs font-semibold text-slate-400 uppercase tracking-wider px-5 py-3">Per Fill / Annual</th>
+                          {canViewFinancialData && (
+                            <th className="text-left text-xs font-semibold text-slate-400 uppercase tracking-wider px-5 py-3">Per Fill / Annual</th>
+                          )}
                           <th className="text-left text-xs font-semibold text-slate-400 uppercase tracking-wider px-5 py-3">Prescriber</th>
                           <th className="text-left text-xs font-semibold text-slate-400 uppercase tracking-wider px-5 py-3">Status</th>
                           <th className="text-left text-xs font-semibold text-slate-400 uppercase tracking-wider px-5 py-3">Last Actioned</th>
@@ -1236,12 +1252,14 @@ export default function OpportunitiesPage() {
                               <td className="px-5 py-3">
                                 <div className="text-sm text-slate-400 max-w-xs truncate">{action || rationale}</div>
                               </td>
-                              <td className="px-5 py-3">
-                                <div>
-                                  <div className="text-emerald-400 font-semibold">{formatCurrency(Number(opp.potential_margin_gain) || 0)}</div>
-                                  <div className="text-xs text-slate-500">{formatCurrency(getAnnualValue(opp))}/yr</div>
-                                </div>
-                              </td>
+                              {canViewFinancialData && (
+                                <td className="px-5 py-3">
+                                  <div>
+                                    <div className="text-emerald-400 font-semibold">{formatCurrency(Number(opp.potential_margin_gain) || 0)}</div>
+                                    <div className="text-xs text-slate-500">{formatCurrency(getAnnualValue(opp))}/yr</div>
+                                  </div>
+                                </td>
+                              )}
                               <td className="px-5 py-3">
                                 <div className="text-sm text-slate-300">{opp.prescriber_name || 'Unknown'}</div>
                               </td>
@@ -1293,6 +1311,7 @@ export default function OpportunitiesPage() {
             onClose={() => { setSelectedOpp(null); setSelectedGroup(null); }}
             onStatusChange={updateStatus}
             isDemo={isDemo}
+            showFinancials={canViewFinancialData}
           />
         </>
       )}
