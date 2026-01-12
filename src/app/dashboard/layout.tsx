@@ -167,18 +167,36 @@ export default function DashboardLayout({
   }
 
   // Return to super admin view
-  function exitImpersonation() {
+  async function exitImpersonation() {
     const originalToken = localStorage.getItem('therxos_original_token');
-    if (originalToken) {
-      // Restore original super admin token
-      localStorage.setItem('therxos_token', originalToken);
+    if (!originalToken) return;
+
+    try {
+      // Fetch super admin user data with original token
+      const res = await fetch(`${API_URL}/api/auth/me`, {
+        headers: { Authorization: `Bearer ${originalToken}` },
+      });
+
+      if (!res.ok) throw new Error('Token invalid');
+
+      const data = await res.json();
+
       // Clear impersonation flags
       localStorage.removeItem('therxos_impersonating');
       localStorage.removeItem('therxos_original_token');
-      // Clear zustand auth storage - admin page will rehydrate from token
-      localStorage.removeItem('therxos-auth');
-      // Full page reload to admin panel
-      window.location.href = '/admin';
+
+      // Restore token and update zustand directly
+      localStorage.setItem('therxos_token', originalToken);
+      setAuth(data.user, originalToken);
+      setPermissionOverrides({});
+
+      // Use Next.js router for navigation
+      router.push('/admin');
+    } catch (err) {
+      console.error('Exit impersonation failed:', err);
+      // Clear everything and go to login
+      localStorage.clear();
+      window.location.href = '/login';
     }
   }
 
