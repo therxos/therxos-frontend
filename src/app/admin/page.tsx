@@ -600,13 +600,18 @@ export default function SuperAdminPage() {
     setScanModalOpen(true);
   }
 
+  // Filter out demo/Hero pharmacy for scans
+  const scanEligiblePharmacies = pharmacies.filter(p =>
+    !p.pharmacy_name?.toLowerCase().includes('hero')
+  );
+
   // Run scan for selected pharmacies
   async function runTriggerScan() {
     if (!scanModalTrigger || selectedScanPharmacies.length === 0) return;
 
     const pharmaciesToScan = selectedScanPharmacies.includes('all')
-      ? pharmacies
-      : pharmacies.filter(p => selectedScanPharmacies.includes(p.pharmacy_id));
+      ? scanEligiblePharmacies
+      : scanEligiblePharmacies.filter(p => selectedScanPharmacies.includes(p.pharmacy_id));
 
     setScanProgress({ current: 0, total: pharmaciesToScan.length, results: [] });
     setScanningTrigger(scanModalTrigger.id);
@@ -1889,7 +1894,7 @@ export default function SuperAdminPage() {
                     />
                     <div className="flex-1">
                       <p className="font-medium text-white">All Pharmacies</p>
-                      <p className="text-xs text-slate-400">{pharmacies.length} pharmacies</p>
+                      <p className="text-xs text-slate-400">{scanEligiblePharmacies.length} pharmacies</p>
                     </div>
                   </label>
 
@@ -1897,7 +1902,7 @@ export default function SuperAdminPage() {
 
                   {/* Individual Pharmacies */}
                   <div className="space-y-2 max-h-64 overflow-y-auto">
-                    {pharmacies.map(pharmacy => (
+                    {scanEligiblePharmacies.map(pharmacy => (
                       <label
                         key={pharmacy.pharmacy_id}
                         className={`flex items-center gap-3 p-3 rounded-lg hover:bg-[#1e3a5f]/50 cursor-pointer border ${
