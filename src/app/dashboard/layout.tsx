@@ -181,8 +181,18 @@ export default function DashboardLayout({
           localStorage.setItem('therxos_token', originalToken);
           localStorage.removeItem('therxos_impersonating');
           localStorage.removeItem('therxos_original_token');
-          // Update auth store with super admin data
-          setAuth(userData.user, originalToken);
+          // Clear zustand persist to avoid stale state
+          localStorage.setItem('therxos-auth', JSON.stringify({
+            state: {
+              user: userData.user,
+              token: originalToken,
+              isAuthenticated: true,
+              permissionOverrides: {}
+            },
+            version: 0
+          }));
+          // Small delay to ensure localStorage is synced
+          await new Promise(resolve => setTimeout(resolve, 100));
           // Navigate to admin
           window.location.href = '/admin';
         } else {
