@@ -947,6 +947,7 @@ export default function OpportunitiesPage() {
                           <th className="text-left text-xs font-semibold text-slate-400 uppercase tracking-wider px-5 py-3">Value</th>
                           <th className="text-left text-xs font-semibold text-slate-400 uppercase tracking-wider px-5 py-3">Prescriber</th>
                           <th className="text-left text-xs font-semibold text-slate-400 uppercase tracking-wider px-5 py-3">Status</th>
+                          <th className="text-left text-xs font-semibold text-slate-400 uppercase tracking-wider px-5 py-3">Last Actioned</th>
                           <th className="text-left text-xs font-semibold text-slate-400 uppercase tracking-wider px-5 py-3">Notes</th>
                           <th className="text-right text-xs font-semibold text-slate-400 uppercase tracking-wider px-5 py-3"></th>
                         </tr>
@@ -980,6 +981,11 @@ export default function OpportunitiesPage() {
                               </td>
                               <td className="px-5 py-3">
                                 <StatusDropdown status={opp.status} onChange={s => updateStatus(opp.opportunity_id, s)} />
+                              </td>
+                              <td className="px-5 py-3">
+                                <div className="text-sm text-slate-400">
+                                  {opp.actioned_at ? new Date(opp.actioned_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '-'}
+                                </div>
                               </td>
                               <td className="px-5 py-3">
                                 <button

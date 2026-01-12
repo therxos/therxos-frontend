@@ -55,6 +55,15 @@ export default function DashboardLayout({
   const [pharmacySwitcherOpen, setPharmacySwitcherOpen] = useState(false);
   const [switchingPharmacy, setSwitchingPharmacy] = useState(false);
   const [isImpersonating, setIsImpersonating] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+
+  // Handle search submission
+  const handleSearch = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter' && searchQuery.trim()) {
+      router.push(`/dashboard/patients?search=${encodeURIComponent(searchQuery.trim())}`);
+      setSearchQuery('');
+    }
+  };
 
   const isSuperAdmin = user?.role === 'super_admin';
   // Check impersonation status after hydration
@@ -157,15 +166,42 @@ export default function DashboardLayout({
   }
 
   // Return to super admin view
-  function exitImpersonation() {
+  async function exitImpersonation() {
     const originalToken = localStorage.getItem('therxos_original_token');
     if (originalToken) {
-      localStorage.setItem('therxos_token', originalToken);
-      localStorage.removeItem('therxos_impersonating');
-      localStorage.removeItem('therxos_original_token');
-      // Clear persisted Zustand auth so it re-fetches from token
-      localStorage.removeItem('therxos-auth');
-      window.location.href = '/admin';
+      try {
+        // Fetch the super admin user data with the original token
+        const res = await fetch(`${API_URL}/api/auth/me`, {
+          headers: { Authorization: `Bearer ${originalToken}` },
+        });
+
+        if (res.ok) {
+          const userData = await res.json();
+          // Restore super admin auth state
+          localStorage.setItem('therxos_token', originalToken);
+          localStorage.removeItem('therxos_impersonating');
+          localStorage.removeItem('therxos_original_token');
+          // Update auth store with super admin data
+          setAuth(userData.user, originalToken);
+          // Navigate to admin
+          window.location.href = '/admin';
+        } else {
+          // Token expired or invalid, just clear and go to login
+          localStorage.removeItem('therxos_token');
+          localStorage.removeItem('therxos_impersonating');
+          localStorage.removeItem('therxos_original_token');
+          localStorage.removeItem('therxos-auth');
+          window.location.href = '/login';
+        }
+      } catch (err) {
+        console.error('Exit impersonation failed:', err);
+        // Fallback: clear everything and redirect
+        localStorage.removeItem('therxos_token');
+        localStorage.removeItem('therxos_impersonating');
+        localStorage.removeItem('therxos_original_token');
+        localStorage.removeItem('therxos-auth');
+        window.location.href = '/login';
+      }
     }
   }
 
@@ -440,6 +476,17 @@ export default function DashboardLayout({
               <Menu className="w-5 h-5" />
             </button>
 
+            {/* Back to Admin button when impersonating */}
+            {isImpersonating && (
+              <button
+                onClick={exitImpersonation}
+                className="flex items-center gap-2 px-3 py-2 rounded-lg transition-colors bg-red-500 hover:bg-red-600 text-white"
+              >
+                <Shield className="w-4 h-4" />
+                <span className="text-sm font-medium">Back to Admin</span>
+              </button>
+            )}
+
             {/* Pharmacy Switcher for Super Admin */}
             {(isSuperAdmin || isImpersonating) && (
               <div className="relative">
@@ -533,14 +580,17 @@ export default function DashboardLayout({
 
           <div className="flex items-center gap-4">
             {/* Search */}
-            <div 
+            <div
               className="hidden md:flex items-center gap-2 px-4 py-2 rounded-lg w-72"
               style={{ background: 'var(--navy-700)', border: '1px solid var(--navy-600)' }}
             >
               <Search className="w-4 h-4" style={{ color: 'var(--slate-500)' }} />
               <input
                 type="text"
-                placeholder="Search patients, opportunities..."
+                placeholder="Search patients... (press Enter)"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                onKeyDown={handleSearch}
                 className="bg-transparent text-sm w-full outline-none placeholder:text-[var(--slate-500)]"
               />
             </div>

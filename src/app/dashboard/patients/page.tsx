@@ -1,7 +1,8 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { useSearchParams } from 'next/navigation';
 import { patientsApi } from '@/lib/api';
 import { useAuthStore } from '@/store';
 import Link from 'next/link';
@@ -27,9 +28,18 @@ function formatCurrency(value: number) {
 
 export default function PatientsPage() {
   const user = useAuthStore((state) => state.user);
+  const searchParams = useSearchParams();
   const isDemo = user?.userId === 'demo-user-001';
   const [search, setSearch] = useState('');
   const [filterOpportunities, setFilterOpportunities] = useState(false);
+
+  // Initialize search from URL params
+  useEffect(() => {
+    const urlSearch = searchParams.get('search');
+    if (urlSearch) {
+      setSearch(urlSearch);
+    }
+  }, [searchParams]);
 
   const { data: patients, isLoading } = useQuery({
     queryKey: ['patients', search, filterOpportunities],
