@@ -2099,7 +2099,7 @@ function TriggerEditModal({
   const [verifying, setVerifying] = useState(false);
   const [verifyResult, setVerifyResult] = useState<{ verifiedCount: number } | null>(null);
   const [showAddBin, setShowAddBin] = useState(false);
-  const [newBinForm, setNewBinForm] = useState({ bin: '', group: '', gpValue: '', coverageStatus: 'works' as const });
+  const [newBinForm, setNewBinForm] = useState<{ bin: string; group: string; gpValue: string; coverageStatus: 'works' | 'excluded' | 'verified' | 'unknown' }>({ bin: '', group: '', gpValue: '', coverageStatus: 'works' });
   const [selectedBinForGroups, setSelectedBinForGroups] = useState<string | null>(null);
   const [savingBinValues, setSavingBinValues] = useState(false);
 
