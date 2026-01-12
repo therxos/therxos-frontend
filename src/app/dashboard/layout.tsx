@@ -169,11 +169,43 @@ export default function DashboardLayout({
     }
   }
 
-  // Demo notifications
-  const notifications = [
-    { id: 1, type: 'capture', message: '3 opportunities captured today', time: '2 min ago' },
-    { id: 2, type: 'audit', message: 'New audit risk detected', time: '15 min ago' },
-  ];
+  // Build real notifications from opportunity data
+  const notifications = [];
+  const today = new Date();
+  const dateStr = today.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+
+  if (notSubmittedCount > 0) {
+    notifications.push({
+      id: 1,
+      type: 'opportunity',
+      message: `${notSubmittedCount} opportunities awaiting review`,
+      time: 'Now',
+      date: dateStr,
+      href: '/dashboard/opportunities'
+    });
+  }
+  if (flaggedCount > 0) {
+    notifications.push({
+      id: 2,
+      type: 'flagged',
+      message: `${flaggedCount} flagged opportunities need attention`,
+      time: 'Now',
+      date: dateStr,
+      href: '/dashboard/flagged'
+    });
+  }
+  // Add completed opportunities count if available
+  const completedCount = oppData?.counts?.['Completed']?.count || oppData?.counts?.['Approved']?.count || 0;
+  if (completedCount > 0) {
+    notifications.push({
+      id: 3,
+      type: 'capture',
+      message: `${completedCount} opportunities captured`,
+      time: 'This month',
+      date: dateStr,
+      href: '/dashboard/opportunities?status=Completed'
+    });
+  }
 
   useEffect(() => {
     if (_hasHydrated && !isAuthenticated) {
@@ -529,7 +561,7 @@ export default function DashboardLayout({
               {notificationsOpen && (
                 <>
                   <div className="fixed inset-0 z-40" onClick={() => setNotificationsOpen(false)} />
-                  <div 
+                  <div
                     className="absolute right-0 mt-2 w-80 rounded-lg shadow-xl z-50 overflow-hidden"
                     style={{ background: 'var(--navy-800)', border: '1px solid var(--navy-600)' }}
                   >
@@ -538,25 +570,31 @@ export default function DashboardLayout({
                     </div>
                     <div className="max-h-80 overflow-y-auto">
                       {notifications.length > 0 ? (
-                        notifications.map(n => (
-                          <div 
-                            key={n.id} 
+                        notifications.map((n: any) => (
+                          <div
+                            key={n.id}
                             className="p-4 hover:bg-[var(--navy-700)] cursor-pointer transition-colors"
                             style={{ borderBottom: '1px solid var(--navy-600)' }}
+                            onClick={() => {
+                              setNotificationsOpen(false);
+                              if (n.href) router.push(n.href);
+                            }}
                           >
                             <div className="flex items-start gap-3">
-                              <div 
+                              <div
                                 className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0"
-                                style={{ 
-                                  background: n.type === 'capture' ? 'var(--green-500)' : 'var(--amber-500)',
-                                  color: 'var(--navy-900)'
+                                style={{
+                                  background: n.type === 'capture' ? 'var(--green-500)' : n.type === 'flagged' ? 'rgb(147, 51, 234)' : 'var(--teal-500)',
+                                  color: 'white'
                                 }}
                               >
-                                {n.type === 'capture' ? '✓' : '!'}
+                                {n.type === 'capture' ? '✓' : n.type === 'flagged' ? <Flag className="w-4 h-4" /> : <Lightbulb className="w-4 h-4" />}
                               </div>
                               <div className="flex-1">
                                 <p className="text-sm">{n.message}</p>
-                                <p className="text-xs mt-1" style={{ color: 'var(--slate-400)' }}>{n.time}</p>
+                                <p className="text-xs mt-1" style={{ color: 'var(--slate-400)' }}>
+                                  {n.time} <span style={{ color: 'var(--slate-500)' }}>· {n.date}</span>
+                                </p>
                               </div>
                             </div>
                           </div>
