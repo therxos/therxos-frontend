@@ -158,6 +158,8 @@ export default function SuperAdminPage() {
   const [editingTrigger, setEditingTrigger] = useState<Trigger | null>(null);
   const [triggerModalOpen, setTriggerModalOpen] = useState(false);
   const [savingTrigger, setSavingTrigger] = useState(false);
+  const [scanningTrigger, setScanningTrigger] = useState<string | null>(null);
+  const [triggerScanResult, setTriggerScanResult] = useState<any>(null);
 
   // Audit Rules
   const [auditRules, setAuditRules] = useState<AuditRule[]>([]);
@@ -545,6 +547,40 @@ export default function SuperAdminPage() {
       }
     } catch (err) {
       console.error('Failed to delete trigger:', err);
+    }
+  }
+
+  async function scanTrigger(triggerId: string, triggerCode: string) {
+    if (!selectedPharmacy) {
+      alert('Please select a pharmacy first to scan for this trigger');
+      return;
+    }
+    if (!confirm(`Scan for "${triggerCode}" opportunities in ${selectedPharmacy.pharmacy_name}?`)) return;
+
+    setScanningTrigger(triggerId);
+    try {
+      const token = localStorage.getItem('therxos_token');
+      const res = await fetch(`${API_URL}/api/admin/triggers/${triggerId}/scan`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ pharmacyId: selectedPharmacy.pharmacy_id }),
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        alert(`Scan complete!\nNew opportunities: ${data.totalNewOpportunities || 0}\nSkipped (duplicates): ${data.totalSkipped || 0}`);
+      } else {
+        const error = await res.json();
+        alert('Scan failed: ' + (error.error || 'Unknown error'));
+      }
+    } catch (err) {
+      console.error('Failed to scan trigger:', err);
+      alert('Failed to scan trigger');
+    } finally {
+      setScanningTrigger(null);
     }
   }
 
@@ -1329,6 +1365,18 @@ export default function SuperAdminPage() {
                           title="Duplicate"
                         >
                           <Copy className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() => scanTrigger(trigger.trigger_id, trigger.trigger_code)}
+                          disabled={scanningTrigger === trigger.trigger_id}
+                          className="p-1.5 hover:bg-emerald-500/20 rounded text-slate-400 hover:text-emerald-400 transition-colors disabled:opacity-50"
+                          title="Scan for this trigger"
+                        >
+                          {scanningTrigger === trigger.trigger_id ? (
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                          ) : (
+                            <ScanLine className="w-4 h-4" />
+                          )}
                         </button>
                         <button
                           onClick={() => deleteTrigger(trigger.trigger_id)}

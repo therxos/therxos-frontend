@@ -1,7 +1,7 @@
 // usePermissions.ts - Enhanced Role-based access control hook for TheRxOS
 // Supports configurable permissions per pharmacy
 
-import { useAuthStore } from '@/store';
+import { useAuthStore, PermissionOverrides } from '@/store';
 
 export const ROLES = {
   SUPER_ADMIN: 'super_admin',
@@ -158,11 +158,9 @@ export function hasPermission(
 // Hook to use permissions in components
 export function usePermissions() {
   const user = useAuthStore((state) => state.user);
+  const permissionOverrides = useAuthStore((state) => state.permissionOverrides);
   const role = (user?.role || 'technician') as Role;
-  
-  // TODO: Get permission overrides from pharmacy settings
-  const permissionOverrides: Record<string, Record<string, boolean>> = {};
-  
+
   const can = (permission: Permission) => hasPermission(role, permission, permissionOverrides);
   
   return {

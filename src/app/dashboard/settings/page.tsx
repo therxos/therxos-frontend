@@ -24,7 +24,10 @@ import {
   Copy,
   Zap,
   ChevronDown,
-  ChevronRight
+  ChevronRight,
+  Lock,
+  ToggleLeft,
+  ToggleRight
 } from 'lucide-react';
 
 const OPPORTUNITY_TYPES = {
@@ -43,10 +46,38 @@ const OPPORTUNITY_TYPES = {
 };
 
 const ROLE_OPTIONS = [
-  { value: 'admin', label: 'Admin', description: 'Full access to all features' },
-  { value: 'pharmacist', label: 'Pharmacist', description: 'Clinical access, can approve changes' },
-  { value: 'technician', label: 'Technician', description: 'Limited access, needs approval for faxes' },
-  { value: 'staff', label: 'Staff', description: 'View-only access' }
+  { value: 'admin', label: 'Admin', description: 'Full access to all features and user management' },
+  { value: 'pharmacist', label: 'Pharmacist', description: 'Clinical access, can approve and send faxes' },
+  { value: 'technician', label: 'Technician', description: 'Limited access, needs pharmacist approval for faxes' }
+];
+
+// Permission toggles that admins can configure per role
+const CONFIGURABLE_PERMISSIONS = [
+  {
+    key: 'view_financial_data',
+    label: 'View Financial Data',
+    description: 'Show monthly/annual values and margin information on opportunities'
+  },
+  {
+    key: 'view_analytics',
+    label: 'Access Analytics',
+    description: 'Allow access to the Analytics section in the sidebar'
+  },
+  {
+    key: 'view_audit_risks',
+    label: 'View Audit Risks',
+    description: 'Allow access to the Audit Risks section'
+  },
+  {
+    key: 'upload_data',
+    label: 'Upload Data',
+    description: 'Allow uploading prescription/patient data files'
+  },
+  {
+    key: 'send_fax_directly',
+    label: 'Send Faxes Directly',
+    description: 'Send faxes without requiring approval (pharmacist default)'
+  }
 ];
 
 export default function SettingsPage() {
@@ -286,6 +317,41 @@ export default function SettingsPage() {
     updateSettingsMutation.mutate(newSettings);
   };
 
+  const handleToggleRolePermission = (role: string, permissionKey: string, enabled: boolean) => {
+    const currentOverrides = pharmacySettings?.permissionOverrides || {};
+    const roleOverrides = currentOverrides[role] || {};
+
+    const newSettings = {
+      ...pharmacySettings,
+      permissionOverrides: {
+        ...currentOverrides,
+        [role]: {
+          ...roleOverrides,
+          [permissionKey]: enabled
+        }
+      }
+    };
+    updateSettingsMutation.mutate(newSettings);
+  };
+
+  const getRolePermission = (role: string, permissionKey: string): boolean => {
+    // Check overrides first
+    const overrides = pharmacySettings?.permissionOverrides || {};
+    if (overrides[role]?.[permissionKey] !== undefined) {
+      return overrides[role][permissionKey];
+    }
+    // Return defaults based on role
+    if (role === 'pharmacist') {
+      // Pharmacists have most permissions by default
+      return ['view_financial_data', 'view_analytics', 'view_audit_risks', 'upload_data', 'send_fax_directly'].includes(permissionKey);
+    }
+    if (role === 'technician') {
+      // Technicians have limited defaults
+      return false; // No extra permissions by default
+    }
+    return false;
+  };
+
   const toggleCategory = (category: string) => {
     setExpandedCategories(prev =>
       prev.includes(category)
@@ -306,7 +372,8 @@ export default function SettingsPage() {
       { id: 'opportunities', label: 'Opportunities', icon: Lightbulb },
       { id: 'triggers', label: 'Triggers', icon: Zap },
       { id: 'prescribers', label: 'Prescribers', icon: UserX },
-      { id: 'team', label: 'Team', icon: Users }
+      { id: 'team', label: 'Team', icon: Users },
+      { id: 'permissions', label: 'Permissions', icon: Lock }
     ] : []),
     { id: 'notifications', label: 'Notifications', icon: Bell },
     { id: 'security', label: 'Security', icon: Shield },
@@ -606,7 +673,6 @@ export default function SettingsPage() {
                       <option value="admin">Admin</option>
                       <option value="pharmacist">Pharmacist</option>
                       <option value="technician">Technician</option>
-                      <option value="staff">Staff</option>
                     </select>
                     {u.user_id !== user?.userId && u.role !== 'super_admin' && (
                       <button
@@ -619,6 +685,104 @@ export default function SettingsPage() {
                   </div>
                 </div>
               ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Permissions Tab (Owner/Admin only) */}
+      {activeTab === 'permissions' && isOwnerOrAdmin && (
+        <div className="card p-6">
+          <h2 className="text-lg font-semibold mb-2">Role Permissions</h2>
+          <p className="text-sm mb-6" style={{ color: 'var(--slate-400)' }}>
+            Configure what each role can access. Toggle permissions on/off for Pharmacists and Technicians.
+          </p>
+
+          {settingsLoading ? (
+            <div className="flex items-center gap-2" style={{ color: 'var(--slate-400)' }}>
+              <Loader2 className="w-4 h-4 animate-spin" /> Loading settings...
+            </div>
+          ) : (
+            <div className="space-y-8">
+              {/* Pharmacist Permissions */}
+              <div>
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="w-8 h-8 rounded-lg bg-blue-500/20 flex items-center justify-center">
+                    <User className="w-4 h-4 text-blue-400" />
+                  </div>
+                  <div>
+                    <h3 className="font-semibold text-blue-400">Pharmacist Permissions</h3>
+                    <p className="text-xs" style={{ color: 'var(--slate-500)' }}>Licensed pharmacists have clinical access by default</p>
+                  </div>
+                </div>
+                <div className="space-y-2 ml-11">
+                  {CONFIGURABLE_PERMISSIONS.map((perm) => (
+                    <label
+                      key={`pharmacist-${perm.key}`}
+                      className="flex items-center justify-between p-3 rounded-lg cursor-pointer hover:bg-[var(--navy-600)]"
+                      style={{ background: 'var(--navy-700)' }}
+                    >
+                      <div className="flex-1">
+                        <p className="font-medium text-sm">{perm.label}</p>
+                        <p className="text-xs" style={{ color: 'var(--slate-500)' }}>{perm.description}</p>
+                      </div>
+                      <button
+                        onClick={() => handleToggleRolePermission('pharmacist', perm.key, !getRolePermission('pharmacist', perm.key))}
+                        disabled={updateSettingsMutation.isPending}
+                        className="ml-4"
+                      >
+                        {getRolePermission('pharmacist', perm.key) ? (
+                          <ToggleRight className="w-8 h-8 text-teal-500" />
+                        ) : (
+                          <ToggleLeft className="w-8 h-8 text-slate-500" />
+                        )}
+                      </button>
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              {/* Technician Permissions */}
+              <div>
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="w-8 h-8 rounded-lg bg-teal-500/20 flex items-center justify-center">
+                    <User className="w-4 h-4 text-teal-400" />
+                  </div>
+                  <div>
+                    <h3 className="font-semibold text-teal-400">Technician Permissions</h3>
+                    <p className="text-xs" style={{ color: 'var(--slate-500)' }}>Technicians have limited access by default</p>
+                  </div>
+                </div>
+                <div className="space-y-2 ml-11">
+                  {CONFIGURABLE_PERMISSIONS.map((perm) => (
+                    <label
+                      key={`technician-${perm.key}`}
+                      className="flex items-center justify-between p-3 rounded-lg cursor-pointer hover:bg-[var(--navy-600)]"
+                      style={{ background: 'var(--navy-700)' }}
+                    >
+                      <div className="flex-1">
+                        <p className="font-medium text-sm">{perm.label}</p>
+                        <p className="text-xs" style={{ color: 'var(--slate-500)' }}>{perm.description}</p>
+                      </div>
+                      <button
+                        onClick={() => handleToggleRolePermission('technician', perm.key, !getRolePermission('technician', perm.key))}
+                        disabled={updateSettingsMutation.isPending}
+                        className="ml-4"
+                      >
+                        {getRolePermission('technician', perm.key) ? (
+                          <ToggleRight className="w-8 h-8 text-teal-500" />
+                        ) : (
+                          <ToggleLeft className="w-8 h-8 text-slate-500" />
+                        )}
+                      </button>
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              <p className="text-xs" style={{ color: 'var(--slate-500)' }}>
+                Note: Admins always have full access. Super Admins (platform administrators) have unrestricted access to all features.
+              </p>
             </div>
           )}
         </div>

@@ -6,7 +6,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useAuthStore, useUIStore } from '@/store';
 import { useQuery } from '@tanstack/react-query';
-import { opportunitiesApi } from '@/lib/api';
+import { opportunitiesApi, settingsApi } from '@/lib/api';
 import usePermissions, { PERMISSIONS } from '@/hooks/usePermissions';
 import {
   LayoutDashboard,
@@ -48,7 +48,7 @@ export default function DashboardLayout({
 }) {
   const router = useRouter();
   const pathname = usePathname();
-  const { user, isAuthenticated, logout, _hasHydrated, setAuth } = useAuthStore();
+  const { user, isAuthenticated, logout, _hasHydrated, setAuth, setPermissionOverrides } = useAuthStore();
   const { sidebarOpen, toggleSidebar } = useUIStore();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
@@ -94,6 +94,20 @@ export default function DashboardLayout({
     },
     enabled: isSuperAdmin || isImpersonating,
   });
+
+  // Fetch pharmacy settings for permission overrides
+  const { data: pharmacySettings } = useQuery({
+    queryKey: ['pharmacy-settings', user?.pharmacyId],
+    queryFn: () => settingsApi.getPharmacySettings(user!.pharmacyId).then(r => r.data),
+    enabled: !!user?.pharmacyId && isAuthenticated,
+  });
+
+  // Update permission overrides when settings change
+  useEffect(() => {
+    if (pharmacySettings?.permissionOverrides) {
+      setPermissionOverrides(pharmacySettings.permissionOverrides);
+    }
+  }, [pharmacySettings, setPermissionOverrides]);
 
   const pharmacies: Pharmacy[] = pharmaciesData?.pharmacies || [];
 

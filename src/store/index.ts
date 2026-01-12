@@ -7,7 +7,7 @@ export interface User {
   email: string;
   firstName: string;
   lastName: string;
-  role: 'super_admin' | 'owner' | 'admin' | 'pharmacist' | 'technician' | 'staff';
+  role: 'super_admin' | 'owner' | 'admin' | 'pharmacist' | 'technician';
   clientId: string;
   clientName: string;
   pharmacyId: string;
@@ -16,14 +16,19 @@ export interface User {
   mustChangePassword: boolean;
 }
 
+// Permission overrides by role
+export type PermissionOverrides = Record<string, Record<string, boolean>>;
+
 interface AuthState {
   user: User | null;
   token: string | null;
   isAuthenticated: boolean;
+  permissionOverrides: PermissionOverrides;
   _hasHydrated: boolean;
   setAuth: (user: User, token: string) => void;
   logout: () => void;
   updateUser: (updates: Partial<User>) => void;
+  setPermissionOverrides: (overrides: PermissionOverrides) => void;
   setHasHydrated: (state: boolean) => void;
 }
 
@@ -33,6 +38,7 @@ export const useAuthStore = create<AuthState>()(
       user: null,
       token: null,
       isAuthenticated: false,
+      permissionOverrides: {},
       _hasHydrated: false,
 
       setAuth: (user, token) => {
@@ -46,13 +52,16 @@ export const useAuthStore = create<AuthState>()(
         if (typeof window !== 'undefined') {
           localStorage.removeItem('therxos_token');
         }
-        set({ user: null, token: null, isAuthenticated: false });
+        set({ user: null, token: null, isAuthenticated: false, permissionOverrides: {} });
       },
 
       updateUser: (updates) =>
         set((state) => ({
           user: state.user ? { ...state.user, ...updates } : null,
         })),
+
+      setPermissionOverrides: (overrides) =>
+        set({ permissionOverrides: overrides }),
 
       setHasHydrated: (state) => {
         set({ _hasHydrated: state });
@@ -65,6 +74,7 @@ export const useAuthStore = create<AuthState>()(
         user: state.user,
         token: state.token,
         isAuthenticated: state.isAuthenticated,
+        permissionOverrides: state.permissionOverrides,
       }),
       onRehydrateStorage: () => (state) => {
         state?.setHasHydrated(true);
