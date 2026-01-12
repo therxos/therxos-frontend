@@ -80,6 +80,7 @@ export default function DashboardLayout({
     canUploadData,
     canManageSettings,
     canViewAuditRisks,
+    canViewFinancialData,
   } = usePermissions();
 
   // Fetch opportunity counts for sidebar badge
@@ -283,8 +284,8 @@ export default function DashboardLayout({
     { name: 'Flagged', href: '/dashboard/flagged', icon: Flag, badge: flaggedCount, badgeColor: 'purple', show: true },
     { name: 'Audit Risks', href: '/dashboard/audit', icon: ShieldAlert, badge: 0, show: canViewAuditRisks },
     { name: 'Patients', href: '/dashboard/patients', icon: Users, show: canViewPatientDetails },
-    { name: 'Analytics', href: '/dashboard/analytics', icon: BarChart3, show: canViewAnalytics },
-    { name: 'Reports', href: '/dashboard/reports', icon: FileText, show: canViewAnalytics },
+    { name: 'Analytics', href: '/dashboard/analytics', icon: BarChart3, show: canViewAnalytics && canViewFinancialData },
+    { name: 'Reports', href: '/dashboard/reports', icon: FileText, show: canViewAnalytics && canViewFinancialData },
     { name: 'Data Upload', href: '/dashboard/upload', icon: Upload, show: canUploadData },
   ].filter(item => item.show);
 

@@ -2,7 +2,6 @@
 
 import { useState, useEffect } from 'react';
 import { useAuthStore } from '@/store';
-import { usePermissions } from '@/hooks/usePermissions';
 import {
   Calendar,
   Download,
@@ -71,26 +70,12 @@ const MONTHS = [
 
 export default function ReportsPage() {
   const { user } = useAuthStore();
-  const { canViewFinancialData } = usePermissions();
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState<MonthlyStats | null>(null);
   const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth());
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
   const [compareMode, setCompareMode] = useState(false);
   const [previousStats, setPreviousStats] = useState<MonthlyStats | null>(null);
-
-  // If user doesn't have permission to view financial data, show access denied
-  if (!canViewFinancialData) {
-    return (
-      <div className="min-h-screen bg-[#0a1628] p-8 flex items-center justify-center">
-        <div className="bg-[#0d2137] border border-[#1e3a5f] rounded-xl p-8 text-center max-w-md">
-          <FileText className="w-12 h-12 text-slate-500 mx-auto mb-4" />
-          <h2 className="text-xl font-bold text-white mb-2">Access Restricted</h2>
-          <p className="text-slate-400">You don't have permission to view financial reports. Please contact your administrator.</p>
-        </div>
-      </div>
-    );
-  }
 
   useEffect(() => {
     fetchMonthlyStats();
