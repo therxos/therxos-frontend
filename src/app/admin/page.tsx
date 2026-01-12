@@ -108,7 +108,43 @@ interface Trigger {
   default_gp_value: number | null;
   is_enabled: boolean;
   created_at: string;
-  bin_values: { bin: string; gp_value: number; is_excluded: boolean }[];
+  bin_values: {
+    bin: string;
+    group?: string | null;
+    gpValue?: number | null;
+    isExcluded?: boolean;
+    coverageStatus?: 'works' | 'excluded' | 'verified' | 'unknown';
+    verifiedAt?: string | null;
+    verifiedClaimCount?: number;
+    avgReimbursement?: number | null;
+  }[];
+}
+
+interface BinValue {
+  id?: string;
+  bin: string;
+  group: string | null;
+  gpValue: number | null;
+  isExcluded: boolean;
+  coverageStatus: 'works' | 'excluded' | 'verified' | 'unknown';
+  verifiedAt?: string | null;
+  verifiedClaimCount?: number;
+  avgReimbursement?: number | null;
+}
+
+interface DiscoveredBin {
+  bin: string;
+  claim_count: number;
+  patient_count: number;
+  pharmacy_count: number;
+  avg_reimbursement: number;
+}
+
+interface DiscoveredGroup {
+  group: string;
+  claim_count: number;
+  patient_count: number;
+  avg_reimbursement: number;
 }
 
 interface AuditRule {
@@ -2022,6 +2058,8 @@ function TriggerEditModal({
   onSave: (trigger: Partial<Trigger>) => void;
   saving: boolean;
 }) {
+  const { user } = useAuthStore();
+  const [activeTab, setActiveTab] = useState<'details' | 'pricing'>('details');
   const [form, setForm] = useState({
     trigger_code: trigger?.trigger_code || '',
     display_name: trigger?.display_name || '',
@@ -2040,6 +2078,229 @@ function TriggerEditModal({
     default_gp_value: String(trigger?.default_gp_value || ''),
     is_enabled: trigger?.is_enabled ?? true,
   });
+
+  // BIN/Group Pricing state
+  const [binValues, setBinValues] = useState<BinValue[]>(
+    (trigger?.bin_values || []).map(bv => ({
+      bin: bv.bin,
+      group: bv.group || null,
+      gpValue: bv.gpValue ?? null,
+      isExcluded: bv.isExcluded || false,
+      coverageStatus: bv.coverageStatus || 'unknown',
+      verifiedAt: bv.verifiedAt,
+      verifiedClaimCount: bv.verifiedClaimCount,
+      avgReimbursement: bv.avgReimbursement,
+    }))
+  );
+  const [discoveredBins, setDiscoveredBins] = useState<DiscoveredBin[]>([]);
+  const [discoveredGroups, setDiscoveredGroups] = useState<DiscoveredGroup[]>([]);
+  const [loadingBins, setLoadingBins] = useState(false);
+  const [loadingGroups, setLoadingGroups] = useState(false);
+  const [verifying, setVerifying] = useState(false);
+  const [verifyResult, setVerifyResult] = useState<{ verifiedCount: number } | null>(null);
+  const [showAddBin, setShowAddBin] = useState(false);
+  const [newBinForm, setNewBinForm] = useState({ bin: '', group: '', gpValue: '', coverageStatus: 'works' as const });
+  const [selectedBinForGroups, setSelectedBinForGroups] = useState<string | null>(null);
+  const [savingBinValues, setSavingBinValues] = useState(false);
+
+  // Fetch discovered BINs when pricing tab opens
+  useEffect(() => {
+    if (activeTab === 'pricing' && discoveredBins.length === 0) {
+      fetchDiscoveredBins();
+    }
+  }, [activeTab]);
+
+  // Fetch groups when a BIN is selected
+  useEffect(() => {
+    if (selectedBinForGroups) {
+      fetchGroupsForBin(selectedBinForGroups);
+    }
+  }, [selectedBinForGroups]);
+
+  const fetchDiscoveredBins = async () => {
+    setLoadingBins(true);
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch(`${API_URL}/api/admin/bins?limit=50`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setDiscoveredBins(data.bins || []);
+      }
+    } catch (error) {
+      console.error('Failed to fetch BINs:', error);
+    }
+    setLoadingBins(false);
+  };
+
+  const fetchGroupsForBin = async (bin: string) => {
+    setLoadingGroups(true);
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch(`${API_URL}/api/admin/bins/${bin}/groups`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setDiscoveredGroups(data.groups || []);
+      }
+    } catch (error) {
+      console.error('Failed to fetch groups:', error);
+    }
+    setLoadingGroups(false);
+  };
+
+  const verifyCoverage = async () => {
+    if (!trigger?.trigger_id) return;
+    setVerifying(true);
+    setVerifyResult(null);
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch(`${API_URL}/api/admin/triggers/${trigger.trigger_id}/verify-coverage`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ minClaims: 1 }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setVerifyResult({ verifiedCount: data.verifiedCount });
+        // Refresh bin values
+        const binRes = await fetch(`${API_URL}/api/admin/triggers/${trigger.trigger_id}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (binRes.ok) {
+          const binData = await binRes.json();
+          setBinValues((binData.binValues || []).map((bv: any) => ({
+            bin: bv.bin,
+            group: bv.group || null,
+            gpValue: bv.gpValue ?? null,
+            isExcluded: bv.isExcluded || false,
+            coverageStatus: bv.coverageStatus || 'unknown',
+            verifiedAt: bv.verifiedAt,
+            verifiedClaimCount: bv.verifiedClaimCount,
+            avgReimbursement: bv.avgReimbursement,
+          })));
+        }
+      }
+    } catch (error) {
+      console.error('Failed to verify coverage:', error);
+    }
+    setVerifying(false);
+  };
+
+  const addBinValue = async () => {
+    if (!newBinForm.bin) return;
+    if (!trigger?.trigger_id) {
+      // Just add locally for new triggers
+      setBinValues([...binValues, {
+        bin: newBinForm.bin,
+        group: newBinForm.group || null,
+        gpValue: newBinForm.gpValue ? Number(newBinForm.gpValue) : null,
+        isExcluded: newBinForm.coverageStatus === 'excluded',
+        coverageStatus: newBinForm.coverageStatus,
+      }]);
+      setNewBinForm({ bin: '', group: '', gpValue: '', coverageStatus: 'works' });
+      setShowAddBin(false);
+      return;
+    }
+
+    setSavingBinValues(true);
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch(`${API_URL}/api/admin/triggers/${trigger.trigger_id}/bin-values`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          bin: newBinForm.bin,
+          group: newBinForm.group || null,
+          gpValue: newBinForm.gpValue ? Number(newBinForm.gpValue) : null,
+          coverageStatus: newBinForm.coverageStatus,
+        }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setBinValues([...binValues, {
+          bin: data.binValue.insurance_bin,
+          group: data.binValue.insurance_group || null,
+          gpValue: data.binValue.gp_value,
+          isExcluded: data.binValue.is_excluded,
+          coverageStatus: data.binValue.coverage_status || 'unknown',
+        }]);
+        setNewBinForm({ bin: '', group: '', gpValue: '', coverageStatus: 'works' });
+        setShowAddBin(false);
+      }
+    } catch (error) {
+      console.error('Failed to add BIN value:', error);
+    }
+    setSavingBinValues(false);
+  };
+
+  const deleteBinValue = async (bin: string, group: string | null) => {
+    if (!trigger?.trigger_id) {
+      // Just remove locally for new triggers
+      setBinValues(binValues.filter(bv => !(bv.bin === bin && bv.group === group)));
+      return;
+    }
+
+    try {
+      const token = localStorage.getItem('token');
+      const url = group
+        ? `${API_URL}/api/admin/triggers/${trigger.trigger_id}/bin-values/${bin}?group=${encodeURIComponent(group)}`
+        : `${API_URL}/api/admin/triggers/${trigger.trigger_id}/bin-values/${bin}?group=`;
+      await fetch(url, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      setBinValues(binValues.filter(bv => !(bv.bin === bin && bv.group === group)));
+    } catch (error) {
+      console.error('Failed to delete BIN value:', error);
+    }
+  };
+
+  const updateBinStatus = async (bin: string, group: string | null, newStatus: 'works' | 'excluded' | 'verified' | 'unknown') => {
+    if (!trigger?.trigger_id) {
+      // Just update locally for new triggers
+      setBinValues(binValues.map(bv =>
+        bv.bin === bin && bv.group === group
+          ? { ...bv, coverageStatus: newStatus, isExcluded: newStatus === 'excluded' }
+          : bv
+      ));
+      return;
+    }
+
+    try {
+      const token = localStorage.getItem('token');
+      const existingBv = binValues.find(bv => bv.bin === bin && bv.group === group);
+      await fetch(`${API_URL}/api/admin/triggers/${trigger.trigger_id}/bin-values`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          bin,
+          group,
+          gpValue: existingBv?.gpValue,
+          coverageStatus: newStatus,
+          isExcluded: newStatus === 'excluded',
+        }),
+      });
+      setBinValues(binValues.map(bv =>
+        bv.bin === bin && bv.group === group
+          ? { ...bv, coverageStatus: newStatus, isExcluded: newStatus === 'excluded' }
+          : bv
+      ));
+    } catch (error) {
+      console.error('Failed to update BIN status:', error);
+    }
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -2064,10 +2325,19 @@ function TriggerEditModal({
     });
   };
 
+  const getStatusBadge = (status: string) => {
+    switch (status) {
+      case 'works': return 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30';
+      case 'excluded': return 'bg-red-500/20 text-red-400 border-red-500/30';
+      case 'verified': return 'bg-blue-500/20 text-blue-400 border-blue-500/30';
+      default: return 'bg-slate-500/20 text-slate-400 border-slate-500/30';
+    }
+  };
+
   return (
     <>
       <div className="fixed inset-0 bg-black/50 z-40" onClick={onClose} />
-      <div className="fixed inset-y-0 right-0 w-[600px] bg-[#0d2137] border-l border-[#1e3a5f] z-50 overflow-y-auto">
+      <div className="fixed inset-y-0 right-0 w-[700px] bg-[#0d2137] border-l border-[#1e3a5f] z-50 overflow-y-auto">
         <div className="p-6">
           <div className="flex items-center justify-between mb-6">
             <h2 className="text-xl font-bold text-white">
@@ -2078,172 +2348,399 @@ function TriggerEditModal({
             </button>
           </div>
 
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
+          {/* Tabs */}
+          <div className="flex gap-1 mb-6 bg-[#0a1628] p-1 rounded-lg">
+            <button
+              onClick={() => setActiveTab('details')}
+              className={`flex-1 py-2 px-4 rounded-lg text-sm font-medium transition-colors ${
+                activeTab === 'details'
+                  ? 'bg-teal-500 text-white'
+                  : 'text-slate-400 hover:text-white hover:bg-[#1e3a5f]'
+              }`}
+            >
+              Trigger Details
+            </button>
+            <button
+              onClick={() => setActiveTab('pricing')}
+              className={`flex-1 py-2 px-4 rounded-lg text-sm font-medium transition-colors ${
+                activeTab === 'pricing'
+                  ? 'bg-teal-500 text-white'
+                  : 'text-slate-400 hover:text-white hover:bg-[#1e3a5f]'
+              }`}
+            >
+              BIN/Group Pricing ({binValues.length})
+            </button>
+          </div>
+
+          {activeTab === 'details' ? (
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs text-slate-400 mb-1">Code</label>
+                  <input
+                    type="text"
+                    value={form.trigger_code}
+                    onChange={(e) => setForm({ ...form, trigger_code: e.target.value.toUpperCase().replace(/\s+/g, '_') })}
+                    className="w-full px-3 py-2 bg-[#0a1628] border border-[#1e3a5f] rounded-lg text-white text-sm focus:outline-none focus:border-teal-500"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-slate-400 mb-1">Type</label>
+                  <select
+                    value={form.trigger_type}
+                    onChange={(e) => setForm({ ...form, trigger_type: e.target.value as 'therapeutic_interchange' | 'missing_therapy' | 'ndc_optimization' })}
+                    className="w-full px-3 py-2 bg-[#0a1628] border border-[#1e3a5f] rounded-lg text-white text-sm focus:outline-none focus:border-teal-500"
+                  >
+                    <option value="therapeutic_interchange">Therapeutic Interchange</option>
+                    <option value="missing_therapy">Missing Therapy</option>
+                    <option value="ndc_optimization">NDC Optimization</option>
+                  </select>
+                </div>
+              </div>
+
               <div>
-                <label className="block text-xs text-slate-400 mb-1">Code</label>
+                <label className="block text-xs text-slate-400 mb-1">Display Name</label>
                 <input
                   type="text"
-                  value={form.trigger_code}
-                  onChange={(e) => setForm({ ...form, trigger_code: e.target.value.toUpperCase().replace(/\s+/g, '_') })}
+                  value={form.display_name}
+                  onChange={(e) => setForm({ ...form, display_name: e.target.value })}
                   className="w-full px-3 py-2 bg-[#0a1628] border border-[#1e3a5f] rounded-lg text-white text-sm focus:outline-none focus:border-teal-500"
                   required
                 />
               </div>
+
               <div>
-                <label className="block text-xs text-slate-400 mb-1">Type</label>
-                <select
-                  value={form.trigger_type}
-                  onChange={(e) => setForm({ ...form, trigger_type: e.target.value as 'therapeutic_interchange' | 'missing_therapy' | 'ndc_optimization' })}
+                <label className="block text-xs text-slate-400 mb-1">Detection Keywords (comma-separated)</label>
+                <textarea
+                  value={form.detection_keywords}
+                  onChange={(e) => setForm({ ...form, detection_keywords: e.target.value })}
                   className="w-full px-3 py-2 bg-[#0a1628] border border-[#1e3a5f] rounded-lg text-white text-sm focus:outline-none focus:border-teal-500"
-                >
-                  <option value="therapeutic_interchange">Therapeutic Interchange</option>
-                  <option value="missing_therapy">Missing Therapy</option>
-                  <option value="ndc_optimization">NDC Optimization</option>
-                </select>
+                  rows={2}
+                  placeholder="OZEMPIC, SEMAGLUTIDE, WEGOVY"
+                />
               </div>
-            </div>
 
-            <div>
-              <label className="block text-xs text-slate-400 mb-1">Display Name</label>
-              <input
-                type="text"
-                value={form.display_name}
-                onChange={(e) => setForm({ ...form, display_name: e.target.value })}
-                className="w-full px-3 py-2 bg-[#0a1628] border border-[#1e3a5f] rounded-lg text-white text-sm focus:outline-none focus:border-teal-500"
-                required
-              />
-            </div>
-
-            <div>
-              <label className="block text-xs text-slate-400 mb-1">Detection Keywords (comma-separated)</label>
-              <textarea
-                value={form.detection_keywords}
-                onChange={(e) => setForm({ ...form, detection_keywords: e.target.value })}
-                className="w-full px-3 py-2 bg-[#0a1628] border border-[#1e3a5f] rounded-lg text-white text-sm focus:outline-none focus:border-teal-500"
-                rows={2}
-                placeholder="OZEMPIC, SEMAGLUTIDE, WEGOVY"
-              />
-            </div>
-
-            <div>
-              <label className="block text-xs text-slate-400 mb-1">Exclude Keywords (comma-separated)</label>
-              <textarea
-                value={form.exclude_keywords}
-                onChange={(e) => setForm({ ...form, exclude_keywords: e.target.value })}
-                className="w-full px-3 py-2 bg-[#0a1628] border border-[#1e3a5f] rounded-lg text-white text-sm focus:outline-none focus:border-teal-500"
-                rows={2}
-                placeholder="Keywords that exclude a match"
-              />
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-xs text-slate-400 mb-1">IF_HAS (require these)</label>
+                <label className="block text-xs text-slate-400 mb-1">Exclude Keywords (comma-separated)</label>
+                <textarea
+                  value={form.exclude_keywords}
+                  onChange={(e) => setForm({ ...form, exclude_keywords: e.target.value })}
+                  className="w-full px-3 py-2 bg-[#0a1628] border border-[#1e3a5f] rounded-lg text-white text-sm focus:outline-none focus:border-teal-500"
+                  rows={2}
+                  placeholder="Keywords that exclude a match"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs text-slate-400 mb-1">IF_HAS (require these)</label>
+                  <input
+                    type="text"
+                    value={form.if_has_keywords}
+                    onChange={(e) => setForm({ ...form, if_has_keywords: e.target.value })}
+                    className="w-full px-3 py-2 bg-[#0a1628] border border-[#1e3a5f] rounded-lg text-white text-sm focus:outline-none focus:border-teal-500"
+                    placeholder="comma-separated"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-slate-400 mb-1">IF_NOT_HAS (missing these)</label>
+                  <input
+                    type="text"
+                    value={form.if_not_has_keywords}
+                    onChange={(e) => setForm({ ...form, if_not_has_keywords: e.target.value })}
+                    className="w-full px-3 py-2 bg-[#0a1628] border border-[#1e3a5f] rounded-lg text-white text-sm focus:outline-none focus:border-teal-500"
+                    placeholder="comma-separated"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs text-slate-400 mb-1">Recommended Drug</label>
                 <input
                   type="text"
-                  value={form.if_has_keywords}
-                  onChange={(e) => setForm({ ...form, if_has_keywords: e.target.value })}
+                  value={form.recommended_drug}
+                  onChange={(e) => setForm({ ...form, recommended_drug: e.target.value })}
                   className="w-full px-3 py-2 bg-[#0a1628] border border-[#1e3a5f] rounded-lg text-white text-sm focus:outline-none focus:border-teal-500"
-                  placeholder="comma-separated"
                 />
               </div>
-              <div>
-                <label className="block text-xs text-slate-400 mb-1">IF_NOT_HAS (missing these)</label>
-                <input
-                  type="text"
-                  value={form.if_not_has_keywords}
-                  onChange={(e) => setForm({ ...form, if_not_has_keywords: e.target.value })}
-                  className="w-full px-3 py-2 bg-[#0a1628] border border-[#1e3a5f] rounded-lg text-white text-sm focus:outline-none focus:border-teal-500"
-                  placeholder="comma-separated"
-                />
-              </div>
-            </div>
 
-            <div>
-              <label className="block text-xs text-slate-400 mb-1">Recommended Drug</label>
-              <input
-                type="text"
-                value={form.recommended_drug}
-                onChange={(e) => setForm({ ...form, recommended_drug: e.target.value })}
-                className="w-full px-3 py-2 bg-[#0a1628] border border-[#1e3a5f] rounded-lg text-white text-sm focus:outline-none focus:border-teal-500"
-              />
-            </div>
+              <div className="grid grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-xs text-slate-400 mb-1">Default GP ($)</label>
+                  <input
+                    type="number"
+                    value={form.default_gp_value}
+                    onChange={(e) => setForm({ ...form, default_gp_value: e.target.value })}
+                    className="w-full px-3 py-2 bg-[#0a1628] border border-[#1e3a5f] rounded-lg text-white text-sm focus:outline-none focus:border-teal-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-slate-400 mb-1">Annual Fills</label>
+                  <input
+                    type="number"
+                    value={form.annual_fills}
+                    onChange={(e) => setForm({ ...form, annual_fills: e.target.value })}
+                    className="w-full px-3 py-2 bg-[#0a1628] border border-[#1e3a5f] rounded-lg text-white text-sm focus:outline-none focus:border-teal-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-slate-400 mb-1">Priority</label>
+                  <select
+                    value={form.priority}
+                    onChange={(e) => setForm({ ...form, priority: e.target.value as 'low' | 'medium' | 'high' | 'critical' })}
+                    className="w-full px-3 py-2 bg-[#0a1628] border border-[#1e3a5f] rounded-lg text-white text-sm focus:outline-none focus:border-teal-500"
+                  >
+                    <option value="low">Low</option>
+                    <option value="medium">Medium</option>
+                    <option value="high">High</option>
+                    <option value="critical">Critical</option>
+                  </select>
+                </div>
+              </div>
 
-            <div className="grid grid-cols-3 gap-4">
               <div>
-                <label className="block text-xs text-slate-400 mb-1">Default GP ($)</label>
-                <input
-                  type="number"
-                  value={form.default_gp_value}
-                  onChange={(e) => setForm({ ...form, default_gp_value: e.target.value })}
+                <label className="block text-xs text-slate-400 mb-1">Action Instructions</label>
+                <textarea
+                  value={form.action_instructions}
+                  onChange={(e) => setForm({ ...form, action_instructions: e.target.value })}
                   className="w-full px-3 py-2 bg-[#0a1628] border border-[#1e3a5f] rounded-lg text-white text-sm focus:outline-none focus:border-teal-500"
+                  rows={2}
                 />
               </div>
-              <div>
-                <label className="block text-xs text-slate-400 mb-1">Annual Fills</label>
+
+              <div className="flex items-center gap-3">
                 <input
-                  type="number"
-                  value={form.annual_fills}
-                  onChange={(e) => setForm({ ...form, annual_fills: e.target.value })}
-                  className="w-full px-3 py-2 bg-[#0a1628] border border-[#1e3a5f] rounded-lg text-white text-sm focus:outline-none focus:border-teal-500"
+                  type="checkbox"
+                  id="trigger_enabled"
+                  checked={form.is_enabled}
+                  onChange={(e) => setForm({ ...form, is_enabled: e.target.checked })}
+                  className="w-4 h-4 rounded border-[#1e3a5f] bg-[#0a1628]"
                 />
+                <label htmlFor="trigger_enabled" className="text-sm text-white">
+                  Enabled
+                </label>
               </div>
-              <div>
-                <label className="block text-xs text-slate-400 mb-1">Priority</label>
-                <select
-                  value={form.priority}
-                  onChange={(e) => setForm({ ...form, priority: e.target.value as 'low' | 'medium' | 'high' | 'critical' })}
-                  className="w-full px-3 py-2 bg-[#0a1628] border border-[#1e3a5f] rounded-lg text-white text-sm focus:outline-none focus:border-teal-500"
+
+              <div className="flex gap-3 pt-4">
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="flex-1 py-2 border border-[#1e3a5f] text-slate-400 rounded-lg hover:bg-[#1e3a5f] transition-colors"
                 >
-                  <option value="low">Low</option>
-                  <option value="medium">Medium</option>
-                  <option value="high">High</option>
-                  <option value="critical">Critical</option>
-                </select>
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={saving}
+                  className="flex-1 py-2 bg-teal-500 hover:bg-teal-600 text-white rounded-lg font-medium transition-colors disabled:opacity-50"
+                >
+                  {saving ? 'Saving...' : 'Save Trigger'}
+                </button>
+              </div>
+            </form>
+          ) : (
+            /* BIN/Group Pricing Tab */
+            <div className="space-y-4">
+              {/* Header with actions */}
+              <div className="flex items-center justify-between">
+                <div className="text-sm text-slate-400">
+                  Default GP: <span className="text-white font-medium">${form.default_gp_value || 'Not set'}</span>
+                </div>
+                <div className="flex gap-2">
+                  {trigger?.trigger_id && (
+                    <button
+                      onClick={verifyCoverage}
+                      disabled={verifying}
+                      className="flex items-center gap-2 px-3 py-1.5 bg-blue-500/20 text-blue-400 border border-blue-500/30 rounded-lg text-sm hover:bg-blue-500/30 disabled:opacity-50"
+                    >
+                      {verifying ? (
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                      ) : (
+                        <ScanLine className="w-4 h-4" />
+                      )}
+                      Scan for Coverage
+                    </button>
+                  )}
+                  <button
+                    onClick={() => setShowAddBin(true)}
+                    className="flex items-center gap-2 px-3 py-1.5 bg-teal-500/20 text-teal-400 border border-teal-500/30 rounded-lg text-sm hover:bg-teal-500/30"
+                  >
+                    <Plus className="w-4 h-4" />
+                    Add BIN
+                  </button>
+                </div>
+              </div>
+
+              {/* Verify result message */}
+              {verifyResult && (
+                <div className="p-3 bg-blue-500/20 border border-blue-500/30 rounded-lg text-sm text-blue-400">
+                  Found {verifyResult.verifiedCount} verified BIN/Group combinations from prescription data.
+                </div>
+              )}
+
+              {/* Add BIN Form */}
+              {showAddBin && (
+                <div className="p-4 bg-[#0a1628] border border-[#1e3a5f] rounded-lg space-y-3">
+                  <div className="flex items-center justify-between">
+                    <h4 className="text-sm font-medium text-white">Add BIN/Group Pricing</h4>
+                    <button onClick={() => setShowAddBin(false)} className="text-slate-400 hover:text-white">
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs text-slate-400 mb-1">BIN</label>
+                      <select
+                        value={newBinForm.bin}
+                        onChange={(e) => {
+                          setNewBinForm({ ...newBinForm, bin: e.target.value, group: '' });
+                          setSelectedBinForGroups(e.target.value);
+                        }}
+                        className="w-full px-3 py-2 bg-[#0d2137] border border-[#1e3a5f] rounded-lg text-white text-sm"
+                      >
+                        <option value="">Select BIN...</option>
+                        {discoveredBins.map(b => (
+                          <option key={b.bin} value={b.bin}>
+                            {b.bin} ({b.claim_count} claims)
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-xs text-slate-400 mb-1">Group (optional)</label>
+                      <select
+                        value={newBinForm.group}
+                        onChange={(e) => setNewBinForm({ ...newBinForm, group: e.target.value })}
+                        className="w-full px-3 py-2 bg-[#0d2137] border border-[#1e3a5f] rounded-lg text-white text-sm"
+                        disabled={!newBinForm.bin || loadingGroups}
+                      >
+                        <option value="">(All Groups)</option>
+                        {discoveredGroups.map(g => (
+                          <option key={g.group} value={g.group}>
+                            {g.group} ({g.claim_count} claims)
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-xs text-slate-400 mb-1">GP Value ($)</label>
+                      <input
+                        type="number"
+                        value={newBinForm.gpValue}
+                        onChange={(e) => setNewBinForm({ ...newBinForm, gpValue: e.target.value })}
+                        className="w-full px-3 py-2 bg-[#0d2137] border border-[#1e3a5f] rounded-lg text-white text-sm"
+                        placeholder="Use default if empty"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs text-slate-400 mb-1">Status</label>
+                      <select
+                        value={newBinForm.coverageStatus}
+                        onChange={(e) => setNewBinForm({ ...newBinForm, coverageStatus: e.target.value as any })}
+                        className="w-full px-3 py-2 bg-[#0d2137] border border-[#1e3a5f] rounded-lg text-white text-sm"
+                      >
+                        <option value="works">Works (Covered)</option>
+                        <option value="excluded">Excluded (Doesn&apos;t work)</option>
+                        <option value="unknown">Unknown</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div className="flex justify-end">
+                    <button
+                      onClick={addBinValue}
+                      disabled={!newBinForm.bin || savingBinValues}
+                      className="px-4 py-2 bg-teal-500 text-white rounded-lg text-sm font-medium hover:bg-teal-600 disabled:opacity-50"
+                    >
+                      {savingBinValues ? 'Adding...' : 'Add'}
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* BIN Values Table */}
+              <div className="bg-[#0a1628] border border-[#1e3a5f] rounded-lg overflow-hidden">
+                <table className="w-full">
+                  <thead>
+                    <tr className="border-b border-[#1e3a5f]">
+                      <th className="text-left text-xs text-slate-400 font-medium px-4 py-3">BIN</th>
+                      <th className="text-left text-xs text-slate-400 font-medium px-4 py-3">Group</th>
+                      <th className="text-left text-xs text-slate-400 font-medium px-4 py-3">GP Value</th>
+                      <th className="text-left text-xs text-slate-400 font-medium px-4 py-3">Status</th>
+                      <th className="text-left text-xs text-slate-400 font-medium px-4 py-3">Verified</th>
+                      <th className="w-10"></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {binValues.length === 0 ? (
+                      <tr>
+                        <td colSpan={6} className="px-4 py-8 text-center text-slate-500 text-sm">
+                          No BIN/Group pricing configured. Using default GP value.
+                        </td>
+                      </tr>
+                    ) : (
+                      binValues.map((bv, idx) => (
+                        <tr key={`${bv.bin}-${bv.group || 'all'}-${idx}`} className="border-b border-[#1e3a5f] last:border-b-0">
+                          <td className="px-4 py-3 text-white text-sm font-mono">{bv.bin}</td>
+                          <td className="px-4 py-3 text-slate-400 text-sm">
+                            {bv.group || <span className="text-slate-500">(all)</span>}
+                          </td>
+                          <td className="px-4 py-3 text-white text-sm">
+                            {bv.gpValue ? `$${bv.gpValue}` : <span className="text-slate-500">default</span>}
+                          </td>
+                          <td className="px-4 py-3">
+                            <select
+                              value={bv.coverageStatus}
+                              onChange={(e) => updateBinStatus(bv.bin, bv.group, e.target.value as any)}
+                              className={`px-2 py-1 rounded text-xs border ${getStatusBadge(bv.coverageStatus)} bg-transparent`}
+                            >
+                              <option value="works">Works</option>
+                              <option value="excluded">Excluded</option>
+                              <option value="verified">Verified</option>
+                              <option value="unknown">Unknown</option>
+                            </select>
+                          </td>
+                          <td className="px-4 py-3 text-xs text-slate-400">
+                            {bv.verifiedClaimCount ? (
+                              <span className="text-blue-400">
+                                {bv.verifiedClaimCount} claims
+                                {bv.avgReimbursement ? ` • $${Math.round(bv.avgReimbursement)}` : ''}
+                              </span>
+                            ) : '-'}
+                          </td>
+                          <td className="px-4 py-3">
+                            <button
+                              onClick={() => deleteBinValue(bv.bin, bv.group)}
+                              className="text-slate-500 hover:text-red-400"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Info box about pricing hierarchy */}
+              <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg text-xs text-amber-400">
+                <strong>Pricing Hierarchy:</strong> Group-specific price → BIN-level price → Default GP
+                <br />
+                <span className="text-amber-400/70">Group-specific pricing always takes precedence over BIN-level defaults.</span>
+              </div>
+
+              <div className="flex gap-3 pt-4">
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="flex-1 py-2 border border-[#1e3a5f] text-slate-400 rounded-lg hover:bg-[#1e3a5f] transition-colors"
+                >
+                  Close
+                </button>
               </div>
             </div>
-
-            <div>
-              <label className="block text-xs text-slate-400 mb-1">Action Instructions</label>
-              <textarea
-                value={form.action_instructions}
-                onChange={(e) => setForm({ ...form, action_instructions: e.target.value })}
-                className="w-full px-3 py-2 bg-[#0a1628] border border-[#1e3a5f] rounded-lg text-white text-sm focus:outline-none focus:border-teal-500"
-                rows={2}
-              />
-            </div>
-
-            <div className="flex items-center gap-3">
-              <input
-                type="checkbox"
-                id="trigger_enabled"
-                checked={form.is_enabled}
-                onChange={(e) => setForm({ ...form, is_enabled: e.target.checked })}
-                className="w-4 h-4 rounded border-[#1e3a5f] bg-[#0a1628]"
-              />
-              <label htmlFor="trigger_enabled" className="text-sm text-white">
-                Enabled
-              </label>
-            </div>
-
-            <div className="flex gap-3 pt-4">
-              <button
-                type="button"
-                onClick={onClose}
-                className="flex-1 py-2 border border-[#1e3a5f] text-slate-400 rounded-lg hover:bg-[#1e3a5f] transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                disabled={saving}
-                className="flex-1 py-2 bg-teal-500 hover:bg-teal-600 text-white rounded-lg font-medium transition-colors disabled:opacity-50"
-              >
-                {saving ? 'Saving...' : 'Save Trigger'}
-              </button>
-            </div>
-          </form>
+          )}
         </div>
       </div>
     </>
