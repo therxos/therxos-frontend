@@ -185,13 +185,11 @@ export default function DashboardLayout({
       localStorage.removeItem('therxos_impersonating');
       localStorage.removeItem('therxos_original_token');
 
-      // Restore token and update zustand directly
+      // Restore token
       localStorage.setItem('therxos_token', originalToken);
-      setAuth(data.user, originalToken);
-      setPermissionOverrides({});
 
-      // Use Next.js router for navigation
-      router.push('/admin');
+      // Use hard navigation to ensure fresh page load with restored auth
+      window.location.href = '/admin';
     } catch (err) {
       console.error('Exit impersonation failed:', err);
       // Clear everything and go to login

@@ -67,14 +67,16 @@ interface Stats {
   total: number;
   not_submitted: number;
   submitted: number;
-  captured: number;
+  approved: number;
+  completed: number;
   didnt_work: number;
   flagged: number;
   denied: number;
   total_annual: number;
   not_submitted_annual: number;
   submitted_annual: number;
-  captured_annual: number;
+  approved_annual: number;
+  completed_annual: number;
 }
 
 // Helpers
@@ -557,13 +559,14 @@ export default function OpportunitiesPage() {
   const [opportunities, setOpportunities] = useState<Opportunity[]>([]);
   const [groupedItems, setGroupedItems] = useState<GroupedItem[]>([]);
   const [stats, setStats] = useState<Stats>({
-    total: 0, not_submitted: 0, submitted: 0, captured: 0, didnt_work: 0, flagged: 0, denied: 0,
-    total_annual: 0, not_submitted_annual: 0, submitted_annual: 0, captured_annual: 0,
+    total: 0, not_submitted: 0, submitted: 0, approved: 0, completed: 0, didnt_work: 0, flagged: 0, denied: 0,
+    total_annual: 0, not_submitted_annual: 0, submitted_annual: 0, approved_annual: 0, completed_annual: 0,
   });
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState<string | null>(null);
   const [showDenied, setShowDenied] = useState(false);
+  const [showCompleted, setShowCompleted] = useState(false);
   const [typeFilter, setTypeFilter] = useState<string | null>(null);
   const [groupBy, setGroupBy] = useState('patient');
   const [search, setSearch] = useState('');
@@ -605,20 +608,22 @@ export default function OpportunitiesPage() {
       const opps: Opportunity[] = data.opportunities || [];
       setOpportunities(opps);
 
-      // Calculate stats - exclude Denied and Flagged from totals
-      const activeOpps = opps.filter(o => o.status !== 'Denied' && o.status !== 'Flagged');
+      // Calculate stats - exclude Denied, Flagged, and Completed from active totals
+      const activeOpps = opps.filter(o => o.status !== 'Denied' && o.status !== 'Flagged' && o.status !== 'Completed');
       const calcStats: Stats = {
         total: activeOpps.length,
         not_submitted: opps.filter(o => o.status === 'Not Submitted').length,
         submitted: opps.filter(o => o.status === 'Submitted').length,
-        captured: opps.filter(o => o.status === 'Completed' || o.status === 'Approved').length,
+        approved: opps.filter(o => o.status === 'Approved').length,
+        completed: opps.filter(o => o.status === 'Completed').length,
         didnt_work: opps.filter(o => o.status === "Didn't Work").length,
         flagged: opps.filter(o => o.status === 'Flagged').length,
         denied: opps.filter(o => o.status === 'Denied').length,
         total_annual: activeOpps.reduce((s, o) => s + getAnnualValue(o), 0),
         not_submitted_annual: opps.filter(o => o.status === 'Not Submitted').reduce((s, o) => s + getAnnualValue(o), 0),
         submitted_annual: opps.filter(o => o.status === 'Submitted').reduce((s, o) => s + getAnnualValue(o), 0),
-        captured_annual: opps.filter(o => o.status === 'Completed' || o.status === 'Approved').reduce((s, o) => s + getAnnualValue(o), 0),
+        approved_annual: opps.filter(o => o.status === 'Approved').reduce((s, o) => s + getAnnualValue(o), 0),
+        completed_annual: opps.filter(o => o.status === 'Completed').reduce((s, o) => s + getAnnualValue(o), 0),
       };
       setStats(calcStats);
       setLastSync(new Date());
@@ -755,19 +760,21 @@ export default function OpportunitiesPage() {
       setOpportunities(prev => prev.map(o => o.opportunity_id === id ? { ...o, status } : o));
       // Recalculate stats
       const opps = opportunities.map(o => o.opportunity_id === id ? { ...o, status } : o);
-      const activeOpps = opps.filter(o => o.status !== 'Denied' && o.status !== 'Flagged' && o.status !== "Didn't Work");
+      const activeOpps = opps.filter(o => o.status !== 'Denied' && o.status !== 'Flagged' && o.status !== "Didn't Work" && o.status !== 'Completed');
       setStats({
         total: activeOpps.length,
         not_submitted: opps.filter(o => o.status === 'Not Submitted').length,
         submitted: opps.filter(o => o.status === 'Submitted').length,
-        captured: opps.filter(o => o.status === 'Completed' || o.status === 'Approved').length,
+        approved: opps.filter(o => o.status === 'Approved').length,
+        completed: opps.filter(o => o.status === 'Completed').length,
         didnt_work: opps.filter(o => o.status === "Didn't Work").length,
         flagged: opps.filter(o => o.status === 'Flagged').length,
         denied: opps.filter(o => o.status === 'Denied').length,
         total_annual: activeOpps.reduce((s, o) => s + getAnnualValue(o), 0),
         not_submitted_annual: opps.filter(o => o.status === 'Not Submitted').reduce((s, o) => s + getAnnualValue(o), 0),
         submitted_annual: opps.filter(o => o.status === 'Submitted').reduce((s, o) => s + getAnnualValue(o), 0),
-        captured_annual: opps.filter(o => o.status === 'Completed' || o.status === 'Approved').reduce((s, o) => s + getAnnualValue(o), 0),
+        approved_annual: opps.filter(o => o.status === 'Approved').reduce((s, o) => s + getAnnualValue(o), 0),
+        completed_annual: opps.filter(o => o.status === 'Completed').reduce((s, o) => s + getAnnualValue(o), 0),
       });
     } catch (e) {
       console.error(e);
@@ -908,6 +915,8 @@ export default function OpportunitiesPage() {
     opportunities: g.opportunities.filter(o => {
       // Hide Denied by default unless showDenied is true or specifically filtering for them
       if (o.status === 'Denied' && !showDenied && statusFilter !== 'Denied') return false;
+      // Hide Completed by default unless showCompleted is true or specifically filtering for them
+      if (o.status === 'Completed' && !showCompleted && filter !== 'completed' && statusFilter !== 'Completed') return false;
       // Hide Flagged from main view - they show in the Flagged queue
       if (o.status === 'Flagged' && filter !== 'flagged' && statusFilter !== 'Flagged') return false;
       // Hide "Didn't Work" from main view - they go to super admin queue
@@ -915,7 +924,8 @@ export default function OpportunitiesPage() {
       // Status filter
       if (filter === 'not_submitted' && o.status !== 'Not Submitted') return false;
       if (filter === 'submitted' && o.status !== 'Submitted') return false;
-      if (filter === 'captured' && o.status !== 'Completed' && o.status !== 'Approved') return false;
+      if (filter === 'approved' && o.status !== 'Approved') return false;
+      if (filter === 'completed' && o.status !== 'Completed') return false;
       if (filter === 'flagged' && o.status !== 'Flagged') return false;
       if (filter === 'didnt_work' && o.status !== "Didn't Work") return false;
       // Specific status filter
@@ -994,7 +1004,9 @@ export default function OpportunitiesPage() {
                     <span className="text-slate-500">•</span>
                     <span className="text-[#14b8a6] font-medium">{formatCurrency(stats.total_annual / 12)}/mo</span>
                     <span className="text-slate-500">•</span>
-                    <span className="text-amber-400 font-medium">Captured: {formatCurrency(stats.captured_annual)}</span>
+                    <span className="text-emerald-400 font-medium">Approved: {formatCurrency(stats.approved_annual)}</span>
+                    <span className="text-slate-500">•</span>
+                    <span className="text-green-400 font-medium">Completed: {formatCurrency(stats.completed_annual)}</span>
                   </>
                 )}
               </div>
@@ -1023,12 +1035,13 @@ export default function OpportunitiesPage() {
       {/* Stats Cards - Clickable - Now in a rounded card */}
       <div className="px-8 py-6">
         <div className="bg-[#0d2137] border border-[#1e3a5f] rounded-xl p-6">
-          <div className="grid grid-cols-4 gap-6">
+          <div className="grid grid-cols-5 gap-4">
             {[
-              { key: 'all', label: 'TOTAL OPPORTUNITIES', value: stats.total, annual: stats.total_annual, color: 'teal', borderColor: 'border-t-[#14b8a6]' },
+              { key: 'all', label: 'TOTAL ACTIVE', value: stats.total, annual: stats.total_annual, color: 'teal', borderColor: 'border-t-[#14b8a6]' },
               { key: 'not_submitted', label: 'NOT SUBMITTED', value: stats.not_submitted, annual: stats.not_submitted_annual, color: 'amber', borderColor: 'border-t-amber-500' },
               { key: 'submitted', label: 'SUBMITTED', value: stats.submitted, annual: stats.submitted_annual, color: 'blue', borderColor: 'border-t-blue-500' },
-              { key: 'captured', label: 'CAPTURED', value: stats.captured, annual: stats.captured_annual, color: 'green', borderColor: 'border-t-emerald-500' },
+              { key: 'approved', label: 'APPROVED', value: stats.approved, annual: stats.approved_annual, color: 'emerald', borderColor: 'border-t-emerald-500' },
+              { key: 'completed', label: 'COMPLETED', value: stats.completed, annual: stats.completed_annual, color: 'green', borderColor: 'border-t-green-500' },
             ].map(card => (
               <div 
                 key={card.key} 
@@ -1036,10 +1049,11 @@ export default function OpportunitiesPage() {
                 className={`bg-[#0a1628] border border-[#1e3a5f] ${card.borderColor} border-t-[3px] rounded-xl p-6 cursor-pointer hover:bg-[#1e3a5f]/30 transition-colors ${filter === card.key ? 'ring-2 ring-[#14b8a6]' : ''}`}
               >
               <div className="text-xs text-slate-400 uppercase tracking-wider">{card.label}</div>
-              <div className={`text-4xl font-bold mt-2 ${
+              <div className={`text-3xl font-bold mt-2 ${
                 card.color === 'teal' ? 'text-[#14b8a6]' :
                 card.color === 'amber' ? 'text-amber-400' :
-                card.color === 'blue' ? 'text-blue-400' : 'text-emerald-400'
+                card.color === 'blue' ? 'text-blue-400' :
+                card.color === 'emerald' ? 'text-emerald-400' : 'text-green-400'
               }`}>{card.value}</div>
               {canViewFinancialData && (
                 <div className="flex gap-2 mt-3">
@@ -1065,7 +1079,7 @@ export default function OpportunitiesPage() {
               { key: 'all', label: `All (${stats.total})` },
               { key: 'not_submitted', label: 'Not Submitted' },
               { key: 'submitted', label: 'Submitted' },
-              { key: 'captured', label: 'Captured' },
+              { key: 'approved', label: 'Approved' },
               { key: 'flagged', label: `Flagged (${stats.flagged})`, color: 'purple' },
             ].map(f => (
               <button
@@ -1090,12 +1104,22 @@ export default function OpportunitiesPage() {
             <option value="">All Statuses</option>
             <option value="Not Submitted">Not Submitted ({stats.not_submitted})</option>
             <option value="Submitted">Submitted ({stats.submitted})</option>
-            <option value="Approved">Approved</option>
-            <option value="Completed">Completed</option>
+            <option value="Approved">Approved ({stats.approved})</option>
+            <option value="Completed">Completed ({stats.completed})</option>
             <option value="Didn't Work">Didn't Work ({stats.didnt_work})</option>
             <option value="Flagged">Flagged ({stats.flagged})</option>
             <option value="Denied">Denied ({stats.denied})</option>
           </select>
+          {/* Show Completed toggle */}
+          <label className="flex items-center gap-2 text-sm text-slate-400 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={showCompleted}
+              onChange={(e) => setShowCompleted(e.target.checked)}
+              className="w-4 h-4 rounded accent-[#14b8a6]"
+            />
+            Show Completed
+          </label>
           {/* Show Denied toggle */}
           <label className="flex items-center gap-2 text-sm text-slate-400 cursor-pointer">
             <input
@@ -1161,7 +1185,8 @@ export default function OpportunitiesPage() {
         ) : (
           filtered.map(group => {
             const isExpanded = expanded.has(group.id);
-            const capturedCount = group.opportunities.filter(o => o.status === 'Completed' || o.status === 'Approved').length;
+            const approvedCount = group.opportunities.filter(o => o.status === 'Approved').length;
+            const completedCount = group.opportunities.filter(o => o.status === 'Completed').length;
             const groupTotal = group.opportunities.reduce((s, o) => s + getAnnualValue(o), 0);
             
             return (
@@ -1204,7 +1229,7 @@ export default function OpportunitiesPage() {
                       {canViewFinancialData && (
                         <div className="text-[#14b8a6] font-semibold">{formatCurrency(groupTotal)}</div>
                       )}
-                      <div className="text-xs text-slate-400">{group.opportunities.length} opps • {capturedCount} captured</div>
+                      <div className="text-xs text-slate-400">{group.opportunities.length} opps{approvedCount > 0 && ` • ${approvedCount} approved`}{completedCount > 0 && ` • ${completedCount} completed`}</div>
                     </div>
                     {isExpanded ? <ChevronUp className="w-5 h-5 text-slate-400" /> : <ChevronDown className="w-5 h-5 text-slate-400" />}
                   </div>
