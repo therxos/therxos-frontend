@@ -600,7 +600,8 @@ export default function OpportunitiesPage() {
     setLoading(true);
     try {
       const token = localStorage.getItem('therxos_token');
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/opportunities`, {
+      // Fetch with higher limit to get all opportunities
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/opportunities?limit=5000`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (!res.ok) throw new Error('Failed');
@@ -608,22 +609,29 @@ export default function OpportunitiesPage() {
       const opps: Opportunity[] = data.opportunities || [];
       setOpportunities(opps);
 
-      // Calculate stats - exclude Denied, Flagged, and Completed from active totals
-      const activeOpps = opps.filter(o => o.status !== 'Denied' && o.status !== 'Flagged' && o.status !== 'Completed');
+      // Use counts from API (which queries ALL records) for accurate stats
+      const apiCounts = data.counts || {};
+      const getCount = (status: string) => apiCounts[status]?.count || 0;
+      const getMargin = (status: string) => apiCounts[status]?.totalMargin || 0;
+
+      // Calculate active total (exclude Denied, Flagged, Completed, Didn't Work)
+      const activeTotal = getCount('Not Submitted') + getCount('Submitted') + getCount('Approved');
+      const activeMargin = getMargin('Not Submitted') + getMargin('Submitted') + getMargin('Approved');
+
       const calcStats: Stats = {
-        total: activeOpps.length,
-        not_submitted: opps.filter(o => o.status === 'Not Submitted').length,
-        submitted: opps.filter(o => o.status === 'Submitted').length,
-        approved: opps.filter(o => o.status === 'Approved').length,
-        completed: opps.filter(o => o.status === 'Completed').length,
-        didnt_work: opps.filter(o => o.status === "Didn't Work").length,
-        flagged: opps.filter(o => o.status === 'Flagged').length,
-        denied: opps.filter(o => o.status === 'Denied').length,
-        total_annual: activeOpps.reduce((s, o) => s + getAnnualValue(o), 0),
-        not_submitted_annual: opps.filter(o => o.status === 'Not Submitted').reduce((s, o) => s + getAnnualValue(o), 0),
-        submitted_annual: opps.filter(o => o.status === 'Submitted').reduce((s, o) => s + getAnnualValue(o), 0),
-        approved_annual: opps.filter(o => o.status === 'Approved').reduce((s, o) => s + getAnnualValue(o), 0),
-        completed_annual: opps.filter(o => o.status === 'Completed').reduce((s, o) => s + getAnnualValue(o), 0),
+        total: activeTotal,
+        not_submitted: getCount('Not Submitted'),
+        submitted: getCount('Submitted'),
+        approved: getCount('Approved'),
+        completed: getCount('Completed'),
+        didnt_work: getCount("Didn't Work"),
+        flagged: getCount('Flagged'),
+        denied: getCount('Denied'),
+        total_annual: activeMargin * 12,
+        not_submitted_annual: getMargin('Not Submitted') * 12,
+        submitted_annual: getMargin('Submitted') * 12,
+        approved_annual: getMargin('Approved') * 12,
+        completed_annual: getMargin('Completed') * 12,
       };
       setStats(calcStats);
       setLastSync(new Date());
