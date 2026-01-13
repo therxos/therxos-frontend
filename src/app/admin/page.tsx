@@ -93,7 +93,7 @@ interface Trigger {
   trigger_id: string;
   trigger_code: string;
   display_name: string;
-  trigger_type: 'therapeutic_interchange' | 'missing_therapy' | 'ndc_optimization';
+  trigger_type: 'therapeutic_interchange' | 'missing_therapy' | 'ndc_optimization' | 'brand_to_generic' | 'formulation_change' | 'combo_therapy';
   category: string | null;
   detection_keywords: string[];
   exclude_keywords: string[];
@@ -130,6 +130,7 @@ interface BinValue {
   verifiedAt?: string | null;
   verifiedClaimCount?: number;
   avgReimbursement?: number | null;
+  avgQty?: number | null;
 }
 
 interface DiscoveredBin {
@@ -191,6 +192,8 @@ export default function SuperAdminPage() {
   const [triggers, setTriggers] = useState<Trigger[]>([]);
   const [showTriggers, setShowTriggers] = useState(true);
   const [triggerFilter, setTriggerFilter] = useState<string>('all');
+  const [triggerSort, setTriggerSort] = useState<{ field: 'display_name' | 'trigger_type' | 'default_gp_value' | 'is_enabled'; direction: 'asc' | 'desc' }>({ field: 'display_name', direction: 'asc' });
+  const [triggerSearch, setTriggerSearch] = useState('');
   const [editingTrigger, setEditingTrigger] = useState<Trigger | null>(null);
   const [triggerModalOpen, setTriggerModalOpen] = useState(false);
   const [savingTrigger, setSavingTrigger] = useState(false);
@@ -213,6 +216,14 @@ export default function SuperAdminPage() {
   // Rescan
   const [rescanning, setRescanning] = useState<string | null>(null);
   const [rescanResult, setRescanResult] = useState<any>(null);
+
+  // Bulk Coverage Scan
+  const [bulkCoverageScanning, setBulkCoverageScanning] = useState(false);
+  const [bulkCoverageResult, setBulkCoverageResult] = useState<{
+    summary: { totalTriggers: number; triggersWithMatches: number; triggersWithNoMatches: number; minMarginUsed: number; dmeMinMarginUsed: number };
+    results: { triggerId: string; triggerName: string; triggerType: string; verifiedCount: number; topBins: { bin: string; group: string; bestDrug: string; avgMargin: string }[] }[];
+    noMatches: { triggerId: string; triggerName: string; reason: string }[];
+  } | null>(null);
 
   // New Client Modal
   const [newClientModalOpen, setNewClientModalOpen] = useState(false);
@@ -592,6 +603,36 @@ export default function SuperAdminPage() {
     }
   }
 
+  async function bulkVerifyAllCoverage() {
+    setBulkCoverageScanning(true);
+    setBulkCoverageResult(null);
+    try {
+      const token = localStorage.getItem('therxos_token');
+      const res = await fetch(`${API_URL}/api/admin/triggers/verify-all-coverage`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ minClaims: 1, daysBack: 365, minMargin: 10, dmeMinMargin: 3 }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setBulkCoverageResult(data);
+        // Refresh triggers to get updated BIN values
+        fetchTriggers();
+      } else {
+        const error = await res.json();
+        alert('Error: ' + (error.error || 'Failed to scan coverage'));
+      }
+    } catch (err) {
+      console.error('Failed to bulk verify coverage:', err);
+      alert('Failed to scan coverage');
+    } finally {
+      setBulkCoverageScanning(false);
+    }
+  }
+
   // Open scan modal for a trigger
   function openScanModal(triggerId: string, triggerCode: string) {
     setScanModalTrigger({ id: triggerId, code: triggerCode });
@@ -761,9 +802,27 @@ export default function SuperAdminPage() {
     }
   }
 
-  const filteredTriggers = triggers.filter(t =>
-    triggerFilter === 'all' || t.trigger_type === triggerFilter
-  );
+  const filteredTriggers = triggers
+    .filter(t => triggerFilter === 'all' || t.trigger_type === triggerFilter)
+    .filter(t => !triggerSearch ||
+      t.display_name.toLowerCase().includes(triggerSearch.toLowerCase()) ||
+      t.trigger_code.toLowerCase().includes(triggerSearch.toLowerCase()) ||
+      (t.detection_keywords || []).some(k => k.toLowerCase().includes(triggerSearch.toLowerCase()))
+    )
+    .sort((a, b) => {
+      const field = triggerSort.field;
+      const direction = triggerSort.direction === 'asc' ? 1 : -1;
+      if (field === 'display_name' || field === 'trigger_type') {
+        return (a[field] || '').localeCompare(b[field] || '') * direction;
+      }
+      if (field === 'default_gp_value') {
+        return ((a.default_gp_value || 0) - (b.default_gp_value || 0)) * direction;
+      }
+      if (field === 'is_enabled') {
+        return ((a.is_enabled ? 1 : 0) - (b.is_enabled ? 1 : 0)) * direction;
+      }
+      return 0;
+    });
 
   async function rescanPharmacy(pharmacyId: string, scanType: 'all' | 'opportunities' | 'audit' = 'all') {
     setRescanning(pharmacyId);
@@ -952,8 +1011,33 @@ export default function SuperAdminPage() {
             </div>
           </div>
 
-          {/* Pharmacy Switcher Dropdown */}
-          <div className="relative">
+          <div className="flex items-center gap-3">
+            {/* Expand/Collapse All */}
+            <button
+              onClick={() => {
+                setShowDidntWorkQueue(true);
+                setShowTriggers(true);
+                setShowAuditRules(true);
+              }}
+              className="flex items-center gap-2 px-3 py-2 rounded-lg bg-[#0d2137] border border-[#1e3a5f] hover:bg-[#1e3a5f] transition-colors text-sm text-slate-400 hover:text-white"
+            >
+              <ChevronDown className="w-4 h-4" />
+              Expand All
+            </button>
+            <button
+              onClick={() => {
+                setShowDidntWorkQueue(false);
+                setShowTriggers(false);
+                setShowAuditRules(false);
+              }}
+              className="flex items-center gap-2 px-3 py-2 rounded-lg bg-[#0d2137] border border-[#1e3a5f] hover:bg-[#1e3a5f] transition-colors text-sm text-slate-400 hover:text-white"
+            >
+              <ChevronRight className="w-4 h-4" />
+              Collapse All
+            </button>
+
+            {/* Pharmacy Switcher Dropdown */}
+            <div className="relative">
             <button
               onClick={() => setPharmacySwitcherOpen(!pharmacySwitcherOpen)}
               disabled={switchingPharmacy}
@@ -995,6 +1079,7 @@ export default function SuperAdminPage() {
                 </div>
               </>
             )}
+            </div>
           </div>
         </div>
       </div>
@@ -1340,6 +1425,16 @@ export default function SuperAdminPage() {
             </div>
           </div>
           <div className="flex items-center gap-3">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+              <input
+                type="text"
+                placeholder="Search triggers..."
+                value={triggerSearch}
+                onChange={(e) => setTriggerSearch(e.target.value)}
+                className="pl-9 pr-3 py-1.5 w-48 bg-[#0a1628] border border-[#1e3a5f] rounded-lg text-sm text-white placeholder:text-slate-500 focus:outline-none focus:border-teal-500"
+              />
+            </div>
             <select
               value={triggerFilter}
               onChange={(e) => setTriggerFilter(e.target.value)}
@@ -1349,7 +1444,27 @@ export default function SuperAdminPage() {
               <option value="therapeutic_interchange">Therapeutic Interchange</option>
               <option value="missing_therapy">Missing Therapy</option>
               <option value="ndc_optimization">NDC Optimization</option>
+              <option value="brand_to_generic">Brand to Generic</option>
+              <option value="formulation_change">Formulation Change</option>
+              <option value="combo_therapy">Combo Therapy</option>
             </select>
+            <button
+              onClick={bulkVerifyAllCoverage}
+              disabled={bulkCoverageScanning}
+              className="flex items-center gap-2 px-4 py-2 bg-purple-500 hover:bg-purple-600 disabled:opacity-50 text-white rounded-lg text-sm font-medium transition-colors"
+            >
+              {bulkCoverageScanning ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Scanning...
+                </>
+              ) : (
+                <>
+                  <ScanLine className="w-4 h-4" />
+                  Scan All Coverage
+                </>
+              )}
+            </button>
             <button
               onClick={() => {
                 setEditingTrigger(null);
@@ -1370,17 +1485,118 @@ export default function SuperAdminPage() {
           </div>
         </div>
 
+        {/* Bulk Coverage Scan Results */}
+        {bulkCoverageResult && (
+          <div className="mb-4 p-4 bg-[#0a1628] border border-[#1e3a5f] rounded-lg">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-sm font-semibold text-white">Coverage Scan Results</h3>
+              <button
+                onClick={() => setBulkCoverageResult(null)}
+                className="text-slate-400 hover:text-white"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="grid grid-cols-5 gap-4 mb-4">
+              <div className="text-center">
+                <p className="text-2xl font-bold text-white">{bulkCoverageResult.summary.totalTriggers}</p>
+                <p className="text-xs text-slate-400">Total Triggers</p>
+              </div>
+              <div className="text-center">
+                <p className="text-2xl font-bold text-green-400">{bulkCoverageResult.summary.triggersWithMatches}</p>
+                <p className="text-xs text-slate-400">With Matches</p>
+              </div>
+              <div className="text-center">
+                <p className="text-2xl font-bold text-red-400">{bulkCoverageResult.summary.triggersWithNoMatches}</p>
+                <p className="text-xs text-slate-400">No Matches</p>
+              </div>
+              <div className="text-center">
+                <p className="text-2xl font-bold text-slate-300">${bulkCoverageResult.summary.minMarginUsed}</p>
+                <p className="text-xs text-slate-400">Min Margin (Rx)</p>
+              </div>
+              <div className="text-center">
+                <p className="text-2xl font-bold text-slate-300">${bulkCoverageResult.summary.dmeMinMarginUsed}</p>
+                <p className="text-xs text-slate-400">Min Margin (DME)</p>
+              </div>
+            </div>
+
+            {/* DME/NDC Optimization Results - Show best products found */}
+            {bulkCoverageResult.results.filter(r => r.triggerType === 'ndc_optimization').length > 0 && (
+              <div className="mb-4">
+                <h4 className="text-xs font-semibold text-teal-400 uppercase tracking-wider mb-2">
+                  DME Best Products Found Per BIN/Group
+                </h4>
+                <div className="space-y-2 max-h-60 overflow-y-auto">
+                  {bulkCoverageResult.results.filter(r => r.triggerType === 'ndc_optimization').map((r) => (
+                    <div key={r.triggerId} className="p-2 bg-teal-500/10 rounded">
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-sm font-medium text-white">{r.triggerName}</span>
+                        <span className="text-xs text-teal-400">{r.verifiedCount} BIN/Groups</span>
+                      </div>
+                      <div className="grid grid-cols-3 gap-2 text-xs">
+                        {r.topBins.map((b, i) => (
+                          <div key={i} className="bg-[#0d2137] p-1.5 rounded">
+                            <div className="text-slate-400">{b.bin}/{b.group || 'ALL'}</div>
+                            <div className="text-green-400 font-medium">${b.avgMargin}</div>
+                            <div className="text-white truncate" title={b.bestDrug}>{b.bestDrug}</div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {bulkCoverageResult.noMatches.length > 0 && (
+              <div>
+                <h4 className="text-xs font-semibold text-red-400 uppercase tracking-wider mb-2">
+                  Triggers Without Matches (may need review)
+                </h4>
+                <div className="space-y-1 max-h-40 overflow-y-auto">
+                  {bulkCoverageResult.noMatches.map((nm) => (
+                    <div key={nm.triggerId} className="flex items-center justify-between text-sm py-1 px-2 bg-red-500/10 rounded">
+                      <span className="text-white">{nm.triggerName}</span>
+                      <span className="text-xs text-slate-400">{nm.reason}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
         {showTriggers && (
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead>
                 <tr className="border-b border-[#1e3a5f]">
-                  <th className="text-left text-xs font-semibold text-slate-400 uppercase tracking-wider px-4 py-3">Name</th>
-                  <th className="text-left text-xs font-semibold text-slate-400 uppercase tracking-wider px-4 py-3">Type</th>
+                  <th
+                    className="text-left text-xs font-semibold text-slate-400 uppercase tracking-wider px-4 py-3 cursor-pointer hover:text-white"
+                    onClick={() => setTriggerSort({ field: 'display_name', direction: triggerSort.field === 'display_name' && triggerSort.direction === 'asc' ? 'desc' : 'asc' })}
+                  >
+                    Name {triggerSort.field === 'display_name' && (triggerSort.direction === 'asc' ? '↑' : '↓')}
+                  </th>
+                  <th
+                    className="text-left text-xs font-semibold text-slate-400 uppercase tracking-wider px-4 py-3 cursor-pointer hover:text-white"
+                    onClick={() => setTriggerSort({ field: 'trigger_type', direction: triggerSort.field === 'trigger_type' && triggerSort.direction === 'asc' ? 'desc' : 'asc' })}
+                  >
+                    Type {triggerSort.field === 'trigger_type' && (triggerSort.direction === 'asc' ? '↑' : '↓')}
+                  </th>
                   <th className="text-left text-xs font-semibold text-slate-400 uppercase tracking-wider px-4 py-3">Detection</th>
-                  <th className="text-center text-xs font-semibold text-slate-400 uppercase tracking-wider px-4 py-3">Default GP</th>
+                  <th
+                    className="text-center text-xs font-semibold text-slate-400 uppercase tracking-wider px-4 py-3 cursor-pointer hover:text-white"
+                    onClick={() => setTriggerSort({ field: 'default_gp_value', direction: triggerSort.field === 'default_gp_value' && triggerSort.direction === 'asc' ? 'desc' : 'asc' })}
+                  >
+                    Default GP {triggerSort.field === 'default_gp_value' && (triggerSort.direction === 'asc' ? '↑' : '↓')}
+                  </th>
                   <th className="text-center text-xs font-semibold text-slate-400 uppercase tracking-wider px-4 py-3">BINs</th>
-                  <th className="text-center text-xs font-semibold text-slate-400 uppercase tracking-wider px-4 py-3">Status</th>
+                  <th
+                    className="text-center text-xs font-semibold text-slate-400 uppercase tracking-wider px-4 py-3 cursor-pointer hover:text-white"
+                    onClick={() => setTriggerSort({ field: 'is_enabled', direction: triggerSort.field === 'is_enabled' && triggerSort.direction === 'asc' ? 'desc' : 'asc' })}
+                  >
+                    Status {triggerSort.field === 'is_enabled' && (triggerSort.direction === 'asc' ? '↑' : '↓')}
+                  </th>
                   <th className="text-center text-xs font-semibold text-slate-400 uppercase tracking-wider px-4 py-3">Actions</th>
                 </tr>
               </thead>
@@ -1393,11 +1609,13 @@ export default function SuperAdminPage() {
                     </td>
                     <td className="px-4 py-3">
                       <span className={`px-2 py-1 rounded text-xs font-medium ${
-                        trigger.trigger_type === 'therapeutic_interchange'
-                          ? 'bg-blue-500/20 text-blue-400'
-                          : trigger.trigger_type === 'missing_therapy'
-                          ? 'bg-purple-500/20 text-purple-400'
-                          : 'bg-amber-500/20 text-amber-400'
+                        trigger.trigger_type === 'therapeutic_interchange' ? 'bg-blue-500/20 text-blue-400'
+                          : trigger.trigger_type === 'missing_therapy' ? 'bg-purple-500/20 text-purple-400'
+                          : trigger.trigger_type === 'ndc_optimization' ? 'bg-amber-500/20 text-amber-400'
+                          : trigger.trigger_type === 'brand_to_generic' ? 'bg-green-500/20 text-green-400'
+                          : trigger.trigger_type === 'formulation_change' ? 'bg-cyan-500/20 text-cyan-400'
+                          : trigger.trigger_type === 'combo_therapy' ? 'bg-pink-500/20 text-pink-400'
+                          : 'bg-slate-500/20 text-slate-400'
                       }`}>
                         {trigger.trigger_type.replace(/_/g, ' ')}
                       </span>
@@ -2303,6 +2521,7 @@ function TriggerEditModal({
       verifiedAt: bv.verifiedAt,
       verifiedClaimCount: bv.verifiedClaimCount,
       avgReimbursement: bv.avgReimbursement,
+      avgQty: bv.avgQty,
     }))
   );
   const [discoveredBins, setDiscoveredBins] = useState<DiscoveredBin[]>([]);
@@ -2396,6 +2615,7 @@ function TriggerEditModal({
             verifiedAt: bv.verifiedAt,
             verifiedClaimCount: bv.verifiedClaimCount,
             avgReimbursement: bv.avgReimbursement,
+            avgQty: bv.avgQty,
           })));
         }
       }
@@ -2602,12 +2822,15 @@ function TriggerEditModal({
                   <label className="block text-xs text-slate-400 mb-1">Type</label>
                   <select
                     value={form.trigger_type}
-                    onChange={(e) => setForm({ ...form, trigger_type: e.target.value as 'therapeutic_interchange' | 'missing_therapy' | 'ndc_optimization' })}
+                    onChange={(e) => setForm({ ...form, trigger_type: e.target.value as Trigger['trigger_type'] })}
                     className="w-full px-3 py-2 bg-[#0a1628] border border-[#1e3a5f] rounded-lg text-white text-sm focus:outline-none focus:border-teal-500"
                   >
                     <option value="therapeutic_interchange">Therapeutic Interchange</option>
                     <option value="missing_therapy">Missing Therapy</option>
                     <option value="ndc_optimization">NDC Optimization</option>
+                    <option value="brand_to_generic">Brand to Generic</option>
+                    <option value="formulation_change">Formulation Change</option>
+                    <option value="combo_therapy">Combo Therapy</option>
                   </select>
                 </div>
               </div>
@@ -2872,22 +3095,23 @@ function TriggerEditModal({
               )}
 
               {/* BIN Values Table */}
-              <div className="bg-[#0a1628] border border-[#1e3a5f] rounded-lg overflow-hidden">
-                <table className="w-full">
+              <div className="bg-[#0a1628] border border-[#1e3a5f] rounded-lg overflow-x-auto">
+                <table className="w-full min-w-[700px]">
                   <thead>
                     <tr className="border-b border-[#1e3a5f]">
                       <th className="text-left text-xs text-slate-400 font-medium px-4 py-3">BIN</th>
                       <th className="text-left text-xs text-slate-400 font-medium px-4 py-3">Group</th>
                       <th className="text-left text-xs text-slate-400 font-medium px-4 py-3">GP Value</th>
+                      <th className="text-left text-xs text-slate-400 font-medium px-4 py-3">Avg Qty</th>
                       <th className="text-left text-xs text-slate-400 font-medium px-4 py-3">Status</th>
                       <th className="text-left text-xs text-slate-400 font-medium px-4 py-3">Verified</th>
-                      <th className="w-10"></th>
+                      <th className="w-12 px-2"></th>
                     </tr>
                   </thead>
                   <tbody>
                     {binValues.length === 0 ? (
                       <tr>
-                        <td colSpan={6} className="px-4 py-8 text-center text-slate-500 text-sm">
+                        <td colSpan={7} className="px-4 py-8 text-center text-slate-500 text-sm">
                           No BIN/Group pricing configured. Using default GP value.
                         </td>
                       </tr>
@@ -2899,7 +3123,10 @@ function TriggerEditModal({
                             {bv.group || <span className="text-slate-500">(all)</span>}
                           </td>
                           <td className="px-4 py-3 text-white text-sm">
-                            {bv.gpValue ? `$${bv.gpValue}` : <span className="text-slate-500">default</span>}
+                            {bv.gpValue ? `$${Number(bv.gpValue).toFixed(2)}` : <span className="text-slate-500">default</span>}
+                          </td>
+                          <td className="px-4 py-3 text-slate-400 text-sm">
+                            {bv.avgQty ? Number(bv.avgQty).toFixed(1) : '-'}
                           </td>
                           <td className="px-4 py-3">
                             <select
@@ -2917,14 +3144,14 @@ function TriggerEditModal({
                             {bv.verifiedClaimCount ? (
                               <span className="text-blue-400">
                                 {bv.verifiedClaimCount} claims
-                                {bv.avgReimbursement ? ` • $${Math.round(bv.avgReimbursement)}` : ''}
+                                {bv.avgReimbursement ? ` • $${Number(bv.avgReimbursement).toFixed(2)}` : ''}
                               </span>
                             ) : '-'}
                           </td>
-                          <td className="px-4 py-3">
+                          <td className="px-2 py-3">
                             <button
                               onClick={() => deleteBinValue(bv.bin, bv.group)}
-                              className="text-slate-500 hover:text-red-400"
+                              className="text-slate-500 hover:text-red-400 p-1"
                             >
                               <Trash2 className="w-4 h-4" />
                             </button>

@@ -31,6 +31,7 @@ interface Opportunity {
   recommended_drug_name: string;
   potential_margin_gain: number;
   annual_margin_gain: number;
+  avg_dispensed_qty?: number | null;
   clinical_rationale: string;
   clinical_priority: string;
   status: string;
@@ -1255,7 +1256,10 @@ export default function OpportunitiesPage() {
                           <th className="text-left text-xs font-semibold text-slate-400 uppercase tracking-wider px-5 py-3">Opportunity</th>
                           <th className="text-left text-xs font-semibold text-slate-400 uppercase tracking-wider px-5 py-3">Action</th>
                           {canViewFinancialData && (
-                            <th className="text-left text-xs font-semibold text-slate-400 uppercase tracking-wider px-5 py-3">Per Fill / Annual</th>
+                            <>
+                              <th className="text-left text-xs font-semibold text-slate-400 uppercase tracking-wider px-5 py-3">Per Fill / Annual</th>
+                              <th className="text-left text-xs font-semibold text-slate-400 uppercase tracking-wider px-5 py-3">Avg Qty</th>
+                            </>
                           )}
                           <th className="text-left text-xs font-semibold text-slate-400 uppercase tracking-wider px-5 py-3">Prescriber</th>
                           <th className="text-left text-xs font-semibold text-slate-400 uppercase tracking-wider px-5 py-3">Status</th>
@@ -1286,12 +1290,19 @@ export default function OpportunitiesPage() {
                                 <div className="text-sm text-slate-400 max-w-xs truncate">{action || rationale}</div>
                               </td>
                               {canViewFinancialData && (
-                                <td className="px-5 py-3">
-                                  <div>
-                                    <div className="text-emerald-400 font-semibold">{formatCurrency(Number(opp.potential_margin_gain) || 0)}</div>
-                                    <div className="text-xs text-slate-500">{formatCurrency(getAnnualValue(opp))}/yr</div>
-                                  </div>
-                                </td>
+                                <>
+                                  <td className="px-5 py-3">
+                                    <div>
+                                      <div className="text-emerald-400 font-semibold">{formatCurrency(Number(opp.potential_margin_gain) || 0)}</div>
+                                      <div className="text-xs text-slate-500">{formatCurrency(getAnnualValue(opp))}/yr</div>
+                                    </div>
+                                  </td>
+                                  <td className="px-5 py-3">
+                                    <div className="text-sm text-slate-400">
+                                      {opp.avg_dispensed_qty ? Number(opp.avg_dispensed_qty).toFixed(1) : '-'}
+                                    </div>
+                                  </td>
+                                </>
                               )}
                               <td className="px-5 py-3">
                                 <div className="text-sm text-slate-300">{opp.prescriber_name || 'Unknown'}</div>
