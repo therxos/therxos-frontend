@@ -16,6 +16,8 @@ import {
   ArrowUpDown,
   ShieldAlert,
   Zap,
+  Layers,
+  Combine,
 } from 'lucide-react';
 
 function formatCurrency(value: number) {
@@ -247,6 +249,8 @@ export default function DashboardPage() {
     therapeutic_interchange: { icon: ArrowUpDown, iconClass: 'interchange', label: 'Therapeutic Interchange' },
     ndc_optimization: { icon: Pill, iconClass: 'ndc', label: 'NDC Optimization' },
     brand_to_generic: { icon: RefreshCw, iconClass: 'brand', label: 'Brand → Generic' },
+    formulation_change: { icon: Layers, iconClass: 'formulation', label: 'Formulation Change' },
+    combo_therapy: { icon: Combine, iconClass: 'combo', label: 'Combo Therapy' },
     audit_flag: { icon: ShieldAlert, iconClass: 'audit', label: 'Audit Flags' },
   };
 

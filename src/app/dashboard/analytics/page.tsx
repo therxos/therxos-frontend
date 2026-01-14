@@ -13,6 +13,9 @@ import {
   RefreshCw,
   Building2,
   Stethoscope,
+  Pill,
+  Target,
+  CheckCircle,
 } from 'lucide-react';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://therxos-backend-production.up.railway.app';
@@ -49,6 +52,62 @@ interface AnalyticsData {
     gp_per_rx: number;
     opportunity_count: number;
     opportunity_value: number;
+  }>;
+}
+
+interface PrescriberStatsData {
+  summary: {
+    total_prescribers: number;
+    known_prescribers: number;
+    total_opportunities: number;
+    total_annual_value: number;
+  };
+  top_by_value: Array<{
+    prescriber_name: string;
+    opportunity_count: number;
+    patient_count: number;
+    monthly_potential: number;
+    annual_potential: number;
+    avg_opportunity_value: number;
+    actioned_count: number;
+    action_rate: number;
+  }>;
+  top_by_count: Array<{
+    prescriber_name: string;
+    opportunity_count: number;
+    annual_potential: number;
+  }>;
+  top_by_action_rate: Array<{
+    prescriber_name: string;
+    opportunity_count: number;
+    actioned_count: number;
+    action_rate: number;
+    annual_potential: number;
+  }>;
+  by_prescriber_type: Record<string, Array<{
+    type: string;
+    count: number;
+    annual_value: number;
+  }>>;
+}
+
+interface RecommendedDrugStatsData {
+  top_recommended_drugs: Array<{
+    recommended_drug: string;
+    opportunity_count: number;
+    patient_count: number;
+    monthly_potential: number;
+    annual_potential: number;
+    avg_gp_per_fill: number;
+    pending: number;
+    in_progress: number;
+    captured: number;
+  }>;
+  top_current_drugs: Array<{
+    current_drug_name: string;
+    recommended_drug: string;
+    opportunity_count: number;
+    annual_potential: number;
   }>;
 }
 
@@ -165,19 +224,40 @@ function BreakdownSection({
 
 export default function AnalyticsPage() {
   const [analytics, setAnalytics] = useState<AnalyticsData | null>(null);
+  const [prescriberStats, setPrescriberStats] = useState<PrescriberStatsData | null>(null);
+  const [drugStats, setDrugStats] = useState<RecommendedDrugStatsData | null>(null);
   const [loading, setLoading] = useState(true);
-  const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set(['bin']));
+  const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set(['bin', 'prescriberOpps']));
 
   async function fetchAnalytics() {
     setLoading(true);
     try {
       const token = localStorage.getItem('therxos_token');
-      const res = await fetch(`${API_URL}/api/analytics/gp-metrics`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (res.ok) {
-        const data = await res.json();
+
+      // Fetch all analytics data in parallel
+      const [gpRes, prescriberRes, drugRes] = await Promise.all([
+        fetch(`${API_URL}/api/analytics/gp-metrics`, {
+          headers: { Authorization: `Bearer ${token}` },
+        }),
+        fetch(`${API_URL}/api/analytics/prescriber-stats?limit=25`, {
+          headers: { Authorization: `Bearer ${token}` },
+        }),
+        fetch(`${API_URL}/api/analytics/recommended-drug-stats?limit=20`, {
+          headers: { Authorization: `Bearer ${token}` },
+        }),
+      ]);
+
+      if (gpRes.ok) {
+        const data = await gpRes.json();
         setAnalytics(data);
+      }
+      if (prescriberRes.ok) {
+        const data = await prescriberRes.json();
+        setPrescriberStats(data);
+      }
+      if (drugRes.ok) {
+        const data = await drugRes.json();
+        setDrugStats(data);
       }
     } catch (e) {
       console.error('Failed to load analytics:', e);
@@ -355,6 +435,158 @@ export default function AnalyticsPage() {
                 { key: 'opportunity_value', label: 'Opp Value', format: (v) => formatCurrency(v as number), align: 'right' },
               ]}
             />
+          </div>
+
+          {/* Opportunity Analytics Section */}
+          <div className="mt-8">
+            <h2 className="text-lg font-semibold text-white mb-4">Opportunity Analytics</h2>
+
+            {/* Prescriber Opportunity Stats Summary */}
+            {prescriberStats && (
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+                <div className="bg-[#0d2137] border border-[#1e3a5f] rounded-xl p-4">
+                  <p className="text-xs text-slate-400 mb-1">Total Prescribers</p>
+                  <p className="text-2xl font-bold text-white">{formatNumber(prescriberStats.summary.total_prescribers)}</p>
+                </div>
+                <div className="bg-[#0d2137] border border-[#1e3a5f] rounded-xl p-4">
+                  <p className="text-xs text-slate-400 mb-1">Total Opportunities</p>
+                  <p className="text-2xl font-bold text-[#14b8a6]">{formatNumber(prescriberStats.summary.total_opportunities)}</p>
+                </div>
+                <div className="bg-[#0d2137] border border-[#1e3a5f] rounded-xl p-4">
+                  <p className="text-xs text-slate-400 mb-1">Total Annual Value</p>
+                  <p className="text-2xl font-bold text-emerald-400">{formatCurrency(prescriberStats.summary.total_annual_value)}</p>
+                </div>
+                <div className="bg-[#0d2137] border border-[#1e3a5f] rounded-xl p-4">
+                  <p className="text-xs text-slate-400 mb-1">Avg per Prescriber</p>
+                  <p className="text-2xl font-bold text-amber-400">
+                    {formatCurrency(prescriberStats.summary.total_prescribers > 0
+                      ? prescriberStats.summary.total_annual_value / prescriberStats.summary.total_prescribers
+                      : 0)}
+                  </p>
+                </div>
+              </div>
+            )}
+
+            <div className="space-y-4">
+              {/* Prescriber Opportunities */}
+              <div className="bg-[#0d2137] border border-[#1e3a5f] rounded-xl overflow-hidden">
+                <div
+                  onClick={() => toggleSection('prescriberOpps')}
+                  className="flex items-center justify-between px-6 py-4 cursor-pointer hover:bg-[#1e3a5f]/30 transition-colors"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-lg bg-orange-500/20 flex items-center justify-center">
+                      <Target className="w-5 h-5 text-orange-400" />
+                    </div>
+                    <div>
+                      <h3 className="font-semibold text-white">Prescriber Opportunities</h3>
+                      <p className="text-sm text-slate-400">
+                        Top {prescriberStats?.top_by_value?.length || 0} prescribers by opportunity value
+                      </p>
+                    </div>
+                  </div>
+                  {expandedSections.has('prescriberOpps') ? (
+                    <ChevronUp className="w-5 h-5 text-slate-400" />
+                  ) : (
+                    <ChevronDown className="w-5 h-5 text-slate-400" />
+                  )}
+                </div>
+
+                {expandedSections.has('prescriberOpps') && prescriberStats && (
+                  <div className="border-t border-[#1e3a5f]">
+                    <table className="w-full">
+                      <thead className="bg-[#1e3a5f]/50">
+                        <tr>
+                          <th className="text-xs font-semibold text-slate-400 uppercase tracking-wider px-4 py-3 text-left">Prescriber</th>
+                          <th className="text-xs font-semibold text-slate-400 uppercase tracking-wider px-4 py-3 text-right">Patients</th>
+                          <th className="text-xs font-semibold text-slate-400 uppercase tracking-wider px-4 py-3 text-right">Opps</th>
+                          <th className="text-xs font-semibold text-slate-400 uppercase tracking-wider px-4 py-3 text-right">Monthly</th>
+                          <th className="text-xs font-semibold text-slate-400 uppercase tracking-wider px-4 py-3 text-right">Annual</th>
+                          <th className="text-xs font-semibold text-slate-400 uppercase tracking-wider px-4 py-3 text-right">Avg/Opp</th>
+                          <th className="text-xs font-semibold text-slate-400 uppercase tracking-wider px-4 py-3 text-right">Action Rate</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {prescriberStats.top_by_value.map((row, idx) => (
+                          <tr key={idx} className="border-t border-[#1e3a5f] hover:bg-[#1e3a5f]/20">
+                            <td className="px-4 py-3 text-sm text-slate-300">{row.prescriber_name}</td>
+                            <td className="px-4 py-3 text-sm text-slate-300 text-right">{formatNumber(row.patient_count)}</td>
+                            <td className="px-4 py-3 text-sm text-slate-300 text-right">{formatNumber(row.opportunity_count)}</td>
+                            <td className="px-4 py-3 text-sm text-slate-300 text-right">{formatCurrency(row.monthly_potential)}</td>
+                            <td className="px-4 py-3 text-sm font-semibold text-emerald-400 text-right">{formatCurrency(row.annual_potential)}</td>
+                            <td className="px-4 py-3 text-sm text-slate-300 text-right">{formatCurrency(row.avg_opportunity_value)}</td>
+                            <td className="px-4 py-3 text-sm text-right">
+                              <span className={`inline-flex items-center gap-1 ${row.action_rate > 0 ? 'text-emerald-400' : 'text-slate-500'}`}>
+                                {row.action_rate > 0 && <CheckCircle className="w-3 h-3" />}
+                                {row.action_rate.toFixed(1)}%
+                              </span>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+
+              {/* Recommended Drug Stats */}
+              <div className="bg-[#0d2137] border border-[#1e3a5f] rounded-xl overflow-hidden">
+                <div
+                  onClick={() => toggleSection('drugStats')}
+                  className="flex items-center justify-between px-6 py-4 cursor-pointer hover:bg-[#1e3a5f]/30 transition-colors"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-lg bg-pink-500/20 flex items-center justify-center">
+                      <Pill className="w-5 h-5 text-pink-400" />
+                    </div>
+                    <div>
+                      <h3 className="font-semibold text-white">Recommended Drugs</h3>
+                      <p className="text-sm text-slate-400">
+                        Top {drugStats?.top_recommended_drugs?.length || 0} recommended drugs by opportunity value
+                      </p>
+                    </div>
+                  </div>
+                  {expandedSections.has('drugStats') ? (
+                    <ChevronUp className="w-5 h-5 text-slate-400" />
+                  ) : (
+                    <ChevronDown className="w-5 h-5 text-slate-400" />
+                  )}
+                </div>
+
+                {expandedSections.has('drugStats') && drugStats && (
+                  <div className="border-t border-[#1e3a5f]">
+                    <table className="w-full">
+                      <thead className="bg-[#1e3a5f]/50">
+                        <tr>
+                          <th className="text-xs font-semibold text-slate-400 uppercase tracking-wider px-4 py-3 text-left">Recommended Drug</th>
+                          <th className="text-xs font-semibold text-slate-400 uppercase tracking-wider px-4 py-3 text-right">Patients</th>
+                          <th className="text-xs font-semibold text-slate-400 uppercase tracking-wider px-4 py-3 text-right">Opps</th>
+                          <th className="text-xs font-semibold text-slate-400 uppercase tracking-wider px-4 py-3 text-right">Avg GP/Fill</th>
+                          <th className="text-xs font-semibold text-slate-400 uppercase tracking-wider px-4 py-3 text-right">Annual</th>
+                          <th className="text-xs font-semibold text-slate-400 uppercase tracking-wider px-4 py-3 text-right">Pending</th>
+                          <th className="text-xs font-semibold text-slate-400 uppercase tracking-wider px-4 py-3 text-right">In Progress</th>
+                          <th className="text-xs font-semibold text-slate-400 uppercase tracking-wider px-4 py-3 text-right">Captured</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {drugStats.top_recommended_drugs.map((row, idx) => (
+                          <tr key={idx} className="border-t border-[#1e3a5f] hover:bg-[#1e3a5f]/20">
+                            <td className="px-4 py-3 text-sm text-slate-300">{row.recommended_drug}</td>
+                            <td className="px-4 py-3 text-sm text-slate-300 text-right">{formatNumber(row.patient_count)}</td>
+                            <td className="px-4 py-3 text-sm text-slate-300 text-right">{formatNumber(row.opportunity_count)}</td>
+                            <td className="px-4 py-3 text-sm text-slate-300 text-right">{formatCurrency(row.avg_gp_per_fill)}</td>
+                            <td className="px-4 py-3 text-sm font-semibold text-emerald-400 text-right">{formatCurrency(row.annual_potential)}</td>
+                            <td className="px-4 py-3 text-sm text-amber-400 text-right">{formatNumber(row.pending)}</td>
+                            <td className="px-4 py-3 text-sm text-blue-400 text-right">{formatNumber(row.in_progress)}</td>
+                            <td className="px-4 py-3 text-sm text-emerald-400 text-right">{formatNumber(row.captured)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
         </>
       )}

@@ -117,6 +117,7 @@ interface Trigger {
     verifiedAt?: string | null;
     verifiedClaimCount?: number;
     avgReimbursement?: number | null;
+    avgQty?: number | null;
   }[];
 }
 
