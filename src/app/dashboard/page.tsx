@@ -161,6 +161,15 @@ export default function DashboardPage() {
     queryFn: () => analyticsApi.performance(30).then((r) => r.data),
   });
 
+  // Fetch audit flags
+  const { data: auditData } = useQuery({
+    queryKey: ['audit-flags'],
+    queryFn: () => analyticsApi.auditFlags({ status: 'open', limit: 100 }).then((r) => r.data),
+  });
+
+  // Count open audit flags
+  const openAuditFlags = auditData?.flags?.length || 0;
+
   // Process opportunities for type breakdown and top patients
   const opportunities = oppData?.opportunities || [];
   
@@ -398,18 +407,35 @@ export default function DashboardPage() {
           </div>
 
           {/* Audit Risks */}
-          <div className="card p-6">
-            <p className="label-text mb-4">Audit Risks</p>
+          <Link href="/dashboard/audit" className="card p-6 block hover:bg-[var(--navy-700)] transition-colors cursor-pointer">
+            <div className="flex items-center justify-between mb-4">
+              <p className="label-text">Audit Risks</p>
+              {openAuditFlags > 0 && (
+                <span className="px-2 py-0.5 text-xs font-bold rounded-full bg-orange-500/20 text-orange-400 border border-orange-500/30">
+                  {openAuditFlags} Open
+                </span>
+              )}
+            </div>
             <div className="flex items-center justify-between">
               <div>
-                <span className="text-3xl font-bold text-amber-400">0</span>
-                <span className="text-sm ml-2" style={{ color: 'var(--slate-400)' }}>active risks</span>
+                <span className={`text-3xl font-bold ${openAuditFlags > 0 ? 'text-orange-400' : 'text-emerald-400'}`}>
+                  {openAuditFlags}
+                </span>
+                <span className="text-sm ml-2" style={{ color: 'var(--slate-400)' }}>
+                  {openAuditFlags === 1 ? 'active risk' : 'active risks'}
+                </span>
               </div>
-              <div className="type-icon audit">
-                <ShieldAlert className="w-5 h-5" />
+              <div className={`type-icon ${openAuditFlags > 0 ? 'audit' : ''}`} style={openAuditFlags === 0 ? { backgroundColor: 'rgba(16, 185, 129, 0.2)' } : {}}>
+                <ShieldAlert className={`w-5 h-5 ${openAuditFlags > 0 ? '' : 'text-emerald-400'}`} />
               </div>
             </div>
-          </div>
+            {openAuditFlags > 0 && (
+              <div className="mt-3 flex items-center gap-1 text-xs text-orange-400">
+                <span>Review flagged claims</span>
+                <ArrowRight className="w-3 h-3" />
+              </div>
+            )}
+          </Link>
 
           {/* Rx Count */}
           <div className="card p-6">

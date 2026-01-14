@@ -89,16 +89,19 @@ export const patientsApi = {
 // Analytics API
 export const analyticsApi = {
   dashboard: (period?: number) => api.get('/analytics/dashboard', { params: { period } }),
-  
+
   byType: (status?: string) => api.get('/analytics/opportunities/by-type', { params: { status } }),
-  
+
   trends: (days?: number) => api.get('/analytics/trends', { params: { days } }),
-  
+
   topPatients: (limit?: number) => api.get('/analytics/top-patients', { params: { limit } }),
-  
+
   performance: (days?: number) => api.get('/analytics/performance', { params: { days } }),
-  
+
   ingestionStatus: () => api.get('/analytics/ingestion-status'),
+
+  auditFlags: (params?: { status?: string; limit?: number }) =>
+    api.get('/analytics/audit-flags', { params }),
 };
 
 // Settings API
