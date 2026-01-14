@@ -57,10 +57,10 @@ export default function DashboardLayout({
   const [isImpersonating, setIsImpersonating] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
 
-  // Handle search submission
+  // Handle search submission - goes to opportunities page
   const handleSearch = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter' && searchQuery.trim()) {
-      router.push(`/dashboard/patients?search=${encodeURIComponent(searchQuery.trim())}`);
+      router.push(`/dashboard/opportunities?search=${encodeURIComponent(searchQuery.trim())}`);
       setSearchQuery('');
     }
   };
@@ -580,7 +580,7 @@ export default function DashboardLayout({
               <Search className="w-4 h-4" style={{ color: 'var(--slate-500)' }} />
               <input
                 type="text"
-                placeholder="Search patients... (press Enter)"
+                placeholder="Search opportunities... (press Enter)"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 onKeyDown={handleSearch}

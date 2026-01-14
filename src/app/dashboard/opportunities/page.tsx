@@ -578,18 +578,22 @@ export default function OpportunitiesPage() {
   const [lastSync, setLastSync] = useState(new Date());
   const [prescriberWarning, setPrescriberWarning] = useState<{ data: PrescriberWarningData; pendingUpdate: { id: string; status: string } } | null>(null);
 
-  // Check URL for type/filter params
+  // Check URL for type/filter/search params
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const params = new URLSearchParams(window.location.search);
       const type = params.get('type');
       const filterParam = params.get('filter');
+      const searchParam = params.get('search');
       if (type) {
         setTypeFilter(type);
         setGroupBy('category');
       }
       if (filterParam === 'flagged') {
         setFilter('flagged');
+      }
+      if (searchParam) {
+        setSearch(searchParam);
       }
     }
   }, []);
@@ -1144,8 +1148,21 @@ export default function OpportunitiesPage() {
               <span className="px-3 py-1.5 bg-purple-500/20 text-purple-400 rounded-lg text-sm font-medium">
                 Type: {typeFilter.replace(/_/g, ' ')}
               </span>
-              <button 
+              <button
                 onClick={() => { setTypeFilter(null); window.history.replaceState({}, '', '/dashboard/opportunities'); }}
+                className="text-slate-400 hover:text-white text-sm"
+              >
+                ✕ Clear
+              </button>
+            </div>
+          )}
+          {search && (
+            <div className="flex items-center gap-2 ml-2">
+              <span className="px-3 py-1.5 bg-[#14b8a6]/20 text-[#14b8a6] rounded-lg text-sm font-medium">
+                Search: "{search}"
+              </span>
+              <button
+                onClick={() => { setSearch(''); window.history.replaceState({}, '', '/dashboard/opportunities'); }}
                 className="text-slate-400 hover:text-white text-sm"
               >
                 ✕ Clear
