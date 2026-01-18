@@ -38,16 +38,18 @@ function formatShortCurrency(value: number) {
 }
 
 function formatPatientName(firstName?: string, lastName?: string, hash?: string, isDemo?: boolean) {
+  // Format names as "First Last" with proper case
+  const properCase = (str?: string) => {
+    if (!str) return '';
+    return str.charAt(0).toUpperCase() + str.slice(1).toLowerCase();
+  };
+
   if (firstName && lastName) {
-    if (isDemo) {
-      return `${firstName} ${lastName}`;
-    }
-    const last3 = lastName.slice(0, 3).toUpperCase();
-    const first3 = firstName.slice(0, 3).toUpperCase();
-    return `${last3},${first3}`;
+    return `${properCase(firstName)} ${properCase(lastName)}`;
   }
-  if (lastName) return isDemo ? lastName : lastName.slice(0, 6).toUpperCase();
-  return hash?.slice(0, 8) || 'Unknown';
+  if (lastName) return properCase(lastName);
+  if (firstName) return properCase(firstName);
+  return hash?.slice(0, 8) || 'Patient';
 }
 
 function formatDOB(dob?: string) {

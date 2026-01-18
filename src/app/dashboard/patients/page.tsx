@@ -54,8 +54,15 @@ export default function PatientsPage() {
 
   const displayPatients = isDemo ? DEMO_PATIENTS : (patients || []);
   const filteredPatients = displayPatients.filter((p: any) => {
-    if (search && !p.patient_hash.toLowerCase().includes(search.toLowerCase())) {
-      return false;
+    if (search) {
+      const searchLower = search.toLowerCase();
+      const matchesName = p.patient_name?.toLowerCase().includes(searchLower);
+      const matchesHash = p.patient_hash?.toLowerCase().includes(searchLower);
+      const matchesFirst = p.first_name?.toLowerCase().includes(searchLower);
+      const matchesLast = p.last_name?.toLowerCase().includes(searchLower);
+      if (!matchesName && !matchesHash && !matchesFirst && !matchesLast) {
+        return false;
+      }
     }
     if (filterOpportunities && p.opportunity_count === 0) {
       return false;
@@ -81,7 +88,7 @@ export default function PatientsPage() {
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5" style={{ color: 'var(--slate-400)' }} />
           <input
             type="text"
-            placeholder="Search by patient ID..."
+            placeholder="Search by patient name..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="input pl-10"
@@ -112,7 +119,7 @@ export default function PatientsPage() {
           <table className="data-table">
             <thead>
               <tr>
-                <th>Patient ID</th>
+                <th>Patient</th>
                 <th>Conditions</th>
                 <th className="text-center">Med Sync</th>
                 <th className="text-right">Opportunities</th>
@@ -125,9 +132,16 @@ export default function PatientsPage() {
               {filteredPatients.map((patient: any) => (
                 <tr key={patient.patient_id}>
                   <td>
-                    <span className="font-mono text-sm" style={{ color: 'var(--teal-500)' }}>
-                      {patient.patient_hash?.slice(0, 8)}...
-                    </span>
+                    <div>
+                      <span className="font-semibold" style={{ color: 'var(--teal-500)' }}>
+                        {patient.patient_name || patient.patient_hash?.slice(0, 8) || 'Unknown'}
+                      </span>
+                      {patient.date_of_birth && (
+                        <div className="text-xs" style={{ color: 'var(--slate-400)' }}>
+                          DOB: {new Date(patient.date_of_birth).toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' })}
+                        </div>
+                      )}
+                    </div>
                   </td>
                   <td>
                     <div className="flex flex-wrap gap-1">

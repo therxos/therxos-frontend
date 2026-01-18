@@ -113,19 +113,17 @@ function getInitials(str: string) {
 }
 
 function formatPatientName(firstName?: string, lastName?: string, hash?: string, isDemo?: boolean) {
+  // Format names as "First Last" with proper case
+  const properCase = (str?: string) => {
+    if (!str) return '';
+    return str.charAt(0).toUpperCase() + str.slice(1).toLowerCase();
+  };
+
   if (firstName && lastName) {
-    // Show full name for demo account (Marvel heroes)
-    if (isDemo) {
-      return `${firstName} ${lastName}`;
-    }
-    // Masked format for real accounts (HIPAA)
-    const last3 = lastName.slice(0, 3).toUpperCase();
-    const first3 = firstName.slice(0, 3).toUpperCase();
-    return `${last3},${first3}`;
+    return `${properCase(firstName)} ${properCase(lastName)}`;
   }
-  if (lastName) {
-    return isDemo ? lastName : lastName.slice(0, 6).toUpperCase();
-  }
+  if (lastName) return properCase(lastName);
+  if (firstName) return properCase(firstName);
   return hash?.slice(0, 8) || 'Unknown';
 }
 
@@ -1087,6 +1085,25 @@ export default function OpportunitiesPage() {
       {/* Filters */}
       <div className="px-8 py-2 flex items-center justify-between">
         <div className="flex items-center gap-3">
+          {/* Search Input */}
+          <div className="relative">
+            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+            <input
+              type="text"
+              placeholder="Search patient, drug, prescriber..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="w-64 pl-10 pr-4 py-2 bg-[#0d2137] border border-[#1e3a5f] rounded-lg text-sm text-white placeholder-slate-500 focus:outline-none focus:border-[#14b8a6]"
+            />
+            {search && (
+              <button
+                onClick={() => setSearch('')}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            )}
+          </div>
           <div className="flex bg-[#0d2137] border border-[#1e3a5f] rounded-lg p-1">
             {[
               { key: 'all', label: `All (${stats.total})` },

@@ -66,6 +66,8 @@ interface PlatformStats {
   captured_value: number;
   mrr: number;
   arr: number;
+  pending_quality_issues?: number;
+  blocked_margin?: number;
 }
 
 interface DidntWorkOpp {
@@ -1146,6 +1148,18 @@ export default function SuperAdminPage() {
             {stats?.total_value ? ((stats.captured_value / stats.total_value) * 100).toFixed(1) : 0}%
           </p>
         </div>
+
+        {/* Data Quality Issues Card */}
+        {(stats?.pending_quality_issues ?? 0) > 0 && (
+          <div className="bg-[#0d2137] border border-amber-500/50 rounded-xl p-4">
+            <div className="flex items-center gap-2 text-amber-400 text-xs mb-1">
+              <AlertCircle className="w-4 h-4" />
+              Data Quality
+            </div>
+            <p className="text-2xl font-bold text-amber-400">{(stats?.pending_quality_issues || 0).toLocaleString()}</p>
+            <p className="text-xs text-amber-300">{formatCurrency(stats?.blocked_margin || 0)} blocked</p>
+          </div>
+        )}
       </div>
 
       {/* Gmail Automation Section */}
