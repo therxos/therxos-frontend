@@ -193,7 +193,7 @@ export default function SuperAdminPage() {
 
   // Trigger Management
   const [triggers, setTriggers] = useState<Trigger[]>([]);
-  const [showTriggers, setShowTriggers] = useState(true);
+  const [showTriggers, setShowTriggers] = useState(false);
   const [triggerFilter, setTriggerFilter] = useState<string>('all');
   const [triggerSort, setTriggerSort] = useState<{ field: 'display_name' | 'trigger_type' | 'default_gp_value' | 'is_enabled'; direction: 'asc' | 'desc' }>({ field: 'display_name', direction: 'asc' });
   const [triggerSearch, setTriggerSearch] = useState('');
@@ -2550,10 +2550,40 @@ function TriggerEditModal({
   const [selectedBinForGroups, setSelectedBinForGroups] = useState<string | null>(null);
   const [savingBinValues, setSavingBinValues] = useState(false);
 
+  // Medicare/CMS Data state
+  const [medicareData, setMedicareData] = useState<{
+    available: boolean;
+    summary?: { totalClaims: number; uniquePlans: number; avgGP: number; avgInsurancePay: number };
+    plans?: Array<{ contractId: string; planName: string; bin: string; claimCount: number; avgGP: number; avgInsurancePay: number }>;
+  } | null>(null);
+  const [loadingMedicare, setLoadingMedicare] = useState(false);
+
+  // Fetch Medicare data when pricing tab opens
+  const fetchMedicareData = async () => {
+    if (!trigger?.trigger_id) return;
+    setLoadingMedicare(true);
+    try {
+      const token = localStorage.getItem('therxos_token');
+      const res = await fetch(`${API_URL}/api/admin/triggers/${trigger.trigger_id}/medicare-data`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setMedicareData(data.medicare);
+      }
+    } catch (error) {
+      console.error('Failed to fetch Medicare data:', error);
+    }
+    setLoadingMedicare(false);
+  };
+
   // Fetch discovered BINs when pricing tab opens
   useEffect(() => {
     if (activeTab === 'pricing' && discoveredBins.length === 0) {
       fetchDiscoveredBins();
+    }
+    if (activeTab === 'pricing' && trigger?.trigger_id && medicareData === null) {
+      fetchMedicareData();
     }
   }, [activeTab]);
 
@@ -3030,6 +3060,58 @@ function TriggerEditModal({
                 </div>
               )}
 
+              {/* Medicare/CMS Data Section */}
+              {trigger?.trigger_id && (
+                <div className="p-4 bg-[#0a1628] border border-[#1e3a5f] rounded-lg">
+                  <div className="flex items-center justify-between mb-3">
+                    <h4 className="text-sm font-semibold text-white flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full bg-blue-500"></span>
+                      Medicare Part D Coverage
+                    </h4>
+                    {loadingMedicare && <Loader2 className="w-4 h-4 animate-spin text-slate-400" />}
+                  </div>
+                  {medicareData === null && !loadingMedicare ? (
+                    <p className="text-xs text-slate-500">Loading Medicare data...</p>
+                  ) : medicareData && !medicareData.available ? (
+                    <p className="text-xs text-slate-500">No Medicare Part D claims found for this drug.</p>
+                  ) : medicareData?.available ? (
+                    <div className="space-y-3">
+                      <div className="grid grid-cols-4 gap-3">
+                        <div className="text-center">
+                          <p className="text-lg font-bold text-white">{medicareData.summary?.totalClaims || 0}</p>
+                          <p className="text-xs text-slate-500">Total Claims</p>
+                        </div>
+                        <div className="text-center">
+                          <p className="text-lg font-bold text-white">{medicareData.summary?.uniquePlans || 0}</p>
+                          <p className="text-xs text-slate-500">Unique Plans</p>
+                        </div>
+                        <div className="text-center">
+                          <p className="text-lg font-bold text-emerald-400">${(medicareData.summary?.avgGP || 0).toFixed(2)}</p>
+                          <p className="text-xs text-slate-500">Avg GP</p>
+                        </div>
+                        <div className="text-center">
+                          <p className="text-lg font-bold text-blue-400">${(medicareData.summary?.avgInsurancePay || 0).toFixed(2)}</p>
+                          <p className="text-xs text-slate-500">Avg Ins Pay</p>
+                        </div>
+                      </div>
+                      {medicareData.plans && medicareData.plans.length > 0 && (
+                        <div className="mt-3">
+                          <p className="text-xs text-slate-400 mb-2">Top Medicare Plans:</p>
+                          <div className="max-h-32 overflow-y-auto space-y-1">
+                            {medicareData.plans.slice(0, 5).map((plan, idx) => (
+                              <div key={idx} className="flex justify-between text-xs py-1 px-2 bg-[#0d2137] rounded">
+                                <span className="text-slate-300">{plan.contractId} {plan.planName && `(${plan.planName})`}</span>
+                                <span className="text-slate-500">{plan.claimCount} claims • ${plan.avgGP.toFixed(2)} GP</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ) : null}
+                </div>
+              )}
+
               {/* Add BIN Form */}
               {showAddBin && (
                 <div className="p-4 bg-[#0a1628] border border-[#1e3a5f] rounded-lg space-y-3">
@@ -3120,13 +3202,14 @@ function TriggerEditModal({
                       <th className="text-left text-xs text-slate-400 font-medium px-4 py-3">Avg Qty</th>
                       <th className="text-left text-xs text-slate-400 font-medium px-4 py-3">Status</th>
                       <th className="text-left text-xs text-slate-400 font-medium px-4 py-3">Verified</th>
+                      <th className="text-left text-xs text-slate-400 font-medium px-4 py-3">Synced On</th>
                       <th className="w-12 px-2"></th>
                     </tr>
                   </thead>
                   <tbody>
                     {binValues.length === 0 ? (
                       <tr>
-                        <td colSpan={7} className="px-4 py-8 text-center text-slate-500 text-sm">
+                        <td colSpan={8} className="px-4 py-8 text-center text-slate-500 text-sm">
                           No BIN/Group pricing configured. Using default GP value.
                         </td>
                       </tr>
@@ -3162,6 +3245,9 @@ function TriggerEditModal({
                                 {bv.avgReimbursement ? ` • $${Number(bv.avgReimbursement).toFixed(2)}` : ''}
                               </span>
                             ) : '-'}
+                          </td>
+                          <td className="px-4 py-3 text-xs text-slate-500">
+                            {bv.verifiedAt ? new Date(bv.verifiedAt).toLocaleDateString() : '-'}
                           </td>
                           <td className="px-2 py-3">
                             <button
