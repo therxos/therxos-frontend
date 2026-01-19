@@ -13,12 +13,15 @@ export default function LoginPage() {
   const router = useRouter();
   const { setAuth, isAuthenticated, _hasHydrated } = useAuthStore();
 
-  // If already authenticated, redirect to dashboard
+  const { user } = useAuthStore();
+
+  // If already authenticated, redirect appropriately
   useEffect(() => {
     if (_hasHydrated && isAuthenticated) {
-      router.push('/dashboard');
+      // Super admin goes to admin panel, others go to dashboard
+      router.push(user?.role === 'super_admin' ? '/admin' : '/dashboard');
     }
-  }, [_hasHydrated, isAuthenticated, router]);
+  }, [_hasHydrated, isAuthenticated, router, user?.role]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -34,6 +37,8 @@ export default function LoginPage() {
       setTimeout(() => {
         if (user.mustChangePassword) {
           router.push('/change-password');
+        } else if (user.role === 'super_admin') {
+          router.push('/admin');
         } else {
           router.push('/dashboard');
         }

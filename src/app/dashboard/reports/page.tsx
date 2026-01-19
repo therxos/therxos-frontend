@@ -77,9 +77,10 @@ export default function ReportsPage() {
   const [compareMode, setCompareMode] = useState(false);
   const [previousStats, setPreviousStats] = useState<MonthlyStats | null>(null);
 
+  // Re-fetch when pharmacy or month/year changes
   useEffect(() => {
-    fetchMonthlyStats();
-  }, [selectedMonth, selectedYear]);
+    if (user?.pharmacyId) fetchMonthlyStats();
+  }, [selectedMonth, selectedYear, user?.pharmacyId]);
 
   async function fetchMonthlyStats() {
     setLoading(true);

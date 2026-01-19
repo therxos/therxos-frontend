@@ -35,9 +35,9 @@ export default function UploadPage() {
   const [uploadResults, setUploadResults] = useState<any>(null);
 
   const { data: ingestionStatus } = useQuery({
-    queryKey: ['ingestion-status'],
+    queryKey: ['ingestion-status', user?.pharmacyId],
     queryFn: () => analyticsApi.ingestionStatus().then((r) => r.data),
-    enabled: !isDemo,
+    enabled: !isDemo && !!user?.pharmacyId,
   });
 
   const uploadMutation = useMutation({

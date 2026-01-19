@@ -27,6 +27,22 @@ function formatCurrency(value: number) {
   }).format(value);
 }
 
+function formatPatientName(patient: any, isDemo: boolean) {
+  // HIPAA: Only show 3 letters of each name for real clients, full names for demo only
+  if (isDemo) {
+    return patient.patient_name || patient.patient_hash?.slice(0, 8) || 'Unknown';
+  }
+  // For real clients, truncate to 3 letters
+  const first = patient.first_name || '';
+  const last = patient.last_name || '';
+  if (first && last) {
+    return `${last.slice(0, 3).toUpperCase()},${first.slice(0, 3).toUpperCase()}`;
+  }
+  if (last) return last.slice(0, 3).toUpperCase();
+  if (first) return first.slice(0, 3).toUpperCase();
+  return patient.patient_hash?.slice(0, 8) || 'Unknown';
+}
+
 export default function PatientsPage() {
   const user = useAuthStore((state) => state.user);
   const { canViewFinancialData } = usePermissions();
@@ -44,12 +60,12 @@ export default function PatientsPage() {
   }, [searchParams]);
 
   const { data: patients, isLoading } = useQuery({
-    queryKey: ['patients', search, filterOpportunities],
-    queryFn: () => patientsApi.getAll({ 
-      search: search || undefined, 
-      hasOpportunities: filterOpportunities || undefined 
+    queryKey: ['patients', user?.pharmacyId, search, filterOpportunities],
+    queryFn: () => patientsApi.getAll({
+      search: search || undefined,
+      hasOpportunities: filterOpportunities || undefined
     }).then((r) => r.data),
-    enabled: !isDemo,
+    enabled: !isDemo && !!user?.pharmacyId,
   });
 
   const displayPatients = isDemo ? DEMO_PATIENTS : (patients || []);
@@ -134,7 +150,7 @@ export default function PatientsPage() {
                   <td>
                     <div>
                       <span className="font-semibold" style={{ color: 'var(--teal-500)' }}>
-                        {patient.patient_name || patient.patient_hash?.slice(0, 8) || 'Unknown'}
+                        {formatPatientName(patient, isDemo)}
                       </span>
                       {patient.date_of_birth && (
                         <div className="text-xs" style={{ color: 'var(--slate-400)' }}>

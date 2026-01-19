@@ -38,17 +38,23 @@ function formatShortCurrency(value: number) {
 }
 
 function formatPatientName(firstName?: string, lastName?: string, hash?: string, isDemo?: boolean) {
-  // Format names as "First Last" with proper case
+  // HIPAA: Only show 3 letters of each name for real clients, full names for demo only
   const properCase = (str?: string) => {
     if (!str) return '';
     return str.charAt(0).toUpperCase() + str.slice(1).toLowerCase();
   };
 
   if (firstName && lastName) {
-    return `${properCase(firstName)} ${properCase(lastName)}`;
+    if (isDemo) {
+      return `${properCase(firstName)} ${properCase(lastName)}`;
+    } else {
+      const f = lastName.slice(0, 3).toUpperCase();
+      const l = firstName.slice(0, 3).toUpperCase();
+      return `${f},${l}`;
+    }
   }
-  if (lastName) return properCase(lastName);
-  if (firstName) return properCase(firstName);
+  if (lastName) return isDemo ? properCase(lastName) : lastName.slice(0, 3).toUpperCase();
+  if (firstName) return isDemo ? properCase(firstName) : firstName.slice(0, 3).toUpperCase();
   return hash?.slice(0, 8) || 'Patient';
 }
 
@@ -148,25 +154,30 @@ export default function DashboardPage() {
   const isDemo = user?.email === 'demo@therxos.com';
 
   // Fetch real data (demo account now has real superhero data)
+  // Include pharmacyId in query keys so data refreshes when switching pharmacies
   const { data: oppData } = useQuery({
-    queryKey: ['all-opportunities'],
+    queryKey: ['all-opportunities', user?.pharmacyId],
     queryFn: () => opportunitiesApi.getAll({ limit: 2000 }).then((r) => r.data),
+    enabled: !!user?.pharmacyId,
   });
 
   const { data: dashboardData, isLoading } = useQuery({
-    queryKey: ['dashboard'],
+    queryKey: ['dashboard', user?.pharmacyId],
     queryFn: () => analyticsApi.dashboard(30).then((r) => r.data),
+    enabled: !!user?.pharmacyId,
   });
 
   const { data: performanceData } = useQuery({
-    queryKey: ['performance'],
+    queryKey: ['performance', user?.pharmacyId],
     queryFn: () => analyticsApi.performance(30).then((r) => r.data),
+    enabled: !!user?.pharmacyId,
   });
 
   // Fetch audit flags
   const { data: auditData } = useQuery({
-    queryKey: ['audit-flags'],
+    queryKey: ['audit-flags', user?.pharmacyId],
     queryFn: () => analyticsApi.auditFlags({ status: 'open', limit: 100 }).then((r) => r.data),
+    enabled: !!user?.pharmacyId,
   });
 
   // Count open audit flags

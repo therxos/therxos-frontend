@@ -113,17 +113,25 @@ function getInitials(str: string) {
 }
 
 function formatPatientName(firstName?: string, lastName?: string, hash?: string, isDemo?: boolean) {
-  // Format names as "First Last" with proper case
+  // HIPAA: Only show 3 letters of each name for real clients, full names for demo only
   const properCase = (str?: string) => {
     if (!str) return '';
     return str.charAt(0).toUpperCase() + str.slice(1).toLowerCase();
   };
 
   if (firstName && lastName) {
-    return `${properCase(firstName)} ${properCase(lastName)}`;
+    if (isDemo) {
+      // Demo account shows full names
+      return `${properCase(firstName)} ${properCase(lastName)}`;
+    } else {
+      // HIPAA compliant: 3-letter truncation
+      const f = lastName.slice(0, 3).toUpperCase();
+      const l = firstName.slice(0, 3).toUpperCase();
+      return `${f},${l}`;
+    }
   }
-  if (lastName) return properCase(lastName);
-  if (firstName) return properCase(firstName);
+  if (lastName) return isDemo ? properCase(lastName) : lastName.slice(0, 3).toUpperCase();
+  if (firstName) return isDemo ? properCase(firstName) : firstName.slice(0, 3).toUpperCase();
   return hash?.slice(0, 8) || 'Unknown';
 }
 
@@ -596,7 +604,8 @@ export default function OpportunitiesPage() {
     }
   }, []);
 
-  useEffect(() => { fetchData(); }, []);
+  // Re-fetch when pharmacy changes (e.g., after impersonation)
+  useEffect(() => { if (user?.pharmacyId) fetchData(); }, [user?.pharmacyId]);
   useEffect(() => { groupData(); }, [opportunities, groupBy]);
 
   async function fetchData() {

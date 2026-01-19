@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import { useAuthStore } from '@/store';
 import usePermissions, { PERMISSIONS, ROLES, ROLE_INFO } from '@/hooks/usePermissions';
 import {
   Users,
@@ -59,6 +60,7 @@ const CONFIGURABLE_PERMISSIONS = {
 
 export default function UserManagementPage() {
   const router = useRouter();
+  const user = useAuthStore((state) => state.user);
   const { canManageUsers, isAdmin } = usePermissions();
   const [users, setUsers] = useState<User[]>([]);
   const [settings, setSettings] = useState<PharmacySettings | null>(null);
@@ -76,13 +78,14 @@ export default function UserManagementPage() {
     send_invite: true,
   });
 
+  // Re-fetch when pharmacy changes (e.g., after impersonation)
   useEffect(() => {
     if (!isAdmin) {
       router.push('/dashboard');
       return;
     }
-    fetchData();
-  }, [isAdmin]);
+    if (user?.pharmacyId) fetchData();
+  }, [isAdmin, user?.pharmacyId]);
 
   async function fetchData() {
     setLoading(true);

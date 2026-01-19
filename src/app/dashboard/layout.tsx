@@ -85,9 +85,9 @@ export default function DashboardLayout({
 
   // Fetch opportunity counts for sidebar badge
   const { data: oppData } = useQuery({
-    queryKey: ['opportunities-count'],
+    queryKey: ['opportunities-count', user?.pharmacyId],
     queryFn: () => opportunitiesApi.getAll({ limit: 1 }).then(r => r.data),
-    enabled: isAuthenticated,
+    enabled: isAuthenticated && !!user?.pharmacyId,
     refetchInterval: 60000, // Refresh every minute
   });
 
@@ -151,8 +151,17 @@ export default function DashboardLayout({
           localStorage.setItem('therxos_original_token', originalToken || '');
         }
 
-        // Update auth store and reload
-        setAuth(data.user, data.token);
+        // Manually persist auth state to avoid race condition with Zustand persist
+        localStorage.setItem('therxos-auth', JSON.stringify({
+          state: {
+            user: data.user,
+            token: data.token,
+            isAuthenticated: true,
+            permissionOverrides: {},
+          },
+          version: 0,
+        }));
+
         window.location.href = '/dashboard';
       } else {
         const error = await res.json();

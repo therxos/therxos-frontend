@@ -79,9 +79,10 @@ export default function FlaggedQueuePage() {
 
   const isDemo = user?.pharmacyName?.toLowerCase().includes('hero');
 
+  // Re-fetch when pharmacy changes (e.g., after impersonation)
   useEffect(() => {
-    fetchFlaggedOpportunities();
-  }, []);
+    if (user?.pharmacyId) fetchFlaggedOpportunities();
+  }, [user?.pharmacyId]);
 
   async function fetchFlaggedOpportunities() {
     setLoading(true);

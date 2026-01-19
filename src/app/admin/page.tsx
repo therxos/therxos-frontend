@@ -110,6 +110,7 @@ interface Trigger {
   default_gp_value: number | null;
   is_enabled: boolean;
   created_at: string;
+  bin_restrictions: string[] | null;
   bin_values: {
     bin: string;
     group?: string | null;
@@ -929,8 +930,16 @@ export default function SuperAdminPage() {
         localStorage.setItem('therxos_impersonating', 'true');
         localStorage.setItem('therxos_original_token', token || '');
 
-        // Update auth store
-        setAuth(data.user, data.token);
+        // Manually persist auth state to avoid race condition with Zustand persist
+        localStorage.setItem('therxos-auth', JSON.stringify({
+          state: {
+            user: data.user,
+            token: data.token,
+            isAuthenticated: true,
+            permissionOverrides: {},
+          },
+          version: 0,
+        }));
 
         window.location.href = '/dashboard';
       } else {
@@ -2523,6 +2532,7 @@ function TriggerEditModal({
     annual_fills: String(trigger?.annual_fills || 12),
     default_gp_value: String(trigger?.default_gp_value || ''),
     is_enabled: trigger?.is_enabled ?? true,
+    bin_restrictions: trigger?.bin_restrictions?.join(', ') || '',
   });
 
   // BIN/Group Pricing state
@@ -2800,6 +2810,7 @@ function TriggerEditModal({
       annual_fills: parseInt(form.annual_fills) || 12,
       default_gp_value: form.default_gp_value ? Number(form.default_gp_value) : null,
       is_enabled: form.is_enabled,
+      bin_restrictions: form.bin_restrictions ? form.bin_restrictions.split(',').map(s => s.trim()).filter(Boolean) : null,
     });
   };
 
@@ -2846,7 +2857,7 @@ function TriggerEditModal({
                   : 'text-slate-400 hover:text-white hover:bg-[#1e3a5f]'
               }`}
             >
-              BIN/Group Pricing ({binValues.length})
+              Reimbursement ({binValues.length})
             </button>
           </div>
 
@@ -3003,6 +3014,22 @@ function TriggerEditModal({
                 </label>
               </div>
 
+              <div>
+                <label className="block text-xs text-slate-400 mb-1">
+                  BIN Restrictions (comma-separated, leave empty for all BINs)
+                </label>
+                <input
+                  type="text"
+                  value={form.bin_restrictions}
+                  onChange={(e) => setForm({ ...form, bin_restrictions: e.target.value })}
+                  className="w-full px-3 py-2 bg-[#0a1628] border border-[#1e3a5f] rounded-lg text-white text-sm focus:outline-none focus:border-teal-500"
+                  placeholder="015581, 610502, 004336"
+                />
+                <p className="text-xs text-slate-500 mt-1">
+                  If set, this trigger will ONLY apply to patients with these insurance BINs.
+                </p>
+              </div>
+
               <div className="flex gap-3 pt-4">
                 <button
                   type="button"
@@ -3021,12 +3048,31 @@ function TriggerEditModal({
               </div>
             </form>
           ) : (
-            /* BIN/Group Pricing Tab */
+            /* Reimbursement Tab */
             <div className="space-y-4">
               {/* Header with actions */}
               <div className="flex items-center justify-between">
-                <div className="text-sm text-slate-400">
+                <div className="text-sm text-slate-400 flex items-center gap-2">
                   Default GP: <span className="text-white font-medium">${form.default_gp_value || 'Not set'}</span>
+                  {binValues.filter(bv => bv.gpValue && bv.gpValue > 0).length >= 1 && (
+                    <button
+                      onClick={() => {
+                        // Calculate average from top 3 verified BIN values
+                        const validBins = binValues
+                          .filter(bv => bv.gpValue && bv.gpValue > 0 && bv.coverageStatus !== 'excluded')
+                          .sort((a, b) => (b.gpValue || 0) - (a.gpValue || 0))
+                          .slice(0, 3);
+                        if (validBins.length > 0) {
+                          const avg = validBins.reduce((sum, bv) => sum + (bv.gpValue || 0), 0) / validBins.length;
+                          setForm({ ...form, default_gp_value: String(Math.round(avg * 100) / 100) });
+                        }
+                      }}
+                      className="text-xs px-2 py-0.5 bg-amber-500/20 text-amber-400 border border-amber-500/30 rounded hover:bg-amber-500/30"
+                      title="Set default to average of top 3 BIN values"
+                    >
+                      Use Top 3 Avg
+                    </button>
+                  )}
                 </div>
                 <div className="flex gap-2">
                   {trigger?.trigger_id && (

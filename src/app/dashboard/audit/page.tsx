@@ -69,12 +69,12 @@ export default function AuditRisksPage() {
     }
   }, [needsPharmacySelection]);
 
-  // Fetch flags when filter changes or pharmacy is selected
+  // Fetch flags when filter changes, pharmacy is selected, or user pharmacy changes
   useEffect(() => {
     if (!needsPharmacySelection || selectedPharmacyId) {
       fetchFlags();
     }
-  }, [filter, selectedPharmacyId, needsPharmacySelection]);
+  }, [filter, selectedPharmacyId, needsPharmacySelection, user?.pharmacyId]);
 
   const fetchPharmacies = async () => {
     try {

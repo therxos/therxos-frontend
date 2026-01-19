@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useAuthStore } from '@/store';
 import {
   TrendingUp,
   TrendingDown,
@@ -223,6 +224,7 @@ function BreakdownSection({
 }
 
 export default function AnalyticsPage() {
+  const user = useAuthStore((state) => state.user);
   const [analytics, setAnalytics] = useState<AnalyticsData | null>(null);
   const [prescriberStats, setPrescriberStats] = useState<PrescriberStatsData | null>(null);
   const [drugStats, setDrugStats] = useState<RecommendedDrugStatsData | null>(null);
@@ -265,10 +267,11 @@ export default function AnalyticsPage() {
     setLoading(false);
   }
 
+  // Re-fetch when pharmacy changes (e.g., after impersonation)
   useEffect(() => {
-    fetchAnalytics();
+    if (user?.pharmacyId) fetchAnalytics();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [user?.pharmacyId]);
 
   function toggleSection(section: string) {
     setExpandedSections((prev: Set<string>) => {
