@@ -40,6 +40,7 @@ import {
   FileDown,
   Send,
   CreditCard,
+  FlaskConical,
 } from 'lucide-react';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL;
@@ -275,6 +276,11 @@ export default function SuperAdminPage() {
     status: 'active' as 'onboarding' | 'active' | 'suspended' | 'demo',
   });
   const [savingEdit, setSavingEdit] = useState(false);
+
+  // Test email modal state
+  const [testEmailModal, setTestEmailModal] = useState<{ clientId: string; pharmacyName: string } | null>(null);
+  const [testEmailAddress, setTestEmailAddress] = useState('');
+  const [sendingTestEmail, setSendingTestEmail] = useState(false);
 
   useEffect(() => {
     // Wait for hydration before checking role
@@ -1042,6 +1048,42 @@ export default function SuperAdminPage() {
       alert('Failed to send welcome email');
     } finally {
       setSendingWelcomeEmail(null);
+    }
+  }
+
+  async function sendTestEmail() {
+    if (!testEmailModal || !testEmailAddress) return;
+
+    setSendingTestEmail(true);
+    try {
+      const token = localStorage.getItem('therxos_token');
+      const res = await fetch(`${API_URL}/api/admin/clients/${testEmailModal.clientId}/send-welcome-email`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          includeDocuments: true,
+          resetPassword: false,
+          testEmail: testEmailAddress,
+        }),
+      });
+
+      const data = await res.json();
+
+      if (data.success) {
+        alert(`Test email sent to ${testEmailAddress}!\n\nThis is a preview of what ${testEmailModal.pharmacyName} will receive.`);
+        setTestEmailModal(null);
+        setTestEmailAddress('');
+      } else {
+        alert('Failed to send test email: ' + (data.error || 'Unknown error'));
+      }
+    } catch (err) {
+      console.error('Send test email failed:', err);
+      alert('Failed to send test email');
+    } finally {
+      setSendingTestEmail(false);
     }
   }
 
@@ -2245,6 +2287,13 @@ export default function SuperAdminPage() {
                         <LogIn className="w-4 h-4" />
                       </button>
                       <button
+                        onClick={() => setTestEmailModal({ clientId: pharmacy.client_id, pharmacyName: pharmacy.pharmacy_name })}
+                        className="p-2 hover:bg-amber-500/20 rounded-lg text-slate-400 hover:text-amber-400 transition-colors"
+                        title="Send Test Email (preview without resetting password)"
+                      >
+                        <FlaskConical className="w-4 h-4" />
+                      </button>
+                      <button
                         onClick={() => sendWelcomeEmail(pharmacy.client_id, pharmacy.pharmacy_name, true)}
                         disabled={sendingWelcomeEmail === pharmacy.client_id}
                         className="p-2 hover:bg-blue-500/20 rounded-lg text-slate-400 hover:text-blue-400 transition-colors disabled:opacity-50"
@@ -2826,6 +2875,67 @@ export default function SuperAdminPage() {
                   className="flex-1 py-2 bg-teal-500 hover:bg-teal-600 text-white rounded-lg font-medium transition-colors disabled:opacity-50"
                 >
                   {savingEdit ? 'Saving...' : 'Save Changes'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Test Email Modal */}
+      {testEmailModal && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+          <div className="bg-[#0d2137] rounded-xl max-w-md w-full border border-[#1e3a5f]">
+            <div className="p-6 border-b border-[#1e3a5f] flex items-center justify-between">
+              <h2 className="text-xl font-semibold text-white">Send Test Email</h2>
+              <button onClick={() => { setTestEmailModal(null); setTestEmailAddress(''); }} className="text-slate-400 hover:text-white">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-4">
+              <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg">
+                <p className="text-sm text-amber-400">
+                  This will send a preview of the welcome email for <strong>{testEmailModal.pharmacyName}</strong> to your test address.
+                  No passwords will be reset.
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-sm text-slate-400 mb-1">Send test email to:</label>
+                <input
+                  type="email"
+                  value={testEmailAddress}
+                  onChange={(e) => setTestEmailAddress(e.target.value)}
+                  placeholder="your@email.com"
+                  className="w-full px-3 py-2 bg-[#0a1628] border border-[#1e3a5f] rounded-lg text-white focus:outline-none focus:border-teal-500"
+                  autoFocus
+                />
+              </div>
+
+              <div className="flex gap-3 pt-2">
+                <button
+                  onClick={() => { setTestEmailModal(null); setTestEmailAddress(''); }}
+                  className="flex-1 py-2 border border-[#1e3a5f] text-slate-400 rounded-lg hover:bg-[#1e3a5f] transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={sendTestEmail}
+                  disabled={sendingTestEmail || !testEmailAddress}
+                  className="flex-1 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-lg font-medium transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                  {sendingTestEmail ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Sending...
+                    </>
+                  ) : (
+                    <>
+                      <Send className="w-4 h-4" />
+                      Send Test
+                    </>
+                  )}
                 </button>
               </div>
             </div>
