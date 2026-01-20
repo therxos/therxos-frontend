@@ -388,7 +388,7 @@ export default function DashboardLayout({
           {/* Pharmacy info */}
           {!sidebarCollapsed && (
             <div className="pb-4 mb-6" style={{ borderBottom: '1px solid var(--navy-600)' }}>
-              <a 
+              <a
                 href={user.pharmacyName ? `https://${user.pharmacyName.toLowerCase().replace(/\s+/g, '')}.com` : '#'}
                 target="_blank"
                 rel="noopener noreferrer"
@@ -398,6 +398,7 @@ export default function DashboardLayout({
                 {user.pharmacyName}
                 <ExternalLink className="w-3 h-3" />
               </a>
+              <span className="text-[8px] text-slate-600 block mt-1">v2.1</span>
             </div>
           )}
           {sidebarCollapsed && <div className="pb-4 mb-6" style={{ borderBottom: '1px solid var(--navy-600)' }} />}
