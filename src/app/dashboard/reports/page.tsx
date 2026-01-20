@@ -17,6 +17,8 @@ import {
   PieChart,
   FileDown,
   Printer,
+  Users,
+  Trophy,
 } from 'lucide-react';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL;
@@ -60,6 +62,15 @@ interface MonthlyStats {
     week_start: string;
     actioned_count: number;
     actioned_value: number;
+  }[];
+  staff_performance: {
+    user_id: string;
+    name: string;
+    role: string;
+    actioned_count: number;
+    completed_count: number;
+    captured_value: number;
+    avg_value_per_capture: number;
   }[];
 }
 
@@ -586,6 +597,74 @@ export default function ReportsPage() {
                 </div>
               );
             })}
+          </div>
+        )}
+      </div>
+
+      {/* Staff Performance */}
+      <div className="mt-6 bg-[#0d2137] border border-[#1e3a5f] rounded-xl p-6">
+        <div className="flex items-center gap-2 mb-6">
+          <Trophy className="w-5 h-5 text-amber-400" />
+          <h2 className="text-lg font-semibold text-white">Staff Performance</h2>
+          <span className="text-xs text-slate-400 ml-2">(Opportunities completed this month)</span>
+        </div>
+
+        {(stats?.staff_performance || []).length === 0 ? (
+          <p className="text-slate-400 text-sm">No staff activity data available for this period</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className="text-left text-xs text-slate-400 uppercase border-b border-[#1e3a5f]">
+                  <th className="pb-3 pr-4">Staff Member</th>
+                  <th className="pb-3 pr-4">Role</th>
+                  <th className="pb-3 pr-4 text-right">Actioned</th>
+                  <th className="pb-3 pr-4 text-right">Completed</th>
+                  <th className="pb-3 pr-4 text-right">Value Captured</th>
+                  <th className="pb-3 text-right">Avg per Capture</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(stats?.staff_performance || []).map((staff, idx) => (
+                  <tr key={staff.user_id} className="border-b border-[#1e3a5f]/50">
+                    <td className="py-3 pr-4">
+                      <div className="flex items-center gap-2">
+                        {idx === 0 && (stats?.staff_performance?.length || 0) > 1 && (
+                          <Trophy className="w-4 h-4 text-amber-400" />
+                        )}
+                        <span className="text-white font-medium">{staff.name}</span>
+                      </div>
+                    </td>
+                    <td className="py-3 pr-4">
+                      <span className="px-2 py-1 bg-slate-700/50 text-slate-300 rounded text-xs capitalize">
+                        {staff.role}
+                      </span>
+                    </td>
+                    <td className="py-3 pr-4 text-right text-blue-400 font-medium">{staff.actioned_count}</td>
+                    <td className="py-3 pr-4 text-right text-emerald-400 font-medium">{staff.completed_count}</td>
+                    <td className="py-3 pr-4 text-right text-emerald-400 font-bold">{formatCurrency(staff.captured_value)}</td>
+                    <td className="py-3 text-right text-teal-400">{formatCurrency(staff.avg_value_per_capture)}</td>
+                  </tr>
+                ))}
+              </tbody>
+              {(stats?.staff_performance || []).length > 0 && (
+                <tfoot>
+                  <tr className="border-t border-[#1e3a5f]">
+                    <td colSpan={2} className="py-3 pr-4 text-slate-400 font-medium">Total</td>
+                    <td className="py-3 pr-4 text-right text-blue-400 font-bold">
+                      {(stats?.staff_performance || []).reduce((sum, s) => sum + s.actioned_count, 0)}
+                    </td>
+                    <td className="py-3 pr-4 text-right text-emerald-400 font-bold">
+                      {(stats?.staff_performance || []).reduce((sum, s) => sum + s.completed_count, 0)}
+                    </td>
+                    <td className="py-3 pr-4 text-right text-emerald-400 font-bold">
+                      {formatCurrency((stats?.staff_performance || []).reduce((sum, s) => sum + s.captured_value, 0))}
+                    </td>
+                    <td className="py-3 text-right text-teal-400">-</td>
+                  </tr>
+                </tfoot>
+              )}
+            </table>
           </div>
         )}
       </div>
