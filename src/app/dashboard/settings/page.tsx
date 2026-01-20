@@ -89,7 +89,7 @@ export default function SettingsPage() {
   const queryClient = useQueryClient();
   const user = useAuthStore((state) => state.user);
   const updateUser = useAuthStore((state) => state.updateUser);
-  const isOwnerOrAdmin = user?.role === 'super_admin' || user?.role === 'admin';
+  const isOwnerOrAdmin = user?.role === 'super_admin' || user?.role === 'admin' || user?.role === 'owner';
 
   const [activeTab, setActiveTab] = useState('profile');
   const [saved, setSaved] = useState(false);
@@ -741,7 +741,7 @@ export default function SettingsPage() {
                       {u.is_active ? 'Active' : 'Inactive'}
                     </span>
                     <select
-                      value={u.role}
+                      value={u.role === 'owner' ? 'admin' : u.role}
                       onChange={(e) => updateUserMutation.mutate({ userId: u.user_id, data: { role: e.target.value } })}
                       className="input py-1 px-2 text-sm"
                       disabled={u.user_id === user?.userId || u.role === 'super_admin'}
