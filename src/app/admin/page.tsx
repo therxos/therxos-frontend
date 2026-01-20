@@ -43,11 +43,12 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL;
 
 interface Pharmacy {
   pharmacy_id: string;
+  client_id: string;
   pharmacy_name: string;
   client_name: string;
   submitter_email: string;
   state: string;
-  status: string;
+  status: 'onboarding' | 'active' | 'suspended';
   created_at: string;
   patient_count: number;
   opportunity_count: number;
@@ -952,6 +953,36 @@ export default function SuperAdminPage() {
       console.error('Impersonation failed:', err);
       alert('Failed to switch pharmacy');
       setSwitchingPharmacy(false);
+    }
+  }
+
+  async function updateClientStatus(clientId: string, newStatus: 'onboarding' | 'active' | 'suspended', pharmacyName: string) {
+    if (!confirm(`Are you sure you want to change ${pharmacyName} status to "${newStatus}"?`)) return;
+
+    try {
+      const token = localStorage.getItem('therxos_token');
+      const res = await fetch(`${API_URL}/api/admin/clients/${clientId}/status`, {
+        method: 'PATCH',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ status: newStatus }),
+      });
+
+      if (res.ok) {
+        // Update local state
+        setPharmacies(prev => prev.map(p =>
+          p.client_id === clientId ? { ...p, status: newStatus } : p
+        ));
+        alert(`${pharmacyName} has been ${newStatus === 'active' ? 'activated' : 'updated to ' + newStatus}!`);
+      } else {
+        const error = await res.json();
+        alert('Failed to update status: ' + (error.error || 'Unknown error'));
+      }
+    } catch (err) {
+      console.error('Status update failed:', err);
+      alert('Failed to update client status');
     }
   }
 
@@ -1917,12 +1948,22 @@ export default function SuperAdminPage() {
                   </td>
                   <td className="px-6 py-4">
                     <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                      pharmacy.status === 'active' 
-                        ? 'bg-emerald-500/20 text-emerald-400' 
-                        : 'bg-slate-500/20 text-slate-400'
+                      pharmacy.status === 'active'
+                        ? 'bg-emerald-500/20 text-emerald-400'
+                        : pharmacy.status === 'onboarding'
+                        ? 'bg-amber-500/20 text-amber-400'
+                        : 'bg-red-500/20 text-red-400'
                     }`}>
                       {pharmacy.status}
                     </span>
+                    {pharmacy.status === 'onboarding' && (
+                      <button
+                        onClick={() => updateClientStatus(pharmacy.client_id, 'active', pharmacy.pharmacy_name)}
+                        className="ml-2 px-2 py-1 rounded text-xs font-medium bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30 transition-colors"
+                      >
+                        Activate
+                      </button>
+                    )}
                   </td>
                   <td className="px-6 py-4 text-center text-white">{pharmacy.user_count}</td>
                   <td className="px-6 py-4 text-center text-white">{pharmacy.patient_count?.toLocaleString()}</td>
