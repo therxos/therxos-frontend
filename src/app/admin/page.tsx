@@ -52,7 +52,7 @@ interface Pharmacy {
   client_name: string;
   submitter_email: string;
   state: string;
-  status: 'onboarding' | 'active' | 'suspended';
+  status: 'onboarding' | 'active' | 'suspended' | 'demo';
   created_at: string;
   patient_count: number;
   opportunity_count: number;
