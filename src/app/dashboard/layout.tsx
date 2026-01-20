@@ -1,5 +1,4 @@
 'use client';
-// Layout v2 - Sidebar reorganization: Main Menu > What's New > Settings/Upload > Support
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
@@ -398,7 +397,6 @@ export default function DashboardLayout({
                 {user.pharmacyName}
                 <ExternalLink className="w-3 h-3" />
               </a>
-              <span className="text-[8px] text-slate-600 block mt-1">v2.3</span>
             </div>
           )}
           {sidebarCollapsed && <div className="pb-4 mb-6" style={{ borderBottom: '1px solid var(--navy-600)' }} />}
