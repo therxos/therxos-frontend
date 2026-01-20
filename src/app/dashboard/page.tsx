@@ -253,10 +253,12 @@ export default function DashboardPage() {
   }, 0);
   const capturedMonthly = capturedAnnual / 12;
 
+  // Use backend counts for accurate totals (oppData is limited to 2000)
+  // Backend dashboardData has the true count of all opportunities
   const stats = {
-    pending_opportunities: pendingOpps,
-    pending_annual: pendingAnnual,
-    pending_monthly: pendingMonthly,
+    pending_opportunities: dashboardData?.pending_opportunities || pendingOpps,
+    pending_annual: dashboardData?.pending_margin ? dashboardData.pending_margin * 12 : pendingAnnual,
+    pending_monthly: dashboardData?.pending_margin || pendingMonthly,
     captured_annual: capturedAnnual,
     captured_monthly: capturedMonthly,
     total_patients: dashboardData?.total_patients || 0,
