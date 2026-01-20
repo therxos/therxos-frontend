@@ -413,7 +413,7 @@ function SidePanel({
 
   // Generate fax PDF for this opportunity
   async function generateFaxPDF() {
-    if (!opportunity) return;
+    if (!opportunity || !groupItem) return;
     setGenerating(true);
 
     try {
