@@ -42,6 +42,7 @@ export const PERMISSIONS = {
   // Analytics
   VIEW_ANALYTICS: 'view_analytics',
   VIEW_FINANCIAL_DATA: 'view_financial_data',
+  VIEW_LIMITED_FINANCIAL_DATA: 'view_limited_financial_data',
   
   // Data
   UPLOAD_DATA: 'upload_data',
@@ -190,6 +191,7 @@ export function usePermissions() {
     canViewPatientDetails: can(PERMISSIONS.VIEW_PATIENT_DETAILS),
     canViewAnalytics: can(PERMISSIONS.VIEW_ANALYTICS),
     canViewFinancialData: can(PERMISSIONS.VIEW_FINANCIAL_DATA),
+    canViewLimitedFinancialData: can(PERMISSIONS.VIEW_LIMITED_FINANCIAL_DATA),
     canUploadData: can(PERMISSIONS.UPLOAD_DATA),
     canViewAuditRisks: can(PERMISSIONS.VIEW_AUDIT_RISKS),
     canAccessAllPharmacies: can(PERMISSIONS.ACCESS_ALL_PHARMACIES),

@@ -394,7 +394,8 @@ function SidePanel({
   onClose,
   onStatusChange,
   isDemo,
-  showFinancials = true,
+  showFullFinancials = true,
+  showLimitedFinancials = false,
   pharmacy,
 }: {
   opportunity: Opportunity | null;
@@ -402,9 +403,11 @@ function SidePanel({
   onClose: () => void;
   onStatusChange: (id: string, status: string) => void;
   isDemo?: boolean;
-  showFinancials?: boolean;
+  showFullFinancials?: boolean;
+  showLimitedFinancials?: boolean;
   pharmacy?: Pharmacy | null;
 }) {
+  const showAnyFinancials = showFullFinancials || showLimitedFinancials;
   const [generating, setGenerating] = useState(false);
 
   if (!opportunity || !groupItem) return null;
@@ -737,20 +740,22 @@ function SidePanel({
         </div>
         
         {/* Value */}
-        {showFinancials && (
+        {showAnyFinancials && (
           <div>
             <div className="text-xs text-slate-500 uppercase tracking-wider mb-3">Value & Impact</div>
             <div className="bg-[#1e3a5f] rounded-lg p-4 grid grid-cols-2 gap-4">
-              <div>
+              <div className={showFullFinancials ? '' : 'col-span-2'}>
                 <div className="text-xs text-slate-500">Per Fill GP</div>
                 <div className="text-2xl font-bold text-emerald-400">{formatCurrency(Number(opportunity.potential_margin_gain) || 0)}</div>
                 <div className="text-xs text-slate-400 mt-1">First fill value</div>
               </div>
-              <div>
-                <div className="text-xs text-slate-500">Monthly Value</div>
-                <div className="text-2xl font-bold text-[#14b8a6]">{formatCurrency(getAnnualValue(opportunity) / 12)}</div>
-                <div className="text-xs text-slate-400 mt-1">{formatCurrency(getAnnualValue(opportunity))}/year</div>
-              </div>
+              {showFullFinancials && (
+                <div>
+                  <div className="text-xs text-slate-500">Monthly Value</div>
+                  <div className="text-2xl font-bold text-[#14b8a6]">{formatCurrency(getAnnualValue(opportunity) / 12)}</div>
+                  <div className="text-xs text-slate-400 mt-1">{formatCurrency(getAnnualValue(opportunity))}/year</div>
+                </div>
+              )}
               <div className="col-span-2 pt-2 border-t border-[#2d4a6f]">
                 <div className="text-xs text-slate-500 mb-1">Priority Score</div>
                 <div className="flex items-center gap-2">
@@ -838,8 +843,16 @@ function SidePanel({
 // Main Component
 export default function OpportunitiesPage() {
   const user = useAuthStore((state) => state.user);
-  const { canViewFinancialData } = usePermissions();
+  const { canViewFinancialData, canViewLimitedFinancialData } = usePermissions();
   const isDemo = user?.email === 'demo@therxos.com';
+
+  // Financial display levels:
+  // - canViewFinancialData: full access (annual values, totals, all amounts)
+  // - canViewLimitedFinancialData: single fill values only (no annual, no totals)
+  // - neither: no financial data shown
+  const showAnyFinancials = canViewFinancialData || canViewLimitedFinancialData;
+  const showFullFinancials = canViewFinancialData; // annual values, totals
+  const showLimitedFinancials = !canViewFinancialData && canViewLimitedFinancialData; // single fill only
   
   const [opportunities, setOpportunities] = useState<Opportunity[]>([]);
   const [groupedItems, setGroupedItems] = useState<GroupedItem[]>([]);
@@ -1315,7 +1328,7 @@ export default function OpportunitiesPage() {
               <h1 className="text-xl font-bold text-white">Opportunity Dashboard</h1>
               <div className="flex items-center gap-3 text-sm">
                 <span className="text-slate-300">{stats.total} opportunities</span>
-                {canViewFinancialData && (
+                {showFullFinancials && (
                   <>
                     <span className="text-slate-500">•</span>
                     <span className="text-emerald-400 font-medium">{formatCurrency(stats.total_annual)} annual</span>
@@ -1373,7 +1386,7 @@ export default function OpportunitiesPage() {
                 card.color === 'blue' ? 'text-blue-400' :
                 card.color === 'emerald' ? 'text-emerald-400' : 'text-green-400'
               }`}>{card.value}</div>
-              {canViewFinancialData && (
+              {showFullFinancials && (
                 <div className="flex gap-2 mt-3">
                   <span className="text-xs px-2 py-1 bg-[#1e3a5f] text-slate-300 rounded">
                     {formatShortCurrency(card.annual)}/yr
@@ -1516,7 +1529,7 @@ export default function OpportunitiesPage() {
           </button>
         </div>
         <div className="text-sm text-slate-400">
-          {filteredCount} opportunities{canViewFinancialData && <> • <span className="text-[#14b8a6] font-medium">{formatCurrency(filteredValue)}</span> annual value</>}
+          {filteredCount} opportunities{showFullFinancials && <> • <span className="text-[#14b8a6] font-medium">{formatCurrency(filteredValue)}</span> annual value</>}
         </div>
       </div>
 
@@ -1576,7 +1589,7 @@ export default function OpportunitiesPage() {
                   </div>
                   <div className="flex items-center gap-8">
                     <div className="text-right">
-                      {canViewFinancialData && (
+                      {showFullFinancials && (
                         <div className="text-[#14b8a6] font-semibold">{formatCurrency(groupTotal)}</div>
                       )}
                       <div className="text-xs text-slate-400">{group.opportunities.length} opps{approvedCount > 0 && ` • ${approvedCount} approved`}{completedCount > 0 && ` • ${completedCount} completed`}</div>
@@ -1596,9 +1609,11 @@ export default function OpportunitiesPage() {
                           )}
                           <th className="text-left text-xs font-semibold text-slate-400 uppercase tracking-wider px-5 py-3">Opportunity</th>
                           <th className="text-left text-xs font-semibold text-slate-400 uppercase tracking-wider px-5 py-3">Action</th>
-                          {canViewFinancialData && (
+                          {showAnyFinancials && (
                             <>
-                              <th className="text-left text-xs font-semibold text-slate-400 uppercase tracking-wider px-5 py-3">Per Fill / Annual</th>
+                              <th className="text-left text-xs font-semibold text-slate-400 uppercase tracking-wider px-5 py-3">
+                                {showFullFinancials ? 'Per Fill / Annual' : 'Per Fill'}
+                              </th>
                               <th className="text-left text-xs font-semibold text-slate-400 uppercase tracking-wider px-5 py-3">Avg Qty</th>
                             </>
                           )}
@@ -1630,12 +1645,14 @@ export default function OpportunitiesPage() {
                               <td className="px-5 py-3">
                                 <div className="text-sm text-slate-400 max-w-xs truncate">{action || rationale}</div>
                               </td>
-                              {canViewFinancialData && (
+                              {showAnyFinancials && (
                                 <>
                                   <td className="px-5 py-3">
                                     <div>
                                       <div className="text-emerald-400 font-semibold">{formatCurrency(Number(opp.potential_margin_gain) || 0)}</div>
-                                      <div className="text-xs text-slate-500">{formatCurrency(getAnnualValue(opp))}/yr</div>
+                                      {showFullFinancials && (
+                                        <div className="text-xs text-slate-500">{formatCurrency(getAnnualValue(opp))}/yr</div>
+                                      )}
                                     </div>
                                   </td>
                                   <td className="px-5 py-3">
@@ -1696,7 +1713,8 @@ export default function OpportunitiesPage() {
             onClose={() => { setSelectedOpp(null); setSelectedGroup(null); }}
             onStatusChange={updateStatus}
             isDemo={isDemo}
-            showFinancials={canViewFinancialData}
+            showFullFinancials={showFullFinancials}
+            showLimitedFinancials={showLimitedFinancials}
             pharmacy={pharmacy}
           />
         </>

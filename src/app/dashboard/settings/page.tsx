@@ -55,8 +55,13 @@ const ROLE_OPTIONS = [
 const CONFIGURABLE_PERMISSIONS = [
   {
     key: 'view_financial_data',
-    label: 'View Financial Data',
-    description: 'Show monthly/annual values and margin information on opportunities'
+    label: 'View Full Financial Data',
+    description: 'Show all financial values including annual totals and aggregate amounts'
+  },
+  {
+    key: 'view_limited_financial_data',
+    label: 'View Limited Financial Data',
+    description: 'Show only per-fill values (hides annual totals and large aggregate numbers)'
   },
   {
     key: 'view_analytics',

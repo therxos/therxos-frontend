@@ -110,7 +110,7 @@ function OpportunityTypeRow({
   annualValue,
   monthlyValue,
   onClick,
-  showFinancials = true,
+  showFullFinancials = true,
 }: {
   icon: any;
   iconClass: string;
@@ -120,7 +120,7 @@ function OpportunityTypeRow({
   annualValue: number;
   monthlyValue: number;
   onClick: () => void;
-  showFinancials?: boolean;
+  showFullFinancials?: boolean;
 }) {
   return (
     <div
@@ -137,7 +137,7 @@ function OpportunityTypeRow({
           <p className="text-xs" style={{ color: 'var(--slate-400)' }}>{count} opportunities</p>
         </div>
       </div>
-      {showFinancials && (
+      {showFullFinancials && (
         <div className="text-right">
           <p className="font-bold text-[var(--green-500)]">{formatCurrency(annualValue)}<span className="text-xs font-normal text-slate-400">/yr</span></p>
           <p className="text-xs" style={{ color: 'var(--slate-400)' }}>{formatShortCurrency(monthlyValue)}/mo</p>
@@ -150,8 +150,13 @@ function OpportunityTypeRow({
 export default function DashboardPage() {
   const router = useRouter();
   const user = useAuthStore((state) => state.user);
-  const { canViewFinancialData } = usePermissions();
+  const { canViewFinancialData, canViewLimitedFinancialData } = usePermissions();
   const isDemo = user?.email === 'demo@therxos.com';
+
+  // Financial display levels
+  const showAnyFinancials = canViewFinancialData || canViewLimitedFinancialData;
+  const showFullFinancials = canViewFinancialData;
+  const showLimitedFinancials = !canViewFinancialData && canViewLimitedFinancialData;
 
   // Fetch real data (demo account now has real superhero data)
   // Include pharmacyId in query keys so data refreshes when switching pharmacies
@@ -319,7 +324,7 @@ export default function DashboardPage() {
           <p className="text-xs" style={{ color: 'var(--slate-400)' }}>opportunities pending action</p>
         </div>
         
-        {canViewFinancialData && (
+        {showFullFinancials && (
           <div className="stat-card green p-6">
             <p className="label-text mb-2">Potential Margin</p>
             <p className="text-3xl font-bold mb-1" style={{ color: 'var(--green-500)' }}>
@@ -331,7 +336,7 @@ export default function DashboardPage() {
           </div>
         )}
 
-        {canViewFinancialData && (
+        {showFullFinancials && (
           <div className="stat-card amber p-6">
             <p className="label-text mb-2">Captured Value</p>
             <p className="text-3xl font-bold mb-1" style={{ color: 'var(--amber-500)' }}>
@@ -386,7 +391,7 @@ export default function DashboardPage() {
                     annualValue={annualValue}
                     monthlyValue={monthlyValue}
                     onClick={() => handleTypeClick(item.opportunity_type)}
-                    showFinancials={canViewFinancialData}
+                    showFullFinancials={showFullFinancials}
                   />
                 );
               })
@@ -480,7 +485,7 @@ export default function DashboardPage() {
                 <th className="text-left text-xs font-semibold uppercase tracking-wider px-6 py-4" style={{ color: 'var(--slate-400)', width: '200px' }}>Patient</th>
                 <th className="text-left text-xs font-semibold uppercase tracking-wider px-6 py-4" style={{ color: 'var(--slate-400)', width: '250px' }}>Conditions</th>
                 <th className="text-center text-xs font-semibold uppercase tracking-wider px-6 py-4" style={{ color: 'var(--slate-400)', width: '120px' }}>Opportunities</th>
-                {canViewFinancialData && (
+                {showFullFinancials && (
                   <th className="text-right text-xs font-semibold uppercase tracking-wider px-6 py-4" style={{ color: 'var(--slate-400)', width: '200px' }}>Potential Margin</th>
                 )}
                 <th className="text-right text-xs font-semibold uppercase tracking-wider px-6 py-4" style={{ color: 'var(--slate-400)', width: '120px' }}>Last Visit</th>
@@ -518,7 +523,7 @@ export default function DashboardPage() {
                     <td className="px-6 py-4 text-center">
                       <span className="font-semibold text-white">{patient.opportunity_count}</span>
                     </td>
-                    {canViewFinancialData && (
+                    {showFullFinancials && (
                       <td className="px-6 py-4 text-right">
                         <div className="text-emerald-400 font-semibold">{formatCurrency(patient.total_margin)}/yr</div>
                         <div className="text-xs" style={{ color: 'var(--slate-400)' }}>{formatShortCurrency(patient.total_margin / 12)}/mo</div>
@@ -531,7 +536,7 @@ export default function DashboardPage() {
                 ))
               ) : (
                 <tr>
-                  <td colSpan={canViewFinancialData ? 5 : 4} className="text-center py-12" style={{ color: 'var(--slate-400)' }}>
+                  <td colSpan={showFullFinancials ? 5 : 4} className="text-center py-12" style={{ color: 'var(--slate-400)' }}>
                     No patients with opportunities found
                   </td>
                 </tr>

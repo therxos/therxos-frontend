@@ -71,13 +71,17 @@ function getAnnualValue(opp: Opportunity): number {
 
 export default function FlaggedQueuePage() {
   const { user } = useAuthStore();
-  const { canViewFinancialData } = usePermissions();
+  const { canViewFinancialData, canViewLimitedFinancialData } = usePermissions();
   const [opportunities, setOpportunities] = useState<Opportunity[]>([]);
   const [loading, setLoading] = useState(true);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [processing, setProcessing] = useState<string | null>(null);
 
   const isDemo = user?.pharmacyName?.toLowerCase().includes('hero');
+
+  // Financial display levels
+  const showAnyFinancials = canViewFinancialData || canViewLimitedFinancialData;
+  const showFullFinancials = canViewFinancialData;
 
   // Re-fetch when pharmacy changes (e.g., after impersonation)
   useEffect(() => {
@@ -181,7 +185,7 @@ export default function FlaggedQueuePage() {
             </div>
           </div>
 
-          {canViewFinancialData && (
+          {showFullFinancials && (
             <div className="text-right">
               <p className="text-sm text-slate-400">Total Value</p>
               <p className="text-2xl font-bold text-purple-400">{formatCurrency(totalValue)}</p>
@@ -248,7 +252,7 @@ export default function FlaggedQueuePage() {
                 </div>
 
                 {/* Value */}
-                {canViewFinancialData && (
+                {showFullFinancials && (
                   <div className="text-right min-w-[100px]">
                     <p className="text-lg font-semibold text-purple-400">{formatCurrency(getAnnualValue(opp))}</p>
                     <p className="text-xs text-slate-400">annual</p>
