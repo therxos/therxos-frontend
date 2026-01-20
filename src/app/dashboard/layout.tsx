@@ -398,7 +398,7 @@ export default function DashboardLayout({
                 {user.pharmacyName}
                 <ExternalLink className="w-3 h-3" />
               </a>
-              <span className="text-[8px] text-slate-600 block mt-1">v2.2</span>
+              <span className="text-[8px] text-slate-600 block mt-1">v2.3</span>
             </div>
           )}
           {sidebarCollapsed && <div className="pb-4 mb-6" style={{ borderBottom: '1px solid var(--navy-600)' }} />}
@@ -445,7 +445,10 @@ export default function DashboardLayout({
             </nav>
           </div>
 
-          {/* What's New Section */}
+          {/* Spacer - pushes everything below to bottom */}
+          <div className="flex-1" />
+
+          {/* What's New Section - at bottom */}
           {!isOnboarding && changelogData?.updates?.length > 0 && (
             <div className="mb-4">
               {!sidebarCollapsed && (
@@ -504,7 +507,7 @@ export default function DashboardLayout({
             </div>
           )}
 
-          {/* Secondary Navigation (Settings, Data Upload) */}
+          {/* Settings - at bottom */}
           {secondaryNav.length > 0 && (
             <div className="mb-4">
               <nav className="space-y-1">
@@ -525,9 +528,6 @@ export default function DashboardLayout({
               </nav>
             </div>
           )}
-
-          {/* Spacer */}
-          <div className="flex-1" />
 
           {/* Support Navigation - at bottom */}
           <div className="mb-4">
