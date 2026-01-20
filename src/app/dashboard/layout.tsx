@@ -33,6 +33,8 @@ import {
   Flag,
   Sparkles,
   ChevronUp,
+  Send,
+  CheckSquare,
 } from 'lucide-react';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL;
@@ -310,17 +312,20 @@ export default function DashboardLayout({
     { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard, show: true },
     { name: 'Opportunities', href: '/dashboard/opportunities', icon: Lightbulb, badge: notSubmittedCount, show: true },
     { name: 'Flagged', href: '/dashboard/flagged', icon: Flag, badge: flaggedCount, badgeColor: 'purple', show: true },
+    { name: 'Fax Queue', href: '/dashboard/fax-queue', icon: Send, show: true },
+    { name: 'Approval Queue', href: '/dashboard/approvals', icon: CheckSquare, show: canManageSettings },
     { name: 'Audit Risks', href: '/dashboard/audit', icon: ShieldAlert, badge: 0, show: canViewAuditRisks },
     { name: 'Patients', href: '/dashboard/patients', icon: Users, show: canViewPatientDetails },
     { name: 'Analytics', href: '/dashboard/analytics', icon: BarChart3, show: canViewAnalytics && canViewFinancialData },
     { name: 'Reports', href: '/dashboard/reports', icon: FileText, show: canViewAnalytics && canViewFinancialData },
     { name: 'Data Upload', href: '/dashboard/upload', icon: Upload, show: canUploadData },
+    { name: 'Settings', href: '/dashboard/settings', icon: Settings, show: canManageSettings },
   ].filter(item => item.show);
 
-  const secondaryNav = isOnboarding ? [
+  // Support nav at bottom - separate from main navigation
+  const supportNav = isOnboarding ? [
     { name: 'Help & Contact', href: '/dashboard/help', icon: HelpCircle, show: true },
   ] : [
-    { name: 'Settings', href: '/dashboard/settings', icon: Settings, show: canManageSettings },
     { name: 'Suggestions', href: '/dashboard/suggestions', icon: MessageSquare, show: true },
     { name: 'Help & Contact', href: '/dashboard/help', icon: HelpCircle, show: true },
   ].filter(item => item.show);
@@ -434,31 +439,6 @@ export default function DashboardLayout({
             </nav>
           </div>
 
-          {/* Secondary Navigation */}
-          <div className="mb-6">
-            {!sidebarCollapsed && (
-              <p className="text-[10px] font-semibold uppercase tracking-wider mb-3 px-3" style={{ color: 'var(--slate-500)' }}>
-                Support
-              </p>
-            )}
-            <nav className="space-y-1">
-              {secondaryNav.map((item) => {
-                const isActive = pathname === item.href;
-                return (
-                  <Link
-                    key={item.name}
-                    href={item.href}
-                    className={`nav-item ${isActive ? 'active' : ''} ${sidebarCollapsed ? 'justify-center px-2' : ''}`}
-                    title={sidebarCollapsed ? item.name : undefined}
-                  >
-                    <item.icon className="w-5 h-5 flex-shrink-0" />
-                    {!sidebarCollapsed && <span>{item.name}</span>}
-                  </Link>
-                );
-              })}
-            </nav>
-          </div>
-
           {/* What's New Section */}
           {!isOnboarding && changelogData?.updates?.length > 0 && (
             <div className="mb-4">
@@ -520,6 +500,31 @@ export default function DashboardLayout({
 
           {/* Spacer */}
           <div className="flex-1" />
+
+          {/* Support Navigation - at bottom */}
+          <div className="mb-4">
+            {!sidebarCollapsed && (
+              <p className="text-[10px] font-semibold uppercase tracking-wider mb-3 px-3" style={{ color: 'var(--slate-500)' }}>
+                Support
+              </p>
+            )}
+            <nav className="space-y-1">
+              {supportNav.map((item) => {
+                const isActive = pathname === item.href;
+                return (
+                  <Link
+                    key={item.name}
+                    href={item.href}
+                    className={`nav-item ${isActive ? 'active' : ''} ${sidebarCollapsed ? 'justify-center px-2' : ''}`}
+                    title={sidebarCollapsed ? item.name : undefined}
+                  >
+                    <item.icon className="w-5 h-5 flex-shrink-0" />
+                    {!sidebarCollapsed && <span>{item.name}</span>}
+                  </Link>
+                );
+              })}
+            </nav>
+          </div>
 
           {/* Collapse toggle */}
           <button

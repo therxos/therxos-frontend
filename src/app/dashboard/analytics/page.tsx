@@ -17,6 +17,8 @@ import {
   Pill,
   Target,
   CheckCircle,
+  AlertTriangle,
+  Calendar,
 } from 'lucide-react';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://therxos-backend-production.up.railway.app';
@@ -71,6 +73,7 @@ interface PrescriberStatsData {
     annual_potential: number;
     avg_opportunity_value: number;
     actioned_count: number;
+    actioned_last_7_days: number;
     action_rate: number;
   }>;
   top_by_count: Array<{
@@ -293,7 +296,7 @@ export default function AnalyticsPage() {
   return (
     <div className="min-h-screen bg-[#0a1628] p-8">
       {/* Header */}
-      <div className="flex items-center justify-between mb-8">
+      <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold text-white">Analytics</h1>
           <p className="text-slate-400 mt-1">GP/Rx performance metrics and opportunity impact</p>
@@ -305,6 +308,14 @@ export default function AnalyticsPage() {
           <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
           Refresh
         </button>
+      </div>
+
+      {/* Timeframe Indicator */}
+      <div className="flex items-center gap-2 mb-6 px-4 py-2 bg-[#1e3a5f]/50 rounded-lg border border-[#1e3a5f] w-fit">
+        <Calendar className="w-4 h-4 text-[#14b8a6]" />
+        <span className="text-sm text-slate-300">
+          Data timeframe: <span className="text-white font-medium">Last 365 days</span>
+        </span>
       </div>
 
       {loading ? (
@@ -506,6 +517,7 @@ export default function AnalyticsPage() {
                           <th className="text-xs font-semibold text-slate-400 uppercase tracking-wider px-4 py-3 text-right">Monthly</th>
                           <th className="text-xs font-semibold text-slate-400 uppercase tracking-wider px-4 py-3 text-right">Annual</th>
                           <th className="text-xs font-semibold text-slate-400 uppercase tracking-wider px-4 py-3 text-right">Avg/Opp</th>
+                          <th className="text-xs font-semibold text-slate-400 uppercase tracking-wider px-4 py-3 text-right" title="Opportunities actioned for this prescriber in the last 7 days">Last 7 Days</th>
                           <th className="text-xs font-semibold text-slate-400 uppercase tracking-wider px-4 py-3 text-right">Action Rate</th>
                         </tr>
                       </thead>
@@ -518,6 +530,16 @@ export default function AnalyticsPage() {
                             <td className="px-4 py-3 text-sm text-slate-300 text-right">{formatCurrency(row.monthly_potential)}</td>
                             <td className="px-4 py-3 text-sm font-semibold text-emerald-400 text-right">{formatCurrency(row.annual_potential)}</td>
                             <td className="px-4 py-3 text-sm text-slate-300 text-right">{formatCurrency(row.avg_opportunity_value)}</td>
+                            <td className="px-4 py-3 text-sm text-right">
+                              <span className={`inline-flex items-center gap-1 ${
+                                row.actioned_last_7_days >= 10 ? 'text-red-400' :
+                                row.actioned_last_7_days >= 5 ? 'text-amber-400' :
+                                row.actioned_last_7_days > 0 ? 'text-emerald-400' : 'text-slate-500'
+                              }`}>
+                                {row.actioned_last_7_days >= 10 && <AlertTriangle className="w-3 h-3" />}
+                                {formatNumber(row.actioned_last_7_days)}
+                              </span>
+                            </td>
                             <td className="px-4 py-3 text-sm text-right">
                               <span className={`inline-flex items-center gap-1 ${row.action_rate > 0 ? 'text-emerald-400' : 'text-slate-500'}`}>
                                 {row.action_rate > 0 && <CheckCircle className="w-3 h-3" />}
