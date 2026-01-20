@@ -1,4 +1,5 @@
 'use client';
+// Layout v2 - Sidebar reorganization: Main Menu > What's New > Settings/Upload > Support
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
