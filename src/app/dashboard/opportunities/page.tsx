@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useAuthStore } from '@/store';
 import { usePermissions } from '@/hooks/usePermissions';
+import { jsPDF } from 'jspdf';
 import {
   Search,
   ChevronDown,
@@ -19,6 +20,19 @@ import {
   Download,
   FileDown,
 } from 'lucide-react';
+
+const API_URL = process.env.NEXT_PUBLIC_API_URL;
+
+interface Pharmacy {
+  pharmacy_name: string;
+  phone?: string;
+  fax?: string;
+  address?: string;
+  city?: string;
+  state?: string;
+  zip?: string;
+  npi?: string;
+}
 
 // Types
 interface Opportunity {
@@ -381,6 +395,7 @@ function SidePanel({
   onStatusChange,
   isDemo,
   showFinancials = true,
+  pharmacy,
 }: {
   opportunity: Opportunity | null;
   groupItem: GroupedItem | null;
@@ -388,10 +403,243 @@ function SidePanel({
   onStatusChange: (id: string, status: string) => void;
   isDemo?: boolean;
   showFinancials?: boolean;
+  pharmacy?: Pharmacy | null;
 }) {
+  const [generating, setGenerating] = useState(false);
+
   if (!opportunity || !groupItem) return null;
-  
+
   const [rationale, action] = (opportunity.clinical_rationale || '').split('\n\nAction: ');
+
+  // Generate fax PDF for this opportunity
+  async function generateFaxPDF() {
+    if (!opportunity) return;
+    setGenerating(true);
+
+    try {
+      const doc = new jsPDF({
+        orientation: 'portrait',
+        unit: 'pt',
+        format: 'letter',
+      });
+
+      const pageWidth = doc.internal.pageSize.getWidth();
+      const pageHeight = doc.internal.pageSize.getHeight();
+      const margin = 50;
+      const contentWidth = pageWidth - (margin * 2);
+
+      let y = margin;
+
+      // Header - Pharmacy Info
+      doc.setFillColor(13, 148, 136); // Teal
+      doc.rect(0, 0, pageWidth, 80, 'F');
+
+      doc.setTextColor(255, 255, 255);
+      doc.setFontSize(24);
+      doc.setFont('helvetica', 'bold');
+      doc.text('TheRxOS', margin, 35);
+
+      doc.setFontSize(10);
+      doc.setFont('helvetica', 'normal');
+      doc.text('Clinical Opportunity Notification', margin, 55);
+
+      // Pharmacy details in header
+      if (pharmacy) {
+        doc.setFontSize(9);
+        const pharmInfo = [
+          pharmacy.pharmacy_name,
+          pharmacy.phone ? `Phone: ${pharmacy.phone}` : null,
+          pharmacy.fax ? `Fax: ${pharmacy.fax}` : null,
+        ].filter(Boolean).join(' | ');
+        doc.text(pharmInfo, pageWidth - margin, 35, { align: 'right' });
+
+        if (pharmacy.address) {
+          const address = `${pharmacy.address}, ${pharmacy.city}, ${pharmacy.state} ${pharmacy.zip}`;
+          doc.text(address, pageWidth - margin, 50, { align: 'right' });
+        }
+        if (pharmacy.npi) {
+          doc.text(`NPI: ${pharmacy.npi}`, pageWidth - margin, 65, { align: 'right' });
+        }
+      }
+
+      y = 100;
+
+      // Date
+      doc.setTextColor(100, 100, 100);
+      doc.setFontSize(10);
+      doc.text(`Date: ${new Date().toLocaleDateString('en-US', {
+        weekday: 'long',
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric'
+      })}`, margin, y);
+      y += 25;
+
+      // To: Prescriber Info
+      doc.setTextColor(0, 0, 0);
+      doc.setFontSize(12);
+      doc.setFont('helvetica', 'bold');
+      doc.text('TO:', margin, y);
+      doc.setFont('helvetica', 'normal');
+      doc.text(opportunity.prescriber_name || 'Prescriber', margin + 30, y);
+      y += 25;
+
+      // Intro text
+      doc.setTextColor(0, 0, 0);
+      doc.setFontSize(10);
+      const introText = `We have identified the following clinical opportunity for your patient. This recommendation is based on formulary optimization, therapeutic guidelines, and potential cost savings. Please review and consider the suggested change.`;
+      const introLines = doc.splitTextToSize(introText, contentWidth);
+      doc.text(introLines, margin, y);
+      y += (introLines.length * 12) + 20;
+
+      // Patient header box
+      doc.setFillColor(240, 249, 255);
+      doc.setDrawColor(14, 165, 233);
+      doc.roundedRect(margin, y, contentWidth, 45, 3, 3, 'FD');
+
+      const patientName = groupItem.first_name && groupItem.last_name
+        ? `${groupItem.first_name} ${groupItem.last_name}`
+        : 'Patient';
+
+      doc.setTextColor(0, 0, 0);
+      doc.setFontSize(11);
+      doc.setFont('helvetica', 'bold');
+      doc.text(`Patient: ${patientName}`, margin + 10, y + 18);
+
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(9);
+      doc.setTextColor(100, 100, 100);
+      const dob = groupItem.date_of_birth
+        ? new Date(groupItem.date_of_birth).toLocaleDateString('en-US')
+        : 'N/A';
+      doc.text(`DOB: ${dob}`, margin + 10, y + 32);
+
+      // Insurance info
+      const insuranceInfo = [
+        opportunity.insurance_bin ? `BIN: ${opportunity.insurance_bin}` : null,
+        opportunity.insurance_group ? `Group: ${opportunity.insurance_group}` : null,
+        opportunity.insurance_pcn ? `PCN: ${opportunity.insurance_pcn}` : null,
+      ].filter(Boolean).join(' | ');
+      if (insuranceInfo) {
+        doc.text(insuranceInfo, pageWidth - margin - 10, y + 25, { align: 'right' });
+      }
+
+      y += 55;
+
+      // Opportunity type badge
+      const oppType = (opportunity.opportunity_type || 'opportunity')
+        .replace(/_/g, ' ')
+        .replace(/\b\w/g, l => l.toUpperCase());
+      doc.setFillColor(147, 51, 234);
+      doc.roundedRect(margin, y, 130, 18, 2, 2, 'F');
+      doc.setTextColor(255, 255, 255);
+      doc.setFontSize(8);
+      doc.text(oppType, margin + 5, y + 12);
+
+      y += 28;
+
+      // Current -> Recommended
+      doc.setTextColor(0, 0, 0);
+      doc.setFontSize(10);
+      doc.setFont('helvetica', 'bold');
+      doc.text('Current Medication:', margin, y);
+      doc.setFont('helvetica', 'normal');
+      doc.text(opportunity.current_drug_name || 'N/A', margin + 110, y);
+      y += 18;
+
+      doc.setFont('helvetica', 'bold');
+      doc.text('Recommended:', margin, y);
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(13, 148, 136);
+      doc.text(opportunity.recommended_drug_name || 'N/A', margin + 110, y);
+      y += 25;
+
+      // Clinical Rationale
+      doc.setTextColor(0, 0, 0);
+      doc.setFont('helvetica', 'bold');
+      doc.text('Clinical Rationale:', margin, y);
+      y += 15;
+
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(9);
+      const rationaleText = rationale || 'Formulary optimization opportunity.';
+      const rationaleLines = doc.splitTextToSize(rationaleText, contentWidth - 10);
+      doc.text(rationaleLines, margin + 10, y);
+      y += (rationaleLines.length * 12) + 20;
+
+      // Response section
+      y += 20;
+      doc.setDrawColor(13, 148, 136);
+      doc.setLineWidth(2);
+      doc.line(margin, y, pageWidth - margin, y);
+      y += 25;
+
+      doc.setTextColor(0, 0, 0);
+      doc.setFontSize(12);
+      doc.setFont('helvetica', 'bold');
+      doc.text('PRESCRIBER RESPONSE', margin, y);
+      y += 25;
+
+      doc.setFontSize(10);
+      doc.setFont('helvetica', 'normal');
+
+      // Checkboxes
+      const checkboxY = y;
+      doc.rect(margin, checkboxY, 12, 12);
+      doc.text('APPROVED - Please proceed with the recommended change', margin + 20, checkboxY + 9);
+
+      doc.rect(margin, checkboxY + 22, 12, 12);
+      doc.text('DENIED - Please continue current therapy', margin + 20, checkboxY + 31);
+
+      doc.rect(margin, checkboxY + 44, 12, 12);
+      doc.text('CONTACT ME - Please call to discuss', margin + 20, checkboxY + 53);
+
+      y = checkboxY + 80;
+
+      // Comments and signature
+      doc.text('Comments: _______________________________________________', margin, y);
+      y += 35;
+      doc.text('Prescriber Signature: ___________________________ Date: ___________', margin, y);
+      y += 25;
+
+      // Footer
+      doc.setFontSize(8);
+      doc.setTextColor(100, 100, 100);
+      doc.text('Please fax this form back to the pharmacy. Thank you for your partnership in patient care.', margin, y);
+
+      // Save the PDF
+      const prescriberSlug = (opportunity.prescriber_name || 'prescriber').replace(/[^a-z0-9]/gi, '_');
+      const patientSlug = patientName.replace(/[^a-z0-9]/gi, '_');
+      const filename = `fax_${patientSlug}_${prescriberSlug}_${new Date().toISOString().split('T')[0]}.pdf`;
+      doc.save(filename);
+
+      // Log to fax history (localStorage)
+      try {
+        const faxHistory = JSON.parse(localStorage.getItem('therxos_fax_history') || '[]');
+        faxHistory.unshift({
+          id: `fax_${Date.now()}`,
+          generated_at: new Date().toISOString(),
+          prescriber_name: opportunity.prescriber_name || 'Unknown Prescriber',
+          patient_name: patientName,
+          patient_id: opportunity.patient_id,
+          opportunity_ids: [opportunity.opportunity_id],
+          opportunity_count: 1,
+          status: 'pending',
+          days_since_generated: 0,
+        });
+        // Keep last 100 faxes
+        localStorage.setItem('therxos_fax_history', JSON.stringify(faxHistory.slice(0, 100)));
+      } catch (e) {
+        console.error('Failed to save fax history:', e);
+      }
+
+    } catch (e) {
+      console.error('PDF generation failed:', e);
+      alert('Failed to generate PDF. Please try again.');
+    } finally {
+      setGenerating(false);
+    }
+  }
   
   return (
     <aside className="fixed inset-y-0 right-0 w-[420px] bg-[#0d2137] border-l border-[#1e3a5f] shadow-2xl z-50 flex flex-col">
@@ -534,13 +782,26 @@ function SidePanel({
       
       {/* Footer Actions */}
       <div className="p-4 border-t border-[#1e3a5f] space-y-2">
-        <button className="w-full py-2.5 bg-red-500 hover:bg-red-600 text-white rounded-lg font-medium flex items-center justify-center gap-2">
-          <FileText className="w-4 h-4" />
-          Generate Fax
+        <button
+          onClick={generateFaxPDF}
+          disabled={generating}
+          className="w-full py-2.5 bg-red-500 hover:bg-red-600 disabled:bg-red-500/50 text-white rounded-lg font-medium flex items-center justify-center gap-2"
+        >
+          {generating ? (
+            <>
+              <RefreshCw className="w-4 h-4 animate-spin" />
+              Generating...
+            </>
+          ) : (
+            <>
+              <FileText className="w-4 h-4" />
+              Generate Fax PDF
+            </>
+          )}
         </button>
-        <button className="w-full py-2.5 bg-[#14b8a6] hover:bg-[#0d9488] text-[#0a1628] rounded-lg font-medium flex items-center justify-center gap-2">
+        <button className="w-full py-2.5 bg-[#14b8a6] hover:bg-[#0d9488] text-[#0a1628] rounded-lg font-medium flex items-center justify-center gap-2 opacity-50 cursor-not-allowed" disabled>
           <Send className="w-4 h-4" />
-          Send Now
+          Send Now (Coming Soon)
         </button>
         <button
           onClick={() => onStatusChange(opportunity.opportunity_id, 'Submitted')}
@@ -583,6 +844,26 @@ export default function OpportunitiesPage() {
   const [notesModal, setNotesModal] = useState<Opportunity | null>(null);
   const [lastSync, setLastSync] = useState(new Date());
   const [prescriberWarning, setPrescriberWarning] = useState<{ data: PrescriberWarningData; pendingUpdate: { id: string; status: string } } | null>(null);
+  const [pharmacy, setPharmacy] = useState<Pharmacy | null>(null);
+
+  // Fetch pharmacy info
+  useEffect(() => {
+    async function fetchPharmacy() {
+      try {
+        const token = localStorage.getItem('therxos_token');
+        const res = await fetch(`${API_URL}/api/settings/pharmacy`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (res.ok) {
+          const data = await res.json();
+          setPharmacy(data.pharmacy || data);
+        }
+      } catch (e) {
+        console.error('Failed to fetch pharmacy:', e);
+      }
+    }
+    if (user?.pharmacyId) fetchPharmacy();
+  }, [user?.pharmacyId]);
 
   // Check URL for type/filter/search params
   useEffect(() => {
@@ -1399,6 +1680,7 @@ export default function OpportunitiesPage() {
             onStatusChange={updateStatus}
             isDemo={isDemo}
             showFinancials={canViewFinancialData}
+            pharmacy={pharmacy}
           />
         </>
       )}
