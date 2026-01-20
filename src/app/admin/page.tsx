@@ -37,6 +37,9 @@ import {
   X,
   ScanLine,
   Loader2,
+  FileDown,
+  Send,
+  CreditCard,
 } from 'lucide-react';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL;
@@ -250,6 +253,11 @@ export default function SuperAdminPage() {
     adminLastName: '',
     pmsSystem: '',
   });
+
+  // Onboarding actions state
+  const [sendingWelcomeEmail, setSendingWelcomeEmail] = useState<string | null>(null);
+  const [downloadingDocs, setDownloadingDocs] = useState<string | null>(null);
+  const [creatingCheckout, setCreatingCheckout] = useState<string | null>(null);
 
   useEffect(() => {
     // Wait for hydration before checking role
@@ -983,6 +991,122 @@ export default function SuperAdminPage() {
     } catch (err) {
       console.error('Status update failed:', err);
       alert('Failed to update client status');
+    }
+  }
+
+  async function sendWelcomeEmail(clientId: string, pharmacyName: string, resetPassword = false) {
+    if (!confirm(`Send welcome email to ${pharmacyName}?${resetPassword ? ' This will reset their password.' : ''}`)) return;
+
+    setSendingWelcomeEmail(clientId);
+    try {
+      const token = localStorage.getItem('therxos_token');
+      const res = await fetch(`${API_URL}/api/admin/clients/${clientId}/send-welcome-email`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ includeDocuments: true, resetPassword }),
+      });
+
+      const data = await res.json();
+
+      if (data.success) {
+        alert(`Welcome email sent to ${pharmacyName}!`);
+      } else if (data.tempPassword) {
+        // Email failed but we have temp password
+        alert(`Email failed, but here's the temp password: ${data.tempPassword}\n\nPlease send manually.`);
+        navigator.clipboard.writeText(data.tempPassword);
+      } else {
+        alert('Failed to send email: ' + (data.error || 'Unknown error'));
+      }
+    } catch (err) {
+      console.error('Send email failed:', err);
+      alert('Failed to send welcome email');
+    } finally {
+      setSendingWelcomeEmail(null);
+    }
+  }
+
+  async function downloadOnboardingDocs(clientId: string, pharmacyName: string) {
+    setDownloadingDocs(clientId);
+    try {
+      const token = localStorage.getItem('therxos_token');
+      const res = await fetch(`${API_URL}/api/admin/clients/${clientId}/generate-documents`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      });
+
+      const data = await res.json();
+
+      if (data.success && data.documents) {
+        // Download BAA
+        const baaBlob = new Blob([Uint8Array.from(atob(data.documents.baa.base64), c => c.charCodeAt(0))], {
+          type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+        });
+        const baaUrl = URL.createObjectURL(baaBlob);
+        const baaLink = document.createElement('a');
+        baaLink.href = baaUrl;
+        baaLink.download = data.documents.baa.filename;
+        baaLink.click();
+        URL.revokeObjectURL(baaUrl);
+
+        // Download Service Agreement
+        setTimeout(() => {
+          const saBlob = new Blob([Uint8Array.from(atob(data.documents.serviceAgreement.base64), c => c.charCodeAt(0))], {
+            type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+          });
+          const saUrl = URL.createObjectURL(saBlob);
+          const saLink = document.createElement('a');
+          saLink.href = saUrl;
+          saLink.download = data.documents.serviceAgreement.filename;
+          saLink.click();
+          URL.revokeObjectURL(saUrl);
+        }, 500);
+
+        alert(`Downloaded BAA and Service Agreement for ${pharmacyName}`);
+      } else {
+        alert('Failed to generate documents: ' + (data.error || 'Unknown error'));
+      }
+    } catch (err) {
+      console.error('Download docs failed:', err);
+      alert('Failed to download documents');
+    } finally {
+      setDownloadingDocs(null);
+    }
+  }
+
+  async function createStripeCheckout(clientId: string, pharmacyName: string) {
+    setCreatingCheckout(clientId);
+    try {
+      const token = localStorage.getItem('therxos_token');
+      const res = await fetch(`${API_URL}/api/admin/clients/${clientId}/create-checkout`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      });
+
+      const data = await res.json();
+
+      if (data.success && data.checkoutUrl) {
+        // Copy to clipboard and offer to open
+        navigator.clipboard.writeText(data.checkoutUrl);
+        if (confirm(`Stripe checkout link copied to clipboard!\n\nOpen in new tab?`)) {
+          window.open(data.checkoutUrl, '_blank');
+        }
+      } else {
+        alert('Failed to create checkout: ' + (data.error || 'Unknown error'));
+      }
+    } catch (err) {
+      console.error('Create checkout failed:', err);
+      alert('Failed to create Stripe checkout');
+    } finally {
+      setCreatingCheckout(null);
     }
   }
 
@@ -1972,7 +2096,7 @@ export default function SuperAdminPage() {
                   <td className="px-6 py-4 text-right text-amber-400">{formatCurrency(pharmacy.captured_value)}</td>
                   <td className="px-6 py-4 text-center text-slate-400 text-sm">{formatDate(pharmacy.last_activity)}</td>
                   <td className="px-6 py-4">
-                    <div className="flex items-center justify-center gap-2">
+                    <div className="flex items-center justify-center gap-1">
                       <button
                         onClick={() => setSelectedPharmacy(pharmacy)}
                         className="p-2 hover:bg-[#1e3a5f] rounded-lg text-slate-400 hover:text-white transition-colors"
@@ -1986,6 +2110,42 @@ export default function SuperAdminPage() {
                         title="Login as Admin"
                       >
                         <LogIn className="w-4 h-4" />
+                      </button>
+                      <button
+                        onClick={() => sendWelcomeEmail(pharmacy.client_id, pharmacy.pharmacy_name, true)}
+                        disabled={sendingWelcomeEmail === pharmacy.client_id}
+                        className="p-2 hover:bg-blue-500/20 rounded-lg text-slate-400 hover:text-blue-400 transition-colors disabled:opacity-50"
+                        title="Send Welcome Email (reset password)"
+                      >
+                        {sendingWelcomeEmail === pharmacy.client_id ? (
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                        ) : (
+                          <Send className="w-4 h-4" />
+                        )}
+                      </button>
+                      <button
+                        onClick={() => downloadOnboardingDocs(pharmacy.client_id, pharmacy.pharmacy_name)}
+                        disabled={downloadingDocs === pharmacy.client_id}
+                        className="p-2 hover:bg-purple-500/20 rounded-lg text-slate-400 hover:text-purple-400 transition-colors disabled:opacity-50"
+                        title="Download BAA & Agreement"
+                      >
+                        {downloadingDocs === pharmacy.client_id ? (
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                        ) : (
+                          <FileDown className="w-4 h-4" />
+                        )}
+                      </button>
+                      <button
+                        onClick={() => createStripeCheckout(pharmacy.client_id, pharmacy.pharmacy_name)}
+                        disabled={creatingCheckout === pharmacy.client_id}
+                        className="p-2 hover:bg-green-500/20 rounded-lg text-slate-400 hover:text-green-400 transition-colors disabled:opacity-50"
+                        title="Create Stripe Checkout Link"
+                      >
+                        {creatingCheckout === pharmacy.client_id ? (
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                        ) : (
+                          <CreditCard className="w-4 h-4" />
+                        )}
                       </button>
                     </div>
                   </td>
