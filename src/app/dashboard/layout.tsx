@@ -31,6 +31,8 @@ import {
   Building2,
   Shield,
   Flag,
+  Sparkles,
+  ChevronUp,
 } from 'lucide-react';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL;
@@ -56,6 +58,8 @@ export default function DashboardLayout({
   const [switchingPharmacy, setSwitchingPharmacy] = useState(false);
   const [isImpersonating, setIsImpersonating] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [whatsNewOpen, setWhatsNewOpen] = useState(false);
+  const [changelogData, setChangelogData] = useState<any>(null);
 
   // Handle search submission - goes to opportunities page
   const handleSearch = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -72,6 +76,27 @@ export default function DashboardLayout({
   useEffect(() => {
     setIsImpersonating(localStorage.getItem('therxos_impersonating') === 'true');
   }, []);
+
+  // Fetch changelog data for "What's New" section
+  useEffect(() => {
+    async function fetchChangelog() {
+      try {
+        const token = localStorage.getItem('therxos_token');
+        const res = await fetch(`${API_URL}/api/changelog?limit=3`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (res.ok) {
+          const data = await res.json();
+          setChangelogData(data);
+        }
+      } catch (err) {
+        console.error('Failed to fetch changelog:', err);
+      }
+    }
+    if (isAuthenticated) {
+      fetchChangelog();
+    }
+  }, [isAuthenticated]);
 
   // Redirect onboarding clients to upload page if they try to access other pages
   useEffect(() => {
@@ -433,6 +458,65 @@ export default function DashboardLayout({
               })}
             </nav>
           </div>
+
+          {/* What's New Section */}
+          {!isOnboarding && changelogData?.updates?.length > 0 && (
+            <div className="mb-4">
+              {!sidebarCollapsed && (
+                <button
+                  onClick={() => setWhatsNewOpen(!whatsNewOpen)}
+                  className="flex items-center justify-between w-full px-3 py-2 text-left rounded-lg hover:bg-[var(--navy-700)] transition-colors"
+                >
+                  <div className="flex items-center gap-2">
+                    <Sparkles className="w-4 h-4" style={{ color: 'var(--teal-500)' }} />
+                    <span className="text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--slate-400)' }}>
+                      What&apos;s New
+                    </span>
+                  </div>
+                  {whatsNewOpen ? (
+                    <ChevronUp className="w-4 h-4" style={{ color: 'var(--slate-500)' }} />
+                  ) : (
+                    <ChevronDown className="w-4 h-4" style={{ color: 'var(--slate-500)' }} />
+                  )}
+                </button>
+              )}
+              {sidebarCollapsed && (
+                <button
+                  onClick={() => setWhatsNewOpen(!whatsNewOpen)}
+                  className="flex items-center justify-center w-full p-2 rounded-lg hover:bg-[var(--navy-700)] transition-colors"
+                  title="What's New"
+                >
+                  <Sparkles className="w-5 h-5" style={{ color: 'var(--teal-500)' }} />
+                </button>
+              )}
+              {whatsNewOpen && !sidebarCollapsed && (
+                <div className="mt-2 px-3 space-y-3">
+                  {changelogData.updates.slice(0, 2).map((update: any, idx: number) => (
+                    <div key={idx} className="text-xs">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="font-semibold" style={{ color: 'var(--teal-400)' }}>
+                          v{update.version}
+                        </span>
+                        <span style={{ color: 'var(--slate-500)' }}>{update.date}</span>
+                      </div>
+                      {update.entries.map((entry: any, entryIdx: number) => (
+                        <div key={entryIdx} className="flex items-start gap-2 mb-1">
+                          <span
+                            className="inline-block w-2 h-2 rounded-full mt-1 flex-shrink-0"
+                            style={{
+                              background: entry.type === 'feature' ? 'var(--teal-500)' :
+                                         entry.type === 'improvement' ? 'var(--blue-500)' : 'var(--amber-500)'
+                            }}
+                          />
+                          <span style={{ color: 'var(--slate-300)' }}>{entry.title}</span>
+                        </div>
+                      ))}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Spacer */}
           <div className="flex-1" />
