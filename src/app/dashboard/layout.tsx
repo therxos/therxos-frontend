@@ -66,10 +66,19 @@ export default function DashboardLayout({
   };
 
   const isSuperAdmin = user?.role === 'super_admin';
+  const isOnboarding = user?.clientStatus === 'onboarding';
+
   // Check impersonation status after hydration
   useEffect(() => {
     setIsImpersonating(localStorage.getItem('therxos_impersonating') === 'true');
   }, []);
+
+  // Redirect onboarding clients to upload page if they try to access other pages
+  useEffect(() => {
+    if (isOnboarding && pathname !== '/dashboard/upload' && pathname !== '/dashboard/help') {
+      router.replace('/dashboard/upload');
+    }
+  }, [isOnboarding, pathname, router]);
 
   // Get user permissions - MUST be called before any early returns (React hooks rule)
   const {
@@ -269,7 +278,10 @@ export default function DashboardLayout({
   };
 
   // Navigation items with permission checks
-  const navigation = [
+  // Onboarding clients only see Upload
+  const navigation = isOnboarding ? [
+    { name: 'Data Upload', href: '/dashboard/upload', icon: Upload, show: true },
+  ] : [
     { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard, show: true },
     { name: 'Opportunities', href: '/dashboard/opportunities', icon: Lightbulb, badge: notSubmittedCount, show: true },
     { name: 'Flagged', href: '/dashboard/flagged', icon: Flag, badge: flaggedCount, badgeColor: 'purple', show: true },
@@ -280,7 +292,9 @@ export default function DashboardLayout({
     { name: 'Data Upload', href: '/dashboard/upload', icon: Upload, show: canUploadData },
   ].filter(item => item.show);
 
-  const secondaryNav = [
+  const secondaryNav = isOnboarding ? [
+    { name: 'Help & Contact', href: '/dashboard/help', icon: HelpCircle, show: true },
+  ] : [
     { name: 'Settings', href: '/dashboard/settings', icon: Settings, show: canManageSettings },
     { name: 'Suggestions', href: '/dashboard/suggestions', icon: MessageSquare, show: true },
     { name: 'Help & Contact', href: '/dashboard/help', icon: HelpCircle, show: true },
@@ -666,6 +680,20 @@ export default function DashboardLayout({
 
         {/* Page content */}
         <main className="p-4 lg:p-8">
+          {isOnboarding && (
+            <div className="mb-6 p-4 rounded-lg border" style={{ background: 'var(--teal-500)/10', borderColor: 'var(--teal-500)' }}>
+              <div className="flex items-start gap-3">
+                <Upload className="w-5 h-5 mt-0.5" style={{ color: 'var(--teal-500)' }} />
+                <div>
+                  <p className="font-semibold" style={{ color: 'var(--teal-400)' }}>Welcome to TheRxOS!</p>
+                  <p className="text-sm mt-1" style={{ color: 'var(--slate-300)' }}>
+                    Your account is being set up. Please upload your prescription data below and we&apos;ll analyze it to identify opportunities for your pharmacy.
+                    Once your data is processed, you&apos;ll have full access to the platform.
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
           {children}
         </main>
       </div>

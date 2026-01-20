@@ -10,6 +10,7 @@ export interface User {
   role: 'super_admin' | 'owner' | 'admin' | 'pharmacist' | 'technician';
   clientId: string;
   clientName: string;
+  clientStatus: 'onboarding' | 'active' | 'suspended';
   pharmacyId: string;
   pharmacyName: string;
   subdomain: string;
