@@ -319,12 +319,12 @@ export default function DashboardLayout({
     { name: 'Patients', href: '/dashboard/patients', icon: Users, show: canViewPatientDetails },
     { name: 'Analytics', href: '/dashboard/analytics', icon: BarChart3, show: canViewAnalytics && canViewFinancialData },
     { name: 'Reports', href: '/dashboard/reports', icon: FileText, show: canViewAnalytics && canViewFinancialData },
+    { name: 'Data Upload', href: '/dashboard/upload', icon: Upload, show: canUploadData },
   ].filter(item => item.show);
 
-  // Secondary nav items (shown after What's New)
+  // Secondary nav items (shown after What's New) - Settings only
   const secondaryNav = isOnboarding ? [] : [
     { name: 'Settings', href: '/dashboard/settings', icon: Settings, show: canManageSettings },
-    { name: 'Data Upload', href: '/dashboard/upload', icon: Upload, show: canUploadData },
   ].filter(item => item.show);
 
   // Support nav at bottom - separate from main navigation
@@ -398,7 +398,7 @@ export default function DashboardLayout({
                 {user.pharmacyName}
                 <ExternalLink className="w-3 h-3" />
               </a>
-              <span className="text-[8px] text-slate-600 block mt-1">v2.1</span>
+              <span className="text-[8px] text-slate-600 block mt-1">v2.2</span>
             </div>
           )}
           {sidebarCollapsed && <div className="pb-4 mb-6" style={{ borderBottom: '1px solid var(--navy-600)' }} />}
