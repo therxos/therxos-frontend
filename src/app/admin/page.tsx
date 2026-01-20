@@ -272,6 +272,7 @@ export default function SuperAdminPage() {
     zip: '',
     phone: '',
     npi: '',
+    status: 'active' as 'onboarding' | 'active' | 'suspended' | 'demo',
   });
   const [savingEdit, setSavingEdit] = useState(false);
 
@@ -1176,6 +1177,7 @@ export default function SuperAdminPage() {
       zip: '',
       phone: '',
       npi: '',
+      status: pharmacy.status || 'active',
     });
     setEditingPharmacy(pharmacy);
   }
@@ -1207,6 +1209,7 @@ export default function SuperAdminPage() {
                 client_name: editForm.clientName || p.client_name,
                 submitter_email: editForm.email || p.submitter_email,
                 state: editForm.state || p.state,
+                status: editForm.status || p.status,
               }
             : p
         ));
@@ -1223,11 +1226,15 @@ export default function SuperAdminPage() {
     }
   }
 
-  const filteredPharmacies = pharmacies.filter(p => 
+  const filteredPharmacies = pharmacies.filter(p =>
     p.pharmacy_name.toLowerCase().includes(search.toLowerCase()) ||
     p.client_name.toLowerCase().includes(search.toLowerCase()) ||
     p.submitter_email.toLowerCase().includes(search.toLowerCase())
   );
+
+  // Split into live and demo/test pharmacies
+  const livePharmacies = filteredPharmacies.filter(p => p.status !== 'demo');
+  const demoPharmacies = filteredPharmacies.filter(p => p.status === 'demo');
 
   function formatCurrency(value: number) {
     return new Intl.NumberFormat('en-US', {
@@ -2145,10 +2152,14 @@ export default function SuperAdminPage() {
         </div>
       </div>
 
-      {/* Pharmacies Table */}
+      {/* Live Pharmacies Table */}
       <div className="bg-[#0d2137] border border-[#1e3a5f] rounded-xl overflow-hidden">
         <div className="px-6 py-4 border-b border-[#1e3a5f] flex items-center justify-between">
-          <h2 className="text-lg font-semibold text-white">All Pharmacies</h2>
+          <div className="flex items-center gap-3">
+            <div className="w-3 h-3 rounded-full bg-emerald-500"></div>
+            <h2 className="text-lg font-semibold text-white">Live Pharmacies</h2>
+            <span className="text-sm text-slate-400">({livePharmacies.length})</span>
+          </div>
           <button
             onClick={() => setNewClientModalOpen(true)}
             className="flex items-center gap-2 px-4 py-2 bg-teal-500 hover:bg-teal-600 text-white font-medium rounded-lg transition-colors"
@@ -2157,7 +2168,7 @@ export default function SuperAdminPage() {
             New Client
           </button>
         </div>
-        
+
         <div className="overflow-x-auto">
           <table className="w-full">
             <thead>
@@ -2174,7 +2185,7 @@ export default function SuperAdminPage() {
               </tr>
             </thead>
             <tbody>
-              {filteredPharmacies.map((pharmacy) => (
+              {livePharmacies.map((pharmacy) => (
                 <tr key={pharmacy.pharmacy_id} className="border-b border-[#1e3a5f] hover:bg-[#1e3a5f]/30">
                   <td className="px-6 py-4">
                     <div>
@@ -2189,7 +2200,9 @@ export default function SuperAdminPage() {
                         ? 'bg-emerald-500/20 text-emerald-400'
                         : pharmacy.status === 'onboarding'
                         ? 'bg-amber-500/20 text-amber-400'
-                        : 'bg-red-500/20 text-red-400'
+                        : pharmacy.status === 'suspended'
+                        ? 'bg-red-500/20 text-red-400'
+                        : 'bg-purple-500/20 text-purple-400'
                     }`}>
                       {pharmacy.status}
                     </span>
@@ -2286,13 +2299,89 @@ export default function SuperAdminPage() {
             </tbody>
           </table>
         </div>
-        
-        {filteredPharmacies.length === 0 && (
+
+        {livePharmacies.length === 0 && (
           <div className="text-center py-12 text-slate-400">
-            No pharmacies found
+            No live pharmacies found
           </div>
         )}
       </div>
+
+      {/* Test/Demo Environments Table */}
+      {demoPharmacies.length > 0 && (
+        <div className="mt-8 bg-[#0d2137] border border-purple-500/30 rounded-xl overflow-hidden">
+          <div className="px-6 py-4 border-b border-purple-500/30 flex items-center justify-between bg-purple-500/5">
+            <div className="flex items-center gap-3">
+              <div className="w-3 h-3 rounded-full bg-purple-500"></div>
+              <h2 className="text-lg font-semibold text-white">Test / Demo Environments</h2>
+              <span className="text-sm text-slate-400">({demoPharmacies.length})</span>
+            </div>
+            <span className="text-xs text-purple-400 bg-purple-500/10 px-3 py-1 rounded-full">For demos, 340B, specialty, compounding tests</span>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className="border-b border-purple-500/20">
+                  <th className="text-left text-xs font-semibold text-slate-400 uppercase tracking-wider px-6 py-3">Pharmacy</th>
+                  <th className="text-left text-xs font-semibold text-slate-400 uppercase tracking-wider px-6 py-3">Type</th>
+                  <th className="text-center text-xs font-semibold text-slate-400 uppercase tracking-wider px-6 py-3">Users</th>
+                  <th className="text-center text-xs font-semibold text-slate-400 uppercase tracking-wider px-6 py-3">Patients</th>
+                  <th className="text-center text-xs font-semibold text-slate-400 uppercase tracking-wider px-6 py-3">Opps</th>
+                  <th className="text-right text-xs font-semibold text-slate-400 uppercase tracking-wider px-6 py-3">Value</th>
+                  <th className="text-center text-xs font-semibold text-slate-400 uppercase tracking-wider px-6 py-3">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {demoPharmacies.map((pharmacy) => (
+                  <tr key={pharmacy.pharmacy_id} className="border-b border-purple-500/10 hover:bg-purple-500/5">
+                    <td className="px-6 py-4">
+                      <div>
+                        <p className="font-medium text-white">{pharmacy.pharmacy_name}</p>
+                        <p className="text-xs text-slate-400">{pharmacy.submitter_email}</p>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4">
+                      <span className="px-2 py-1 rounded-full text-xs font-medium bg-purple-500/20 text-purple-400">
+                        Demo
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 text-center text-white">{pharmacy.user_count}</td>
+                    <td className="px-6 py-4 text-center text-white">{pharmacy.patient_count?.toLocaleString()}</td>
+                    <td className="px-6 py-4 text-center text-teal-400">{pharmacy.opportunity_count?.toLocaleString()}</td>
+                    <td className="px-6 py-4 text-right text-emerald-400">{formatCurrency(pharmacy.total_value)}</td>
+                    <td className="px-6 py-4">
+                      <div className="flex items-center justify-center gap-1">
+                        <button
+                          onClick={() => openEditModal(pharmacy)}
+                          className="p-2 hover:bg-amber-500/20 rounded-lg text-slate-400 hover:text-amber-400 transition-colors"
+                          title="Edit Details"
+                        >
+                          <Pencil className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() => setSelectedPharmacy(pharmacy)}
+                          className="p-2 hover:bg-[#1e3a5f] rounded-lg text-slate-400 hover:text-white transition-colors"
+                          title="View Details"
+                        >
+                          <Eye className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() => impersonatePharmacy(pharmacy.pharmacy_id)}
+                          className="p-2 hover:bg-teal-500/20 rounded-lg text-slate-400 hover:text-teal-400 transition-colors"
+                          title="Login as Admin"
+                        >
+                          <LogIn className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
       {/* Pharmacy Detail Modal */}
       {selectedPharmacy && (
@@ -2644,6 +2733,20 @@ export default function SuperAdminPage() {
                   onChange={(e) => setEditForm({ ...editForm, email: e.target.value })}
                   className="w-full px-3 py-2 bg-[#0a1628] border border-[#1e3a5f] rounded-lg text-white"
                 />
+              </div>
+
+              <div>
+                <label className="block text-sm text-slate-400 mb-1">Status</label>
+                <select
+                  value={editForm.status}
+                  onChange={(e) => setEditForm({ ...editForm, status: e.target.value as 'onboarding' | 'active' | 'suspended' | 'demo' })}
+                  className="w-full px-3 py-2 bg-[#0a1628] border border-[#1e3a5f] rounded-lg text-white"
+                >
+                  <option value="onboarding">Onboarding</option>
+                  <option value="active">Active</option>
+                  <option value="suspended">Suspended</option>
+                  <option value="demo">Demo</option>
+                </select>
               </div>
 
               <div className="grid grid-cols-2 gap-4">
