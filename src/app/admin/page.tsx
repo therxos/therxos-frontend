@@ -40,7 +40,7 @@ import {
   FileDown,
   Send,
   CreditCard,
-  FlaskConical,
+  Beaker,
 } from 'lucide-react';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL;
@@ -2291,7 +2291,7 @@ export default function SuperAdminPage() {
                         className="p-2 hover:bg-amber-500/20 rounded-lg text-slate-400 hover:text-amber-400 transition-colors"
                         title="Send Test Email (preview without resetting password)"
                       >
-                        <FlaskConical className="w-4 h-4" />
+                        <Beaker className="w-4 h-4" />
                       </button>
                       <button
                         onClick={() => sendWelcomeEmail(pharmacy.client_id, pharmacy.pharmacy_name, true)}
