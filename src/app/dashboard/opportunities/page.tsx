@@ -430,67 +430,81 @@ function SidePanel({
 
       let y = margin;
 
-      // Header - Pharmacy Info
-      doc.setFillColor(13, 148, 136); // Teal
-      doc.rect(0, 0, pageWidth, 80, 'F');
+      // Header - Pharmacy Info (no TheRxOS branding)
+      doc.setFillColor(30, 58, 95); // Navy blue - professional
+      doc.rect(0, 0, pageWidth, 90, 'F');
 
       doc.setTextColor(255, 255, 255);
-      doc.setFontSize(24);
+      doc.setFontSize(20);
       doc.setFont('helvetica', 'bold');
-      doc.text('TheRxOS', margin, 35);
+      doc.text(pharmacy?.pharmacy_name || 'Pharmacy', margin, 32);
 
       doc.setFontSize(10);
       doc.setFont('helvetica', 'normal');
-      doc.text('Clinical Opportunity Notification', margin, 55);
+      doc.text('Prescription Optimization Request', margin, 50);
 
-      // Pharmacy details in header
+      // Pharmacy contact details in header
       if (pharmacy) {
         doc.setFontSize(9);
-        const pharmInfo = [
-          pharmacy.pharmacy_name,
-          pharmacy.phone ? `Phone: ${pharmacy.phone}` : null,
-          pharmacy.fax ? `Fax: ${pharmacy.fax}` : null,
-        ].filter(Boolean).join(' | ');
-        doc.text(pharmInfo, pageWidth - margin, 35, { align: 'right' });
-
         if (pharmacy.address) {
-          const address = `${pharmacy.address}, ${pharmacy.city}, ${pharmacy.state} ${pharmacy.zip}`;
-          doc.text(address, pageWidth - margin, 50, { align: 'right' });
+          doc.text(`${pharmacy.address}, ${pharmacy.city}, ${pharmacy.state} ${pharmacy.zip}`, margin, 68);
         }
-        if (pharmacy.npi) {
-          doc.text(`NPI: ${pharmacy.npi}`, pageWidth - margin, 65, { align: 'right' });
-        }
+        const contactLine = [
+          pharmacy.phone ? `Tel: ${pharmacy.phone}` : null,
+          pharmacy.fax ? `Fax: ${pharmacy.fax}` : null,
+          pharmacy.npi ? `NPI: ${pharmacy.npi}` : null,
+        ].filter(Boolean).join('  |  ');
+        doc.text(contactLine, margin, 82);
       }
 
-      y = 100;
+      y = 110;
 
-      // Date
+      // Date on right
       doc.setTextColor(100, 100, 100);
-      doc.setFontSize(10);
+      doc.setFontSize(9);
       doc.text(`Date: ${new Date().toLocaleDateString('en-US', {
-        weekday: 'long',
-        year: 'numeric',
         month: 'long',
-        day: 'numeric'
-      })}`, margin, y);
-      y += 25;
+        day: 'numeric',
+        year: 'numeric'
+      })}`, pageWidth - margin, y, { align: 'right' });
 
-      // To: Prescriber Info
+      // TO: Prescriber section (more prominent)
       doc.setTextColor(0, 0, 0);
-      doc.setFontSize(12);
+      doc.setFontSize(11);
       doc.setFont('helvetica', 'bold');
       doc.text('TO:', margin, y);
-      doc.setFont('helvetica', 'normal');
+
+      doc.setFontSize(14);
       doc.text(opportunity.prescriber_name || 'Prescriber', margin + 30, y);
+      y += 18;
+
+      // FROM: Pharmacy section
+      doc.setFontSize(11);
+      doc.text('FROM:', margin, y);
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(11);
+      doc.text(pharmacy?.pharmacy_name || 'Pharmacy', margin + 45, y);
+      y += 18;
+
+      // RE: line
+      doc.setFont('helvetica', 'bold');
+      doc.text('RE:', margin, y);
+      doc.setFont('helvetica', 'normal');
+      doc.text('Prescription Therapy Optimization Request', margin + 25, y);
       y += 25;
+
+      // Divider line
+      doc.setDrawColor(200, 200, 200);
+      doc.line(margin, y, pageWidth - margin, y);
+      y += 20;
 
       // Intro text
       doc.setTextColor(0, 0, 0);
       doc.setFontSize(10);
-      const introText = `We have identified the following clinical opportunity for your patient. This recommendation is based on formulary optimization, therapeutic guidelines, and potential cost savings. Please review and consider the suggested change.`;
+      const introText = `We have identified a clinical opportunity for your patient that may improve therapeutic outcomes and/or reduce costs. Please review the recommendation below and indicate your response.`;
       const introLines = doc.splitTextToSize(introText, contentWidth);
       doc.text(introLines, margin, y);
-      y += (introLines.length * 12) + 20;
+      y += (introLines.length * 12) + 15;
 
       // Patient header box
       doc.setFillColor(240, 249, 255);
@@ -602,10 +616,13 @@ function SidePanel({
       doc.text('Prescriber Signature: ___________________________ Date: ___________', margin, y);
       y += 25;
 
-      // Footer
-      doc.setFontSize(8);
+      // Footer with pharmacy fax number
+      doc.setFontSize(9);
       doc.setTextColor(100, 100, 100);
-      doc.text('Please fax this form back to the pharmacy. Thank you for your partnership in patient care.', margin, y);
+      const faxBackText = pharmacy?.fax
+        ? `Please fax this form back to ${pharmacy.fax}. Thank you for your partnership in patient care.`
+        : 'Please fax this form back to the pharmacy. Thank you for your partnership in patient care.';
+      doc.text(faxBackText, margin, y);
 
       // Save the PDF
       const prescriberSlug = (opportunity.prescriber_name || 'prescriber').replace(/[^a-z0-9]/gi, '_');
@@ -851,12 +868,12 @@ export default function OpportunitiesPage() {
     async function fetchPharmacy() {
       try {
         const token = localStorage.getItem('therxos_token');
-        const res = await fetch(`${API_URL}/api/settings/pharmacy`, {
+        const res = await fetch(`${API_URL}/api/settings/pharmacy-info`, {
           headers: { Authorization: `Bearer ${token}` },
         });
         if (res.ok) {
           const data = await res.json();
-          setPharmacy(data.pharmacy || data);
+          setPharmacy(data.pharmacy);
         }
       } catch (e) {
         console.error('Failed to fetch pharmacy:', e);

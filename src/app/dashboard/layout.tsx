@@ -318,8 +318,12 @@ export default function DashboardLayout({
     { name: 'Patients', href: '/dashboard/patients', icon: Users, show: canViewPatientDetails },
     { name: 'Analytics', href: '/dashboard/analytics', icon: BarChart3, show: canViewAnalytics && canViewFinancialData },
     { name: 'Reports', href: '/dashboard/reports', icon: FileText, show: canViewAnalytics && canViewFinancialData },
-    { name: 'Data Upload', href: '/dashboard/upload', icon: Upload, show: canUploadData },
+  ].filter(item => item.show);
+
+  // Secondary nav items (shown after What's New)
+  const secondaryNav = isOnboarding ? [] : [
     { name: 'Settings', href: '/dashboard/settings', icon: Settings, show: canManageSettings },
+    { name: 'Data Upload', href: '/dashboard/upload', icon: Upload, show: canUploadData },
   ].filter(item => item.show);
 
   // Support nav at bottom - separate from main navigation
@@ -495,6 +499,28 @@ export default function DashboardLayout({
                   ))}
                 </div>
               )}
+            </div>
+          )}
+
+          {/* Secondary Navigation (Settings, Data Upload) */}
+          {secondaryNav.length > 0 && (
+            <div className="mb-4">
+              <nav className="space-y-1">
+                {secondaryNav.map((item) => {
+                  const isActive = pathname === item.href || (item.href !== '/dashboard' && pathname.startsWith(item.href));
+                  return (
+                    <Link
+                      key={item.name}
+                      href={item.href}
+                      className={`nav-item ${isActive ? 'active' : ''} ${sidebarCollapsed ? 'justify-center px-2' : ''}`}
+                      title={sidebarCollapsed ? item.name : undefined}
+                    >
+                      <item.icon className="w-5 h-5 flex-shrink-0" />
+                      {!sidebarCollapsed && <span>{item.name}</span>}
+                    </Link>
+                  );
+                })}
+              </nav>
             </div>
           )}
 
