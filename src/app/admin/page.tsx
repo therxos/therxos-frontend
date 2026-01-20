@@ -258,6 +258,22 @@ export default function SuperAdminPage() {
   const [sendingWelcomeEmail, setSendingWelcomeEmail] = useState<string | null>(null);
   const [downloadingDocs, setDownloadingDocs] = useState<string | null>(null);
   const [creatingCheckout, setCreatingCheckout] = useState<string | null>(null);
+  const [emailingDocs, setEmailingDocs] = useState<string | null>(null);
+
+  // Edit modal state
+  const [editingPharmacy, setEditingPharmacy] = useState<Pharmacy | null>(null);
+  const [editForm, setEditForm] = useState({
+    pharmacyName: '',
+    clientName: '',
+    email: '',
+    state: '',
+    address: '',
+    city: '',
+    zip: '',
+    phone: '',
+    npi: '',
+  });
+  const [savingEdit, setSavingEdit] = useState(false);
 
   useEffect(() => {
     // Wait for hydration before checking role
@@ -1107,6 +1123,103 @@ export default function SuperAdminPage() {
       alert('Failed to create Stripe checkout');
     } finally {
       setCreatingCheckout(null);
+    }
+  }
+
+  async function emailDocuments(clientId: string, pharmacyName: string) {
+    if (!confirm(`Email BAA and Service Agreement to ${pharmacyName}?`)) return;
+
+    setEmailingDocs(clientId);
+    try {
+      const token = localStorage.getItem('therxos_token');
+      const res = await fetch(`${API_URL}/api/admin/clients/${clientId}/email-documents`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      });
+
+      const data = await res.json();
+
+      if (data.success) {
+        alert(`Documents emailed to ${pharmacyName}!`);
+      } else if (data.documents) {
+        // Email failed but we have docs - offer download
+        alert('Email not configured. Downloading documents instead...');
+        // Download the docs
+        const baaBlob = new Blob([Uint8Array.from(atob(data.documents.baa.base64), c => c.charCodeAt(0))]);
+        const baaUrl = URL.createObjectURL(baaBlob);
+        const baaLink = document.createElement('a');
+        baaLink.href = baaUrl;
+        baaLink.download = data.documents.baa.filename;
+        baaLink.click();
+      } else {
+        alert('Failed to email documents: ' + (data.error || 'Unknown error'));
+      }
+    } catch (err) {
+      console.error('Email docs failed:', err);
+      alert('Failed to email documents');
+    } finally {
+      setEmailingDocs(null);
+    }
+  }
+
+  function openEditModal(pharmacy: Pharmacy) {
+    setEditForm({
+      pharmacyName: pharmacy.pharmacy_name || '',
+      clientName: pharmacy.client_name || '',
+      email: pharmacy.submitter_email || '',
+      state: pharmacy.state || '',
+      address: '',
+      city: '',
+      zip: '',
+      phone: '',
+      npi: '',
+    });
+    setEditingPharmacy(pharmacy);
+  }
+
+  async function saveEdit() {
+    if (!editingPharmacy) return;
+
+    setSavingEdit(true);
+    try {
+      const token = localStorage.getItem('therxos_token');
+      const res = await fetch(`${API_URL}/api/admin/clients/${editingPharmacy.client_id}`, {
+        method: 'PATCH',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(editForm),
+      });
+
+      const data = await res.json();
+
+      if (data.success) {
+        // Update local state
+        setPharmacies(prev => prev.map(p =>
+          p.client_id === editingPharmacy.client_id
+            ? {
+                ...p,
+                pharmacy_name: editForm.pharmacyName || p.pharmacy_name,
+                client_name: editForm.clientName || p.client_name,
+                submitter_email: editForm.email || p.submitter_email,
+                state: editForm.state || p.state,
+              }
+            : p
+        ));
+        setEditingPharmacy(null);
+        alert('Client updated successfully!');
+      } else {
+        alert('Failed to update: ' + (data.error || 'Unknown error'));
+      }
+    } catch (err) {
+      console.error('Save edit failed:', err);
+      alert('Failed to save changes');
+    } finally {
+      setSavingEdit(false);
     }
   }
 
@@ -2098,6 +2211,13 @@ export default function SuperAdminPage() {
                   <td className="px-6 py-4">
                     <div className="flex items-center justify-center gap-1">
                       <button
+                        onClick={() => openEditModal(pharmacy)}
+                        className="p-2 hover:bg-amber-500/20 rounded-lg text-slate-400 hover:text-amber-400 transition-colors"
+                        title="Edit Details"
+                      >
+                        <Pencil className="w-4 h-4" />
+                      </button>
+                      <button
                         onClick={() => setSelectedPharmacy(pharmacy)}
                         className="p-2 hover:bg-[#1e3a5f] rounded-lg text-slate-400 hover:text-white transition-colors"
                         title="View Details"
@@ -2115,12 +2235,24 @@ export default function SuperAdminPage() {
                         onClick={() => sendWelcomeEmail(pharmacy.client_id, pharmacy.pharmacy_name, true)}
                         disabled={sendingWelcomeEmail === pharmacy.client_id}
                         className="p-2 hover:bg-blue-500/20 rounded-lg text-slate-400 hover:text-blue-400 transition-colors disabled:opacity-50"
-                        title="Send Welcome Email (reset password)"
+                        title="Send Welcome Email + Docs (resets password)"
                       >
                         {sendingWelcomeEmail === pharmacy.client_id ? (
                           <Loader2 className="w-4 h-4 animate-spin" />
                         ) : (
                           <Send className="w-4 h-4" />
+                        )}
+                      </button>
+                      <button
+                        onClick={() => emailDocuments(pharmacy.client_id, pharmacy.pharmacy_name)}
+                        disabled={emailingDocs === pharmacy.client_id}
+                        className="p-2 hover:bg-indigo-500/20 rounded-lg text-slate-400 hover:text-indigo-400 transition-colors disabled:opacity-50"
+                        title="Email Documents Only (no credentials)"
+                      >
+                        {emailingDocs === pharmacy.client_id ? (
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                        ) : (
+                          <Mail className="w-4 h-4" />
                         )}
                       </button>
                       <button
@@ -2470,6 +2602,132 @@ export default function SuperAdminPage() {
           onSave={saveAuditRule}
           saving={savingAuditRule}
         />
+      )}
+
+      {/* Edit Client Modal */}
+      {editingPharmacy && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+          <div className="bg-[#0d2137] rounded-xl max-w-lg w-full max-h-[90vh] overflow-y-auto border border-[#1e3a5f]">
+            <div className="p-6 border-b border-[#1e3a5f] flex items-center justify-between">
+              <h2 className="text-xl font-semibold text-white">Edit Client</h2>
+              <button onClick={() => setEditingPharmacy(null)} className="text-slate-400 hover:text-white">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-4">
+              <div>
+                <label className="block text-sm text-slate-400 mb-1">Pharmacy Name</label>
+                <input
+                  type="text"
+                  value={editForm.pharmacyName}
+                  onChange={(e) => setEditForm({ ...editForm, pharmacyName: e.target.value })}
+                  className="w-full px-3 py-2 bg-[#0a1628] border border-[#1e3a5f] rounded-lg text-white"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm text-slate-400 mb-1">Client/Company Name</label>
+                <input
+                  type="text"
+                  value={editForm.clientName}
+                  onChange={(e) => setEditForm({ ...editForm, clientName: e.target.value })}
+                  className="w-full px-3 py-2 bg-[#0a1628] border border-[#1e3a5f] rounded-lg text-white"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm text-slate-400 mb-1">Email</label>
+                <input
+                  type="email"
+                  value={editForm.email}
+                  onChange={(e) => setEditForm({ ...editForm, email: e.target.value })}
+                  className="w-full px-3 py-2 bg-[#0a1628] border border-[#1e3a5f] rounded-lg text-white"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm text-slate-400 mb-1">State</label>
+                  <input
+                    type="text"
+                    value={editForm.state}
+                    onChange={(e) => setEditForm({ ...editForm, state: e.target.value })}
+                    className="w-full px-3 py-2 bg-[#0a1628] border border-[#1e3a5f] rounded-lg text-white"
+                    placeholder="XX"
+                    maxLength={2}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm text-slate-400 mb-1">Phone</label>
+                  <input
+                    type="text"
+                    value={editForm.phone}
+                    onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })}
+                    className="w-full px-3 py-2 bg-[#0a1628] border border-[#1e3a5f] rounded-lg text-white"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm text-slate-400 mb-1">Address</label>
+                <input
+                  type="text"
+                  value={editForm.address}
+                  onChange={(e) => setEditForm({ ...editForm, address: e.target.value })}
+                  className="w-full px-3 py-2 bg-[#0a1628] border border-[#1e3a5f] rounded-lg text-white"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm text-slate-400 mb-1">City</label>
+                  <input
+                    type="text"
+                    value={editForm.city}
+                    onChange={(e) => setEditForm({ ...editForm, city: e.target.value })}
+                    className="w-full px-3 py-2 bg-[#0a1628] border border-[#1e3a5f] rounded-lg text-white"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm text-slate-400 mb-1">ZIP</label>
+                  <input
+                    type="text"
+                    value={editForm.zip}
+                    onChange={(e) => setEditForm({ ...editForm, zip: e.target.value })}
+                    className="w-full px-3 py-2 bg-[#0a1628] border border-[#1e3a5f] rounded-lg text-white"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm text-slate-400 mb-1">NPI</label>
+                <input
+                  type="text"
+                  value={editForm.npi}
+                  onChange={(e) => setEditForm({ ...editForm, npi: e.target.value })}
+                  className="w-full px-3 py-2 bg-[#0a1628] border border-[#1e3a5f] rounded-lg text-white"
+                />
+              </div>
+
+              <div className="flex gap-3 pt-4">
+                <button
+                  onClick={() => setEditingPharmacy(null)}
+                  className="flex-1 py-2 border border-[#1e3a5f] text-slate-400 rounded-lg hover:bg-[#1e3a5f] transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={saveEdit}
+                  disabled={savingEdit}
+                  className="flex-1 py-2 bg-teal-500 hover:bg-teal-600 text-white rounded-lg font-medium transition-colors disabled:opacity-50"
+                >
+                  {savingEdit ? 'Saving...' : 'Save Changes'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* New Client Modal */}
