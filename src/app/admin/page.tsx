@@ -1076,6 +1076,20 @@ export default function SuperAdminPage() {
         alert(`Test email sent to ${testEmailAddress}!\n\nThis is a preview of what ${testEmailModal.pharmacyName} will receive.`);
         setTestEmailModal(null);
         setTestEmailAddress('');
+      } else if (data.isTest && data.preview) {
+        // Email transport not configured - show preview info
+        const preview = data.preview;
+        alert(
+          `Email Preview (transport not configured)\n\n` +
+          `To: ${preview.to}\n` +
+          `Subject: ${preview.subject}\n` +
+          `Pharmacy: ${preview.pharmacyName}\n` +
+          `Password: ${preview.tempPassword}\n` +
+          `Documents: ${preview.hasDocuments ? 'BAA + Service Agreement attached' : 'None'}\n\n` +
+          `Note: Configure GMAIL_CLIENT_ID/GMAIL_CLIENT_SECRET or SMTP settings in Railway to enable actual email sending.`
+        );
+        setTestEmailModal(null);
+        setTestEmailAddress('');
       } else {
         alert('Failed to send test email: ' + (data.error || 'Unknown error'));
       }
