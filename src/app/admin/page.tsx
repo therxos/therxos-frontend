@@ -287,6 +287,25 @@ export default function SuperAdminPage() {
   const [testEmailAddress, setTestEmailAddress] = useState('');
   const [sendingTestEmail, setSendingTestEmail] = useState(false);
 
+  // Add store modal state
+  const [addStoreModal, setAddStoreModal] = useState<{ clientId: string; clientName: string } | null>(null);
+  const [addingStore, setAddingStore] = useState(false);
+  const [addStoreForm, setAddStoreForm] = useState({
+    pharmacyName: '',
+    pharmacyNpi: '',
+    pharmacyNcpdp: '',
+    pharmacyState: '',
+    pharmacyAddress: '',
+    pharmacyCity: '',
+    pharmacyZip: '',
+    pharmacyPhone: '',
+    pharmacyFax: '',
+    pmsSystem: '',
+    adminEmail: '',
+    adminFirstName: '',
+    adminLastName: '',
+  });
+
   useEffect(() => {
     // Wait for hydration before checking role
     if (!_hasHydrated) return;
@@ -1108,6 +1127,66 @@ export default function SuperAdminPage() {
       alert('Failed to send test email');
     } finally {
       setSendingTestEmail(false);
+    }
+  }
+
+  async function addStore() {
+    if (!addStoreModal || !addStoreForm.pharmacyName) {
+      alert('Store name is required');
+      return;
+    }
+
+    setAddingStore(true);
+    try {
+      const token = localStorage.getItem('therxos_token');
+      const res = await fetch(`${API_URL}/api/admin/clients/${addStoreModal.clientId}/pharmacies`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(addStoreForm),
+      });
+
+      const data = await res.json();
+
+      if (data.success) {
+        let message = `Store "${data.pharmacy.pharmacyName}" added to ${addStoreModal.clientName}!`;
+        if (data.credentials) {
+          message += `\n\nAdmin credentials:\nEmail: ${data.credentials.email}\nPassword: ${data.credentials.temporaryPassword}`;
+          navigator.clipboard.writeText(data.credentials.temporaryPassword);
+          message += '\n\n(Password copied to clipboard)';
+        }
+        alert(message);
+
+        // Reset and close
+        setAddStoreModal(null);
+        setAddStoreForm({
+          pharmacyName: '',
+          pharmacyNpi: '',
+          pharmacyNcpdp: '',
+          pharmacyState: '',
+          pharmacyAddress: '',
+          pharmacyCity: '',
+          pharmacyZip: '',
+          pharmacyPhone: '',
+          pharmacyFax: '',
+          pmsSystem: '',
+          adminEmail: '',
+          adminFirstName: '',
+          adminLastName: '',
+        });
+
+        // Refresh pharmacy list
+        await fetchPharmacies();
+      } else {
+        alert('Failed to add store: ' + (data.error || 'Unknown error'));
+      }
+    } catch (err) {
+      console.error('Add store failed:', err);
+      alert('Failed to add store');
+    } finally {
+      setAddingStore(false);
     }
   }
 
@@ -2311,6 +2390,13 @@ export default function SuperAdminPage() {
                         <LogIn className="w-4 h-4" />
                       </button>
                       <button
+                        onClick={() => setAddStoreModal({ clientId: pharmacy.client_id, clientName: pharmacy.client_name })}
+                        className="p-2 hover:bg-purple-500/20 rounded-lg text-slate-400 hover:text-purple-400 transition-colors"
+                        title="Add Store to this Client"
+                      >
+                        <Plus className="w-4 h-4" />
+                      </button>
+                      <button
                         onClick={() => setTestEmailModal({ clientId: pharmacy.client_id, pharmacyName: pharmacy.pharmacy_name })}
                         className="p-2 hover:bg-amber-500/20 rounded-lg text-slate-400 hover:text-amber-400 transition-colors"
                         title="Send Test Email (preview without resetting password)"
@@ -2967,6 +3053,214 @@ export default function SuperAdminPage() {
         </div>
       )}
 
+      {/* Add Store Modal */}
+      {addStoreModal && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+          <div className="bg-[#0d2137] rounded-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto border border-[#1e3a5f]">
+            <div className="p-6 border-b border-[#1e3a5f] flex items-center justify-between">
+              <div>
+                <h2 className="text-xl font-semibold text-white">Add Store to {addStoreModal.clientName}</h2>
+                <p className="text-sm text-slate-400 mt-1">Add a new pharmacy location under this client group</p>
+              </div>
+              <button onClick={() => setAddStoreModal(null)} className="text-slate-400 hover:text-white">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="col-span-2">
+                  <label className="block text-sm text-slate-400 mb-1">Store Name *</label>
+                  <input
+                    type="text"
+                    value={addStoreForm.pharmacyName}
+                    onChange={(e) => setAddStoreForm({ ...addStoreForm, pharmacyName: e.target.value })}
+                    className="w-full px-3 py-2 bg-[#0a1628] border border-[#1e3a5f] rounded-lg text-white focus:outline-none focus:border-teal-500"
+                    placeholder="Downtown Pharmacy"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm text-slate-400 mb-1">NPI</label>
+                  <input
+                    type="text"
+                    value={addStoreForm.pharmacyNpi}
+                    onChange={(e) => setAddStoreForm({ ...addStoreForm, pharmacyNpi: e.target.value })}
+                    className="w-full px-3 py-2 bg-[#0a1628] border border-[#1e3a5f] rounded-lg text-white focus:outline-none focus:border-teal-500"
+                    placeholder="1234567890"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm text-slate-400 mb-1">NCPDP</label>
+                  <input
+                    type="text"
+                    value={addStoreForm.pharmacyNcpdp}
+                    onChange={(e) => setAddStoreForm({ ...addStoreForm, pharmacyNcpdp: e.target.value })}
+                    className="w-full px-3 py-2 bg-[#0a1628] border border-[#1e3a5f] rounded-lg text-white focus:outline-none focus:border-teal-500"
+                    placeholder="1234567"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm text-slate-400 mb-1">State</label>
+                  <input
+                    type="text"
+                    value={addStoreForm.pharmacyState}
+                    onChange={(e) => setAddStoreForm({ ...addStoreForm, pharmacyState: e.target.value })}
+                    className="w-full px-3 py-2 bg-[#0a1628] border border-[#1e3a5f] rounded-lg text-white focus:outline-none focus:border-teal-500"
+                    placeholder="CA"
+                    maxLength={2}
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm text-slate-400 mb-1">PMS System</label>
+                  <select
+                    value={addStoreForm.pmsSystem}
+                    onChange={(e) => setAddStoreForm({ ...addStoreForm, pmsSystem: e.target.value })}
+                    className="w-full px-3 py-2 bg-[#0a1628] border border-[#1e3a5f] rounded-lg text-white focus:outline-none focus:border-teal-500"
+                  >
+                    <option value="">Select PMS...</option>
+                    <option value="PioneerRx">PioneerRx</option>
+                    <option value="Rx30">Rx30</option>
+                    <option value="PrimeRx">PrimeRx</option>
+                    <option value="BestRx">BestRx</option>
+                    <option value="ComputerRx">ComputerRx</option>
+                    <option value="Other">Other</option>
+                  </select>
+                </div>
+
+                <div className="col-span-2">
+                  <label className="block text-sm text-slate-400 mb-1">Address</label>
+                  <input
+                    type="text"
+                    value={addStoreForm.pharmacyAddress}
+                    onChange={(e) => setAddStoreForm({ ...addStoreForm, pharmacyAddress: e.target.value })}
+                    className="w-full px-3 py-2 bg-[#0a1628] border border-[#1e3a5f] rounded-lg text-white focus:outline-none focus:border-teal-500"
+                    placeholder="123 Main Street"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm text-slate-400 mb-1">City</label>
+                  <input
+                    type="text"
+                    value={addStoreForm.pharmacyCity}
+                    onChange={(e) => setAddStoreForm({ ...addStoreForm, pharmacyCity: e.target.value })}
+                    className="w-full px-3 py-2 bg-[#0a1628] border border-[#1e3a5f] rounded-lg text-white focus:outline-none focus:border-teal-500"
+                    placeholder="Los Angeles"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm text-slate-400 mb-1">ZIP Code</label>
+                  <input
+                    type="text"
+                    value={addStoreForm.pharmacyZip}
+                    onChange={(e) => setAddStoreForm({ ...addStoreForm, pharmacyZip: e.target.value })}
+                    className="w-full px-3 py-2 bg-[#0a1628] border border-[#1e3a5f] rounded-lg text-white focus:outline-none focus:border-teal-500"
+                    placeholder="90210"
+                    maxLength={10}
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm text-slate-400 mb-1">Phone</label>
+                  <input
+                    type="tel"
+                    value={addStoreForm.pharmacyPhone}
+                    onChange={(e) => setAddStoreForm({ ...addStoreForm, pharmacyPhone: e.target.value })}
+                    className="w-full px-3 py-2 bg-[#0a1628] border border-[#1e3a5f] rounded-lg text-white focus:outline-none focus:border-teal-500"
+                    placeholder="(555) 123-4567"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm text-slate-400 mb-1">Fax</label>
+                  <input
+                    type="tel"
+                    value={addStoreForm.pharmacyFax}
+                    onChange={(e) => setAddStoreForm({ ...addStoreForm, pharmacyFax: e.target.value })}
+                    className="w-full px-3 py-2 bg-[#0a1628] border border-[#1e3a5f] rounded-lg text-white focus:outline-none focus:border-teal-500"
+                    placeholder="(555) 123-4568"
+                  />
+                </div>
+              </div>
+
+              <hr className="border-[#1e3a5f] my-4" />
+
+              <div className="p-3 bg-purple-500/10 border border-purple-500/30 rounded-lg">
+                <p className="text-sm text-purple-400">
+                  Optional: Create a separate admin account for this location
+                </p>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="col-span-2">
+                  <label className="block text-sm text-slate-400 mb-1">Admin Email (optional)</label>
+                  <input
+                    type="email"
+                    value={addStoreForm.adminEmail}
+                    onChange={(e) => setAddStoreForm({ ...addStoreForm, adminEmail: e.target.value })}
+                    className="w-full px-3 py-2 bg-[#0a1628] border border-[#1e3a5f] rounded-lg text-white focus:outline-none focus:border-teal-500"
+                    placeholder="store-admin@pharmacy.com"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm text-slate-400 mb-1">Admin First Name</label>
+                  <input
+                    type="text"
+                    value={addStoreForm.adminFirstName}
+                    onChange={(e) => setAddStoreForm({ ...addStoreForm, adminFirstName: e.target.value })}
+                    className="w-full px-3 py-2 bg-[#0a1628] border border-[#1e3a5f] rounded-lg text-white focus:outline-none focus:border-teal-500"
+                    placeholder="John"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm text-slate-400 mb-1">Admin Last Name</label>
+                  <input
+                    type="text"
+                    value={addStoreForm.adminLastName}
+                    onChange={(e) => setAddStoreForm({ ...addStoreForm, adminLastName: e.target.value })}
+                    className="w-full px-3 py-2 bg-[#0a1628] border border-[#1e3a5f] rounded-lg text-white focus:outline-none focus:border-teal-500"
+                    placeholder="Doe"
+                  />
+                </div>
+              </div>
+
+              <div className="flex gap-3 pt-4">
+                <button
+                  onClick={() => setAddStoreModal(null)}
+                  className="flex-1 py-2 border border-[#1e3a5f] text-slate-400 rounded-lg hover:bg-[#1e3a5f]/50"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={addStore}
+                  disabled={addingStore || !addStoreForm.pharmacyName}
+                  className="flex-1 py-2 bg-purple-500 hover:bg-purple-600 text-white rounded-lg font-medium transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                  {addingStore ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Adding...
+                    </>
+                  ) : (
+                    <>
+                      <Plus className="w-4 h-4" />
+                      Add Store
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* New Client Modal */}
       {newClientModalOpen && (
         <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
@@ -2986,26 +3280,33 @@ export default function SuperAdminPage() {
                   </div>
                 )}
 
+                <div className="p-3 bg-blue-500/10 border border-blue-500/30 rounded-lg mb-4">
+                  <p className="text-sm text-blue-400">
+                    <strong>Multi-store support:</strong> Create a client group, then add individual store locations. Each store can have its own admin account.
+                  </p>
+                </div>
+
                 <div className="grid grid-cols-2 gap-4">
                   <div className="col-span-2">
-                    <label className="block text-sm text-slate-400 mb-1">Client/Organization Name *</label>
+                    <label className="block text-sm text-slate-400 mb-1">Client Group Name *</label>
                     <input
                       type="text"
                       value={newClientForm.clientName}
                       onChange={(e) => setNewClientForm({ ...newClientForm, clientName: e.target.value })}
                       className="w-full px-3 py-2 bg-[#0a1628] border border-[#1e3a5f] rounded-lg text-white focus:outline-none focus:border-teal-500"
-                      placeholder="Acme Pharmacy"
+                      placeholder="Acme Pharmacy Group"
                     />
+                    <p className="text-xs text-slate-500 mt-1">This is the parent organization for all store locations</p>
                   </div>
 
                   <div className="col-span-2">
-                    <label className="block text-sm text-slate-400 mb-1">Pharmacy Name (if different)</label>
+                    <label className="block text-sm text-slate-400 mb-1">First Store Name</label>
                     <input
                       type="text"
                       value={newClientForm.pharmacyName}
                       onChange={(e) => setNewClientForm({ ...newClientForm, pharmacyName: e.target.value })}
                       className="w-full px-3 py-2 bg-[#0a1628] border border-[#1e3a5f] rounded-lg text-white focus:outline-none focus:border-teal-500"
-                      placeholder="Leave blank to use client name"
+                      placeholder="Main Street Location (leave blank to use group name)"
                     />
                   </div>
 
