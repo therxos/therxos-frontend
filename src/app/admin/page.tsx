@@ -4155,6 +4155,17 @@ function TriggerEditModal({
                 />
               </div>
 
+              <div>
+                <label className="block text-xs text-slate-400 mb-1">Clinical Rationale / Justification</label>
+                <textarea
+                  value={form.clinical_rationale}
+                  onChange={(e) => setForm({ ...form, clinical_rationale: e.target.value })}
+                  className="w-full px-3 py-2 bg-[#0a1628] border border-[#1e3a5f] rounded-lg text-white text-sm focus:outline-none focus:border-teal-500"
+                  rows={3}
+                  placeholder="Clinical justification for this therapeutic interchange..."
+                />
+              </div>
+
               <div className="flex items-center gap-3">
                 <input
                   type="checkbox"
