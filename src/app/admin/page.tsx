@@ -1252,7 +1252,7 @@ export default function SuperAdminPage() {
         });
 
         // Refresh pharmacy list
-        await fetchPharmacies();
+        await fetchData();
       } else {
         alert('Failed to add store: ' + (data.error || 'Unknown error'));
       }
