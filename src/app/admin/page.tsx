@@ -234,6 +234,14 @@ export default function SuperAdminPage() {
     noMatches: { triggerId: string; triggerName: string; reason: string }[];
   } | null>(null);
 
+  // Generate Clinical Justifications
+  const [generatingJustifications, setGeneratingJustifications] = useState(false);
+  const [justificationResult, setJustificationResult] = useState<{
+    processed: number;
+    succeeded: number;
+    failed: number;
+  } | null>(null);
+
   // New Client Modal
   const [newClientModalOpen, setNewClientModalOpen] = useState(false);
   const [creatingClient, setCreatingClient] = useState(false);
@@ -695,6 +703,72 @@ export default function SuperAdminPage() {
       alert('Failed to scan coverage');
     } finally {
       setBulkCoverageScanning(false);
+    }
+  }
+
+  async function generateAllJustifications(overwrite = false) {
+    if (!confirm(overwrite
+      ? 'This will regenerate ALL clinical justifications, even existing ones. Continue?'
+      : 'This will generate clinical justifications for triggers that don\'t have one. Continue?'
+    )) return;
+
+    setGeneratingJustifications(true);
+    setJustificationResult(null);
+    try {
+      const token = localStorage.getItem('therxos_token');
+      const res = await fetch(`${API_URL}/api/admin/triggers/generate-all-justifications`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ overwrite, triggerType: 'therapeutic_interchange' }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setJustificationResult({
+          processed: data.processed,
+          succeeded: data.succeeded,
+          failed: data.failed,
+        });
+        // Refresh triggers
+        fetchTriggers();
+        alert(`Generated ${data.succeeded} clinical justifications${data.failed > 0 ? ` (${data.failed} failed)` : ''}`);
+      } else {
+        const error = await res.json();
+        alert('Error: ' + (error.error || 'Failed to generate justifications'));
+      }
+    } catch (err) {
+      console.error('Failed to generate justifications:', err);
+      alert('Failed to generate justifications');
+    } finally {
+      setGeneratingJustifications(false);
+    }
+  }
+
+  async function regenerateJustification(triggerId: string, triggerName: string) {
+    if (!confirm(`Regenerate clinical justification for "${triggerName}"?`)) return;
+
+    try {
+      const token = localStorage.getItem('therxos_token');
+      const res = await fetch(`${API_URL}/api/admin/triggers/${triggerId}/generate-justification`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        alert(`Generated: ${data.clinical_rationale}`);
+        fetchTriggers();
+      } else {
+        const error = await res.json();
+        alert('Error: ' + (error.error || 'Failed to generate justification'));
+      }
+    } catch (err) {
+      console.error('Failed to generate justification:', err);
+      alert('Failed to generate justification');
     }
   }
 
@@ -1910,6 +1984,24 @@ export default function SuperAdminPage() {
               )}
             </button>
             <button
+              onClick={() => generateAllJustifications(false)}
+              disabled={generatingJustifications}
+              className="flex items-center gap-2 px-4 py-2 bg-amber-500 hover:bg-amber-600 disabled:opacity-50 text-white rounded-lg text-sm font-medium transition-colors"
+              title="Generate clinical justifications using AI for triggers that don't have one"
+            >
+              {generatingJustifications ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Generating...
+                </>
+              ) : (
+                <>
+                  <Zap className="w-4 h-4" />
+                  Generate Justifications
+                </>
+              )}
+            </button>
+            <button
               onClick={() => {
                 setEditingTrigger(null);
                 setTriggerModalOpen(true);
@@ -2131,6 +2223,15 @@ export default function SuperAdminPage() {
                             <ScanLine className="w-4 h-4" />
                           )}
                         </button>
+                        {trigger.trigger_type === 'therapeutic_interchange' && (
+                          <button
+                            onClick={() => regenerateJustification(trigger.trigger_id, trigger.display_name)}
+                            className="p-1.5 hover:bg-amber-500/20 rounded text-slate-400 hover:text-amber-400 transition-colors"
+                            title="Regenerate Clinical Justification"
+                          >
+                            <Zap className="w-4 h-4" />
+                          </button>
+                        )}
                         <button
                           onClick={() => deleteTrigger(trigger.trigger_id)}
                           className="p-1.5 hover:bg-red-500/20 rounded text-slate-400 hover:text-red-400 transition-colors"
