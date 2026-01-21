@@ -4,15 +4,25 @@ import { useState, useCallback } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { ingestionApi, analyticsApi } from '@/lib/api';
 import { useAuthStore } from '@/store';
-import { 
-  Upload, 
-  FileText, 
-  CheckCircle, 
-  AlertCircle, 
+import {
+  Upload,
+  FileText,
+  CheckCircle,
+  AlertCircle,
   Loader2,
   X,
   Clock,
-  Database
+  Database,
+  UserPlus,
+  Image,
+  FileSpreadsheet,
+  Send,
+  Download,
+  Plus,
+  Pill,
+  CreditCard,
+  User,
+  Lightbulb
 } from 'lucide-react';
 
 // Demo ingestion history
@@ -22,10 +32,33 @@ const DEMO_HISTORY = [
   { id: 3, filename: 'rx_history_oct.csv', status: 'completed', records: 1100, created_at: '2025-10-10T09:15:00Z' },
 ];
 
+// Demo intake results
+const DEMO_INTAKE_RESULTS = {
+  patient: { firstName: 'John', lastName: 'Smith', dob: '1965-03-15' },
+  insurance: { bin: '004336', pcn: 'ADV', group: 'RX1234' },
+  medications: [
+    { name: 'Lisinopril 10mg', frequency: 'Once daily' },
+    { name: 'Metformin 500mg', frequency: 'Twice daily' },
+    { name: 'Atorvastatin 20mg', frequency: 'Once daily at bedtime' },
+  ],
+  opportunities: [
+    { type: 'Therapeutic Interchange', current: 'Atorvastatin 20mg', recommended: 'Rosuvastatin 10mg', reason: 'Equivalent efficacy, better formulary coverage' },
+    { type: 'Missing Therapy', current: 'Metformin (Diabetes)', recommended: 'GLP-1 Agonist', reason: 'A1C optimization, cardiovascular benefit' },
+  ]
+};
+
+interface IntakeResult {
+  patient: { firstName: string; lastName: string; dob: string };
+  insurance: { bin: string; pcn: string; group: string };
+  medications: { name: string; frequency?: string }[];
+  opportunities: { type: string; current: string; recommended: string; reason: string; opportunityId?: string }[];
+}
+
 export default function UploadPage() {
   const user = useAuthStore((state) => state.user);
   const isDemo = user?.userId === 'demo-user-001';
-  
+
+  // Prescription Data Upload State
   const [dragActive, setDragActive] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [uploadStatus, setUploadStatus] = useState<'idle' | 'uploading' | 'success' | 'error'>('idle');
@@ -34,12 +67,22 @@ export default function UploadPage() {
   const [runScan, setRunScan] = useState(false);
   const [uploadResults, setUploadResults] = useState<any>(null);
 
+  // New Patient Intake State
+  const [intakeDragActive, setIntakeDragActive] = useState(false);
+  const [intakeFile, setIntakeFile] = useState<File | null>(null);
+  const [intakePreview, setIntakePreview] = useState<string | null>(null);
+  const [intakeStatus, setIntakeStatus] = useState<'idle' | 'processing' | 'success' | 'error'>('idle');
+  const [intakeMessage, setIntakeMessage] = useState('');
+  const [intakeResults, setIntakeResults] = useState<IntakeResult | null>(null);
+  const [addingToQueue, setAddingToQueue] = useState<string | null>(null);
+
   const { data: ingestionStatus } = useQuery({
     queryKey: ['ingestion-status', user?.pharmacyId],
     queryFn: () => analyticsApi.ingestionStatus().then((r) => r.data),
     enabled: !isDemo && !!user?.pharmacyId,
   });
 
+  // Prescription Upload Mutation
   const uploadMutation = useMutation({
     mutationFn: (file: File) => ingestionApi.uploadCSV(file, {
       pharmacyId: user?.pharmacyId,
@@ -67,6 +110,39 @@ export default function UploadPage() {
     },
   });
 
+  // New Patient Intake Mutation
+  const intakeMutation = useMutation({
+    mutationFn: async (file: File) => {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('pharmacyId', user?.pharmacyId || '');
+
+      const token = localStorage.getItem('therxos_token');
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/intake/process`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+        body: formData,
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Processing failed');
+      }
+
+      return response.json();
+    },
+    onSuccess: (data) => {
+      setIntakeStatus('success');
+      setIntakeResults(data);
+      setIntakeMessage(`Found ${data.medications?.length || 0} medications and ${data.opportunities?.length || 0} potential opportunities`);
+    },
+    onError: (error: any) => {
+      setIntakeStatus('error');
+      setIntakeMessage(error.message || 'Failed to process file. Please try again.');
+    },
+  });
+
+  // Prescription drag handlers
   const handleDrag = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
@@ -121,12 +197,175 @@ export default function UploadPage() {
       }, 2000);
       return;
     }
-    
+
     setUploadStatus('uploading');
     uploadMutation.mutate(selectedFile);
   };
 
+  // Intake drag handlers
+  const handleIntakeDrag = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.type === 'dragenter' || e.type === 'dragover') {
+      setIntakeDragActive(true);
+    } else if (e.type === 'dragleave') {
+      setIntakeDragActive(false);
+    }
+  }, []);
+
+  const handleIntakeDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIntakeDragActive(false);
+
+    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+      const file = e.dataTransfer.files[0];
+      const validTypes = ['image/jpeg', 'image/png', 'image/jpg', 'application/pdf', 'text/csv'];
+      const validExtensions = ['.jpg', '.jpeg', '.png', '.pdf', '.csv'];
+
+      const isValidType = validTypes.includes(file.type) || validExtensions.some(ext => file.name.toLowerCase().endsWith(ext));
+
+      if (isValidType) {
+        setIntakeFile(file);
+        setIntakeStatus('idle');
+        setIntakeResults(null);
+
+        // Create preview for images
+        if (file.type.startsWith('image/')) {
+          const reader = new FileReader();
+          reader.onload = (e) => setIntakePreview(e.target?.result as string);
+          reader.readAsDataURL(file);
+        } else {
+          setIntakePreview(null);
+        }
+      } else {
+        setIntakeStatus('error');
+        setIntakeMessage('Please upload a JPG, PNG, PDF, or CSV file');
+      }
+    }
+  }, []);
+
+  const handleIntakeFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      const file = e.target.files[0];
+      setIntakeFile(file);
+      setIntakeStatus('idle');
+      setIntakeResults(null);
+
+      if (file.type.startsWith('image/')) {
+        const reader = new FileReader();
+        reader.onload = (e) => setIntakePreview(e.target?.result as string);
+        reader.readAsDataURL(file);
+      } else {
+        setIntakePreview(null);
+      }
+    }
+  };
+
+  const handleIntakeProcess = async () => {
+    if (!intakeFile) return;
+
+    if (!user?.pharmacyId) {
+      setIntakeStatus('error');
+      setIntakeMessage('Session expired. Please log out and log back in.');
+      return;
+    }
+
+    if (isDemo) {
+      setIntakeStatus('processing');
+      setTimeout(() => {
+        setIntakeStatus('success');
+        setIntakeResults(DEMO_INTAKE_RESULTS);
+        setIntakeMessage('Demo mode: Found 3 medications and 2 potential opportunities');
+      }, 3000);
+      return;
+    }
+
+    setIntakeStatus('processing');
+    intakeMutation.mutate(intakeFile);
+  };
+
+  const handleAddToQueue = async (opportunity: IntakeResult['opportunities'][0], index: number) => {
+    if (!intakeResults?.patient) return;
+
+    setAddingToQueue(`${index}`);
+
+    try {
+      const token = localStorage.getItem('therxos_token');
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/intake/add-opportunity`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          pharmacyId: user?.pharmacyId,
+          patient: intakeResults.patient,
+          insurance: intakeResults.insurance,
+          opportunity
+        }),
+      });
+
+      if (!response.ok) throw new Error('Failed to add');
+
+      const data = await response.json();
+
+      // Update the opportunity with the created ID
+      setIntakeResults(prev => {
+        if (!prev) return prev;
+        const newOpps = [...prev.opportunities];
+        newOpps[index] = { ...newOpps[index], opportunityId: data.opportunityId };
+        return { ...prev, opportunities: newOpps };
+      });
+    } catch (err) {
+      console.error('Failed to add opportunity:', err);
+    } finally {
+      setAddingToQueue(null);
+    }
+  };
+
+  const handleExportCSV = () => {
+    if (!intakeResults) return;
+
+    const rows = [
+      ['Patient Name', 'DOB', 'Insurance BIN', 'PCN', 'Group', 'Opportunity Type', 'Current', 'Recommended', 'Reason'],
+      ...intakeResults.opportunities.map(opp => [
+        `${intakeResults.patient.firstName} ${intakeResults.patient.lastName}`,
+        intakeResults.patient.dob,
+        intakeResults.insurance.bin,
+        intakeResults.insurance.pcn,
+        intakeResults.insurance.group,
+        opp.type,
+        opp.current,
+        opp.recommended,
+        opp.reason
+      ])
+    ];
+
+    const csvContent = rows.map(row => row.map(cell => `"${cell}"`).join(',')).join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `intake_${intakeResults.patient.lastName}_${new Date().toISOString().split('T')[0]}.csv`;
+    a.click();
+  };
+
+  const clearIntake = () => {
+    setIntakeFile(null);
+    setIntakePreview(null);
+    setIntakeStatus('idle');
+    setIntakeResults(null);
+    setIntakeMessage('');
+  };
+
   const history = isDemo ? DEMO_HISTORY : (ingestionStatus?.recentUploads || []);
+
+  const getFileIcon = (file: File) => {
+    if (file.type.startsWith('image/')) return <Image className="w-10 h-10" style={{ color: 'var(--blue-500)' }} />;
+    if (file.type === 'application/pdf') return <FileText className="w-10 h-10" style={{ color: 'var(--red-500)' }} />;
+    return <FileSpreadsheet className="w-10 h-10" style={{ color: 'var(--green-500)' }} />;
+  };
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -134,14 +373,22 @@ export default function UploadPage() {
       <div>
         <h1 className="text-2xl font-bold">Data Upload</h1>
         <p className="mt-1" style={{ color: 'var(--slate-400)' }}>
-          Upload prescription data from your pharmacy management system
+          Upload prescription data or process new patient intake documents
         </p>
       </div>
 
-      {/* Upload Area */}
+      {/* Prescription Data Upload */}
       <div className="card p-6">
-        <h2 className="text-lg font-semibold mb-4">Upload CSV File</h2>
-        
+        <div className="flex items-center gap-3 mb-4">
+          <div className="w-10 h-10 rounded-lg bg-teal-500/20 flex items-center justify-center">
+            <Database className="w-5 h-5 text-teal-500" />
+          </div>
+          <div>
+            <h2 className="text-lg font-semibold">Prescription Data Upload</h2>
+            <p className="text-sm" style={{ color: 'var(--slate-400)' }}>Upload CSV exports from your pharmacy system</p>
+          </div>
+        </div>
+
         <div
           className={`relative border-2 border-dashed rounded-xl p-8 text-center transition-all ${
             dragActive ? 'border-[var(--teal-500)] bg-[var(--teal-500)]/5' : 'border-[var(--navy-600)]'
@@ -161,14 +408,14 @@ export default function UploadPage() {
                     {(selectedFile.size / 1024 / 1024).toFixed(2)} MB
                   </p>
                 </div>
-                <button 
+                <button
                   onClick={() => setSelectedFile(null)}
                   className="icon-btn ml-4"
                 >
                   <X className="w-4 h-4" />
                 </button>
               </div>
-              
+
               {/* Processing Options */}
               <div className="flex flex-wrap gap-4 justify-center mb-4">
                 <label className="flex items-center gap-2 cursor-pointer">
@@ -256,7 +503,7 @@ export default function UploadPage() {
             )}
           </div>
         )}
-        
+
         {uploadStatus === 'error' && (
           <div className="mt-4 p-4 rounded-lg flex items-center gap-3" style={{ background: 'var(--red-100)' }}>
             <AlertCircle className="w-5 h-5" style={{ color: '#991b1b' }} />
@@ -275,18 +522,244 @@ export default function UploadPage() {
         </div>
       </div>
 
+      {/* New Patient Intake Upload */}
+      <div className="card p-6">
+        <div className="flex items-center gap-3 mb-4">
+          <div className="w-10 h-10 rounded-lg bg-blue-500/20 flex items-center justify-center">
+            <UserPlus className="w-5 h-5 text-blue-500" />
+          </div>
+          <div>
+            <h2 className="text-lg font-semibold">New Patient Intake</h2>
+            <p className="text-sm" style={{ color: 'var(--slate-400)' }}>Upload medication list to identify opportunities before first fill</p>
+          </div>
+        </div>
+
+        {!intakeResults ? (
+          <>
+            <div
+              className={`relative border-2 border-dashed rounded-xl p-8 text-center transition-all ${
+                intakeDragActive ? 'border-[var(--blue-500)] bg-[var(--blue-500)]/5' : 'border-[var(--navy-600)]'
+              }`}
+              onDragEnter={handleIntakeDrag}
+              onDragLeave={handleIntakeDrag}
+              onDragOver={handleIntakeDrag}
+              onDrop={handleIntakeDrop}
+            >
+              {intakeFile ? (
+                <div className="space-y-4">
+                  <div className="flex items-center justify-center gap-3">
+                    {getFileIcon(intakeFile)}
+                    <div className="text-left">
+                      <p className="font-medium">{intakeFile.name}</p>
+                      <p className="text-sm" style={{ color: 'var(--slate-400)' }}>
+                        {(intakeFile.size / 1024 / 1024).toFixed(2)} MB
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => { setIntakeFile(null); setIntakePreview(null); }}
+                      className="icon-btn ml-4"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+
+                  {intakePreview && (
+                    <div className="max-w-xs mx-auto">
+                      <img src={intakePreview} alt="Preview" className="rounded-lg border border-[var(--navy-600)]" />
+                    </div>
+                  )}
+
+                  <button
+                    onClick={handleIntakeProcess}
+                    disabled={intakeStatus === 'processing'}
+                    className="btn btn-primary"
+                    style={{ background: 'var(--blue-500)' }}
+                  >
+                    {intakeStatus === 'processing' ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        Analyzing...
+                      </>
+                    ) : (
+                      <>
+                        <Lightbulb className="w-4 h-4" />
+                        Find Opportunities
+                      </>
+                    )}
+                  </button>
+                </div>
+              ) : (
+                <>
+                  <UserPlus className="w-12 h-12 mx-auto mb-4" style={{ color: 'var(--slate-400)' }} />
+                  <p className="font-medium mb-2">Upload patient medication list</p>
+                  <p className="text-sm mb-4" style={{ color: 'var(--slate-400)' }}>
+                    Drag and drop or click to browse • JPG, PNG, PDF, or CSV
+                  </p>
+                  <label className="btn btn-secondary cursor-pointer">
+                    <input
+                      type="file"
+                      accept=".jpg,.jpeg,.png,.pdf,.csv"
+                      onChange={handleIntakeFileSelect}
+                      className="hidden"
+                    />
+                    Browse Files
+                  </label>
+                </>
+              )}
+            </div>
+
+            {intakeStatus === 'error' && (
+              <div className="mt-4 p-4 rounded-lg flex items-center gap-3" style={{ background: 'var(--red-100)' }}>
+                <AlertCircle className="w-5 h-5" style={{ color: '#991b1b' }} />
+                <span style={{ color: '#991b1b' }}>{intakeMessage}</span>
+              </div>
+            )}
+
+            <div className="mt-6 p-4 rounded-lg" style={{ background: 'var(--navy-700)' }}>
+              <h3 className="font-medium mb-2">How It Works</h3>
+              <ul className="text-sm space-y-1" style={{ color: 'var(--slate-400)' }}>
+                <li>• Upload a photo or scan of the patient's medication list</li>
+                <li>• Our AI extracts medications and insurance information</li>
+                <li>• We identify therapeutic opportunities before their first fill</li>
+                <li>• Add opportunities to your queue or generate a fax</li>
+              </ul>
+            </div>
+          </>
+        ) : (
+          /* Intake Results */
+          <div className="space-y-6">
+            {/* Patient & Insurance Info */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="p-4 rounded-lg" style={{ background: 'var(--navy-700)' }}>
+                <div className="flex items-center gap-2 mb-3">
+                  <User className="w-4 h-4 text-blue-400" />
+                  <h3 className="font-medium">Patient Information</h3>
+                </div>
+                <div className="space-y-1 text-sm">
+                  <p><span style={{ color: 'var(--slate-400)' }}>Name:</span> {intakeResults.patient.firstName} {intakeResults.patient.lastName}</p>
+                  <p><span style={{ color: 'var(--slate-400)' }}>DOB:</span> {intakeResults.patient.dob}</p>
+                </div>
+              </div>
+              <div className="p-4 rounded-lg" style={{ background: 'var(--navy-700)' }}>
+                <div className="flex items-center gap-2 mb-3">
+                  <CreditCard className="w-4 h-4 text-green-400" />
+                  <h3 className="font-medium">Insurance Information</h3>
+                </div>
+                <div className="space-y-1 text-sm">
+                  <p><span style={{ color: 'var(--slate-400)' }}>BIN:</span> {intakeResults.insurance.bin || 'Not found'}</p>
+                  <p><span style={{ color: 'var(--slate-400)' }}>PCN:</span> {intakeResults.insurance.pcn || 'Not found'}</p>
+                  <p><span style={{ color: 'var(--slate-400)' }}>Group:</span> {intakeResults.insurance.group || 'Not found'}</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Medications Found */}
+            <div>
+              <div className="flex items-center gap-2 mb-3">
+                <Pill className="w-4 h-4 text-purple-400" />
+                <h3 className="font-medium">Medications Found ({intakeResults.medications.length})</h3>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {intakeResults.medications.map((med, i) => (
+                  <span key={i} className="px-3 py-1 rounded-full text-sm" style={{ background: 'var(--navy-700)' }}>
+                    {med.name}
+                  </span>
+                ))}
+              </div>
+            </div>
+
+            {/* Opportunities Found */}
+            {intakeResults.opportunities.length > 0 ? (
+              <div>
+                <div className="flex items-center gap-2 mb-3">
+                  <Lightbulb className="w-4 h-4 text-amber-400" />
+                  <h3 className="font-medium">Opportunities Found ({intakeResults.opportunities.length})</h3>
+                </div>
+                <div className="space-y-3">
+                  {intakeResults.opportunities.map((opp, i) => (
+                    <div key={i} className="p-4 rounded-lg" style={{ background: 'var(--navy-700)' }}>
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 mb-2">
+                            <span className="badge badge-amber">{opp.type}</span>
+                          </div>
+                          <p className="text-sm mb-1">
+                            <span style={{ color: 'var(--slate-400)' }}>Current:</span> {opp.current}
+                          </p>
+                          <p className="text-sm mb-2">
+                            <span style={{ color: 'var(--slate-400)' }}>Recommended:</span>{' '}
+                            <span className="text-teal-400 font-medium">{opp.recommended}</span>
+                          </p>
+                          <p className="text-xs" style={{ color: 'var(--slate-500)' }}>{opp.reason}</p>
+                        </div>
+                        <div>
+                          {opp.opportunityId ? (
+                            <span className="badge badge-green">Added</span>
+                          ) : (
+                            <button
+                              onClick={() => handleAddToQueue(opp, i)}
+                              disabled={addingToQueue === `${i}`}
+                              className="btn btn-primary text-sm py-1.5 px-3"
+                            >
+                              {addingToQueue === `${i}` ? (
+                                <Loader2 className="w-3 h-3 animate-spin" />
+                              ) : (
+                                <>
+                                  <Plus className="w-3 h-3" />
+                                  Add to Queue
+                                </>
+                              )}
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <div className="text-center py-6" style={{ color: 'var(--slate-400)' }}>
+                <CheckCircle className="w-12 h-12 mx-auto mb-3 text-green-500" />
+                <p className="font-medium">No opportunities identified</p>
+                <p className="text-sm">This patient's medications are already optimized</p>
+              </div>
+            )}
+
+            {/* Action Buttons */}
+            <div className="flex flex-wrap gap-3 pt-4 border-t border-[var(--navy-600)]">
+              <button onClick={handleExportCSV} className="btn btn-secondary">
+                <Download className="w-4 h-4" />
+                Export CSV
+              </button>
+              <button
+                onClick={() => {/* TODO: Generate fax */}}
+                className="btn btn-secondary"
+                disabled={intakeResults.opportunities.length === 0}
+              >
+                <Send className="w-4 h-4" />
+                Generate Fax
+              </button>
+              <button onClick={clearIntake} className="btn btn-ghost ml-auto">
+                <X className="w-4 h-4" />
+                Clear & Start Over
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+
       {/* Upload History */}
       <div className="card p-6">
         <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
-          <Database className="w-5 h-5" style={{ color: 'var(--teal-500)' }} />
+          <Clock className="w-5 h-5" style={{ color: 'var(--teal-500)' }} />
           Recent Uploads
         </h2>
-        
+
         {history.length > 0 ? (
           <div className="space-y-3">
             {history.map((upload: any) => (
-              <div 
-                key={upload.id} 
+              <div
+                key={upload.id}
                 className="flex items-center justify-between p-4 rounded-lg"
                 style={{ background: 'var(--navy-700)' }}
               >
