@@ -249,6 +249,11 @@ export default function SuperAdminPage() {
     pharmacyNpi: '',
     pharmacyNcpdp: '',
     pharmacyState: '',
+    pharmacyAddress: '',
+    pharmacyCity: '',
+    pharmacyZip: '',
+    pharmacyPhone: '',
+    pharmacyFax: '',
     adminEmail: '',
     adminFirstName: '',
     adminLastName: '',
@@ -406,6 +411,11 @@ export default function SuperAdminPage() {
       pharmacyNpi: '',
       pharmacyNcpdp: '',
       pharmacyState: '',
+      pharmacyAddress: '',
+      pharmacyCity: '',
+      pharmacyZip: '',
+      pharmacyPhone: '',
+      pharmacyFax: '',
       adminEmail: '',
       adminFirstName: '',
       adminLastName: '',
@@ -3030,6 +3040,62 @@ export default function SuperAdminPage() {
                       className="w-full px-3 py-2 bg-[#0a1628] border border-[#1e3a5f] rounded-lg text-white focus:outline-none focus:border-teal-500"
                       placeholder="CA"
                       maxLength={2}
+                    />
+                  </div>
+
+                  <div className="col-span-2">
+                    <label className="block text-sm text-slate-400 mb-1">Address</label>
+                    <input
+                      type="text"
+                      value={newClientForm.pharmacyAddress}
+                      onChange={(e) => setNewClientForm({ ...newClientForm, pharmacyAddress: e.target.value })}
+                      className="w-full px-3 py-2 bg-[#0a1628] border border-[#1e3a5f] rounded-lg text-white focus:outline-none focus:border-teal-500"
+                      placeholder="123 Main Street"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm text-slate-400 mb-1">City</label>
+                    <input
+                      type="text"
+                      value={newClientForm.pharmacyCity}
+                      onChange={(e) => setNewClientForm({ ...newClientForm, pharmacyCity: e.target.value })}
+                      className="w-full px-3 py-2 bg-[#0a1628] border border-[#1e3a5f] rounded-lg text-white focus:outline-none focus:border-teal-500"
+                      placeholder="Los Angeles"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm text-slate-400 mb-1">ZIP Code</label>
+                    <input
+                      type="text"
+                      value={newClientForm.pharmacyZip}
+                      onChange={(e) => setNewClientForm({ ...newClientForm, pharmacyZip: e.target.value })}
+                      className="w-full px-3 py-2 bg-[#0a1628] border border-[#1e3a5f] rounded-lg text-white focus:outline-none focus:border-teal-500"
+                      placeholder="90210"
+                      maxLength={10}
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm text-slate-400 mb-1">Phone</label>
+                    <input
+                      type="tel"
+                      value={newClientForm.pharmacyPhone}
+                      onChange={(e) => setNewClientForm({ ...newClientForm, pharmacyPhone: e.target.value })}
+                      className="w-full px-3 py-2 bg-[#0a1628] border border-[#1e3a5f] rounded-lg text-white focus:outline-none focus:border-teal-500"
+                      placeholder="(555) 123-4567"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm text-slate-400 mb-1">Fax</label>
+                    <input
+                      type="tel"
+                      value={newClientForm.pharmacyFax}
+                      onChange={(e) => setNewClientForm({ ...newClientForm, pharmacyFax: e.target.value })}
+                      className="w-full px-3 py-2 bg-[#0a1628] border border-[#1e3a5f] rounded-lg text-white focus:outline-none focus:border-teal-500"
+                      placeholder="(555) 123-4568"
                     />
                   </div>
 
