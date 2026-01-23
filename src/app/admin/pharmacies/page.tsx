@@ -108,9 +108,9 @@ export default function PharmaciesPage() {
 
   const filteredPharmacies = pharmacies.filter(p => {
     const matchesSearch =
-      p.pharmacy_name.toLowerCase().includes(search.toLowerCase()) ||
-      p.client_name?.toLowerCase().includes(search.toLowerCase()) ||
-      p.state?.toLowerCase().includes(search.toLowerCase());
+      (p.pharmacy_name || '').toLowerCase().includes(search.toLowerCase()) ||
+      (p.client_name || '').toLowerCase().includes(search.toLowerCase()) ||
+      (p.state || '').toLowerCase().includes(search.toLowerCase());
     const matchesStatus = statusFilter === 'all' || p.status === statusFilter;
     return matchesSearch && matchesStatus;
   });
@@ -187,8 +187,8 @@ export default function PharmaciesPage() {
           >
             <div className="flex items-start justify-between mb-4">
               <div>
-                <h3 className="text-lg font-semibold text-white">{pharmacy.pharmacy_name}</h3>
-                <p className="text-sm text-slate-400">{pharmacy.client_name}</p>
+                <h3 className="text-lg font-semibold text-white">{pharmacy.pharmacy_name || 'Unnamed Pharmacy'}</h3>
+                <p className="text-sm text-slate-400">{pharmacy.client_name || 'No client'}</p>
               </div>
               <span className={`px-2 py-1 rounded text-xs font-medium ${
                 pharmacy.status === 'active' ? 'bg-emerald-500/20 text-emerald-400'
