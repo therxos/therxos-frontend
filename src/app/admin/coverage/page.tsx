@@ -77,7 +77,7 @@ export default function CoverageScannerPage() {
     setScanResult(null);
     try {
       const token = localStorage.getItem('therxos_token');
-      const res = await fetch(`${API_URL}/api/admin/triggers/scan-all-coverage`, {
+      const res = await fetch(`${API_URL}/api/admin/triggers/verify-all-coverage`, {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${token}`,
