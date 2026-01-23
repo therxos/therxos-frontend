@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useAuthStore } from '@/store';
 import { usePermissions } from '@/hooks/usePermissions';
-import { jsPDF } from 'jspdf';
+import { PDFDocument, rgb, StandardFonts } from 'pdf-lib';
 import {
   Search,
   ChevronDown,
@@ -114,11 +114,34 @@ function formatShortCurrency(value: number) {
 
 function formatDate(dateStr: string) {
   if (!dateStr) return 'N/A';
+  // Handle YYYY-MM-DD format - parse as local date to avoid timezone shift
+  const datePart = dateStr.split('T')[0];
+  const parts = datePart.split('-');
+  if (parts.length === 3) {
+    const [year, month, day] = parts;
+    return new Date(parseInt(year), parseInt(month) - 1, parseInt(day)).toLocaleDateString('en-US', {
+      month: 'numeric',
+      day: 'numeric',
+      year: 'numeric',
+    });
+  }
   return new Date(dateStr).toLocaleDateString('en-US', {
     month: 'numeric',
     day: 'numeric',
     year: 'numeric',
   });
+}
+
+// Parse date string as local date (avoids UTC timezone shift)
+function parseLocalDate(dateStr: string): Date | null {
+  if (!dateStr) return null;
+  const datePart = dateStr.split('T')[0];
+  const parts = datePart.split('-');
+  if (parts.length === 3) {
+    const [year, month, day] = parts;
+    return new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+  }
+  return new Date(dateStr);
 }
 
 function getInitials(str: string) {
@@ -409,231 +432,259 @@ function SidePanel({
 }) {
   const showAnyFinancials = showFullFinancials || showLimitedFinancials;
   const [generating, setGenerating] = useState(false);
+  const [selectedForFax, setSelectedForFax] = useState<Set<string>>(new Set());
+  const [viewMode, setViewMode] = useState<'single' | 'batch'>('single');
 
   if (!opportunity || !groupItem) return null;
 
   const [rationale, action] = (opportunity.clinical_rationale || '').split('\n\nAction: ');
 
-  // Generate fax PDF for this opportunity
+  // Get all opportunities for this patient grouped by prescriber
+  const allOpportunities = groupItem.opportunities || [opportunity];
+  const byPrescriber = allOpportunities.reduce((acc, opp) => {
+    const prescriber = opp.prescriber_name || 'Unknown Prescriber';
+    if (!acc[prescriber]) acc[prescriber] = [];
+    acc[prescriber].push(opp);
+    return acc;
+  }, {} as Record<string, Opportunity[]>);
+
+  // Toggle opportunity selection for batch fax
+  const toggleSelection = (oppId: string, prescriber: string) => {
+    const newSelected = new Set(selectedForFax);
+    if (newSelected.has(oppId)) {
+      newSelected.delete(oppId);
+    } else {
+      // Only allow selecting from same prescriber
+      const currentPrescriber = allOpportunities.find(o => selectedForFax.has(o.opportunity_id))?.prescriber_name;
+      if (currentPrescriber && currentPrescriber !== prescriber) {
+        alert('You can only batch opportunities for the same prescriber. Clear selection to choose a different prescriber.');
+        return;
+      }
+      newSelected.add(oppId);
+    }
+    setSelectedForFax(newSelected);
+  };
+
+  // Select all for a prescriber
+  const selectAllForPrescriber = (prescriber: string) => {
+    const opps = byPrescriber[prescriber] || [];
+    const allSelected = opps.every(o => selectedForFax.has(o.opportunity_id));
+    const newSelected = new Set<string>();
+    if (!allSelected) {
+      opps.forEach(o => newSelected.add(o.opportunity_id));
+    }
+    setSelectedForFax(newSelected);
+  };
+
+  // Get selected opportunities
+  const getSelectedOpportunities = () => allOpportunities.filter(o => selectedForFax.has(o.opportunity_id));
+
+  // Generate fax PDF for this opportunity - matches TIF.pdf format
   async function generateFaxPDF() {
     if (!opportunity || !groupItem) return;
     setGenerating(true);
 
     try {
-      const doc = new jsPDF({
-        orientation: 'portrait',
-        unit: 'pt',
-        format: 'letter',
-      });
+      const pdfDoc = await PDFDocument.create();
+      const page = pdfDoc.addPage([612, 792]); // Letter size
+      const form = pdfDoc.getForm();
+      const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
+      const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
 
-      const pageWidth = doc.internal.pageSize.getWidth();
-      const pageHeight = doc.internal.pageSize.getHeight();
-      const margin = 50;
-      const contentWidth = pageWidth - (margin * 2);
+      const { width, height } = page.getSize();
+      const margin = 40;
+      const contentWidth = width - (margin * 2);
+      const navyBlue = rgb(30/255, 58/255, 95/255);
+      const fieldHeight = 18;
 
-      let y = margin;
+      let y = height - 40;
+      let fieldCounter = 0;
 
-      // Header - Pharmacy Info (no TheRxOS branding)
-      doc.setFillColor(30, 58, 95); // Navy blue - professional
-      doc.rect(0, 0, pageWidth, 90, 'F');
+      // Helper to draw section header
+      const drawHeader = (text: string) => {
+        page.drawRectangle({ x: margin, y: y - 16, width: contentWidth, height: 18, color: navyBlue });
+        page.drawText(text, { x: margin + 5, y: y - 12, size: 10, font: fontBold, color: rgb(1, 1, 1) });
+        y -= 20;
+      };
 
-      doc.setTextColor(255, 255, 255);
-      doc.setFontSize(20);
-      doc.setFont('helvetica', 'bold');
-      doc.text(pharmacy?.pharmacy_name || 'Pharmacy', margin, 32);
+      // Helper to add text field
+      const addTextField = (name: string, x: number, yPos: number, w: number, h: number, defaultValue: string = '') => {
+        const fieldName = `${name}_${fieldCounter++}`;
+        const textField = form.createTextField(fieldName);
+        textField.addToPage(page, { x, y: yPos - h + 2, width: w, height: h, borderWidth: 1 });
+        if (defaultValue) textField.setText(defaultValue);
+        return textField;
+      };
 
-      doc.setFontSize(10);
-      doc.setFont('helvetica', 'normal');
-      doc.text('Prescription Optimization Request', margin, 50);
+      // Helper to add checkbox
+      const addCheckbox = (name: string, x: number, yPos: number, checked: boolean = false) => {
+        const fieldName = `${name}_${fieldCounter++}`;
+        const checkbox = form.createCheckBox(fieldName);
+        checkbox.addToPage(page, { x, y: yPos - 10, width: 12, height: 12 });
+        if (checked) checkbox.check();
+        return checkbox;
+      };
 
-      // Pharmacy contact details in header
-      if (pharmacy) {
-        doc.setFontSize(9);
-        if (pharmacy.address) {
-          doc.text(`${pharmacy.address}, ${pharmacy.city}, ${pharmacy.state} ${pharmacy.zip}`, margin, 68);
-        }
-        const contactLine = [
-          pharmacy.phone ? `Tel: ${pharmacy.phone}` : null,
-          pharmacy.fax ? `Fax: ${pharmacy.fax}` : null,
-          pharmacy.npi ? `NPI: ${pharmacy.npi}` : null,
-        ].filter(Boolean).join('  |  ');
-        doc.text(contactLine, margin, 82);
-      }
+      // Title
+      page.drawText('Therapeutic Interchange Request Form', { x: width / 2 - 140, y: y, size: 16, font: fontBold });
+      y -= 25;
 
-      y = 110;
+      // Date received field
+      page.drawText('Date request received:', { x: width - margin - 180, y: y, size: 9, font });
+      addTextField('date_received', width - margin - 80, y + 4, 75, fieldHeight, '');
+      y -= 20;
 
-      // Date on right
-      doc.setTextColor(100, 100, 100);
-      doc.setFontSize(9);
-      doc.text(`Date: ${new Date().toLocaleDateString('en-US', {
-        month: 'long',
-        day: 'numeric',
-        year: 'numeric'
-      })}`, pageWidth - margin, y, { align: 'right' });
+      // PHARMACY SECTION
+      drawHeader('Requesting Pharmacy Information');
 
-      // TO: Prescriber section (more prominent)
-      doc.setTextColor(0, 0, 0);
-      doc.setFontSize(11);
-      doc.setFont('helvetica', 'bold');
-      doc.text('TO:', margin, y);
+      // Row 1
+      page.drawText('Date Submitted:', { x: margin + 5, y: y - 12, size: 9, font: fontBold });
+      addTextField('date_submitted', margin + 85, y - 2, 100, fieldHeight, new Date().toLocaleDateString('en-US'));
+      page.drawText('Contact Person:', { x: margin + contentWidth/2 + 5, y: y - 12, size: 9, font: fontBold });
+      addTextField('pharmacy_contact', margin + contentWidth/2 + 85, y - 2, 150, fieldHeight, '');
+      y -= 22;
 
-      doc.setFontSize(14);
-      doc.text(opportunity.prescriber_name || 'Prescriber', margin + 30, y);
-      y += 18;
+      // Row 2
+      page.drawText('Pharmacy Name:', { x: margin + 5, y: y - 12, size: 9, font: fontBold });
+      addTextField('pharmacy_name', margin + 90, y - 2, 155, fieldHeight, pharmacy?.pharmacy_name || '');
+      page.drawText('Pharmacy NPI:', { x: margin + contentWidth/2 + 5, y: y - 12, size: 9, font: fontBold });
+      addTextField('pharmacy_npi', margin + contentWidth/2 + 80, y - 2, 100, fieldHeight, pharmacy?.npi || '');
+      y -= 22;
 
-      // FROM: Pharmacy section
-      doc.setFontSize(11);
-      doc.text('FROM:', margin, y);
-      doc.setFont('helvetica', 'normal');
-      doc.setFontSize(11);
-      doc.text(pharmacy?.pharmacy_name || 'Pharmacy', margin + 45, y);
-      y += 18;
+      // Row 3
+      page.drawText('Phone:', { x: margin + 5, y: y - 12, size: 9, font: fontBold });
+      addTextField('pharmacy_phone', margin + 45, y - 2, 100, fieldHeight, pharmacy?.phone || '');
+      page.drawText('Fax:', { x: margin + contentWidth/2 + 5, y: y - 12, size: 9, font: fontBold });
+      addTextField('pharmacy_fax', margin + contentWidth/2 + 30, y - 2, 100, fieldHeight, pharmacy?.fax || '');
+      y -= 28;
 
-      // RE: line
-      doc.setFont('helvetica', 'bold');
-      doc.text('RE:', margin, y);
-      doc.setFont('helvetica', 'normal');
-      doc.text('Prescription Therapy Optimization Request', margin + 25, y);
-      y += 25;
+      // PRESCRIBER SECTION
+      drawHeader('Prescriber Information');
 
-      // Divider line
-      doc.setDrawColor(200, 200, 200);
-      doc.line(margin, y, pageWidth - margin, y);
-      y += 20;
+      page.drawText('Prescriber Name:', { x: margin + 5, y: y - 12, size: 9, font: fontBold });
+      addTextField('prescriber_name', margin + 95, y - 2, 150, fieldHeight, opportunity.prescriber_name || '');
+      page.drawText('Prescriber NPI:', { x: margin + contentWidth/2 + 5, y: y - 12, size: 9, font: fontBold });
+      addTextField('prescriber_npi', margin + contentWidth/2 + 85, y - 2, 100, fieldHeight, '');
+      y -= 22;
 
-      // Intro text
-      doc.setTextColor(0, 0, 0);
-      doc.setFontSize(10);
-      const introText = `We have identified a clinical opportunity for your patient that may improve therapeutic outcomes and/or reduce costs. Please review the recommendation below and indicate your response.`;
-      const introLines = doc.splitTextToSize(introText, contentWidth);
-      doc.text(introLines, margin, y);
-      y += (introLines.length * 12) + 15;
+      page.drawText('Practice Name:', { x: margin + 5, y: y - 12, size: 9, font: fontBold });
+      addTextField('practice_name', margin + 85, y - 2, 160, fieldHeight, '');
+      page.drawText('Fax:', { x: margin + contentWidth/2 + 5, y: y - 12, size: 9, font: fontBold });
+      addTextField('prescriber_fax', margin + contentWidth/2 + 30, y - 2, 100, fieldHeight, '');
+      y -= 28;
 
-      // Patient header box
-      doc.setFillColor(240, 249, 255);
-      doc.setDrawColor(14, 165, 233);
-      doc.roundedRect(margin, y, contentWidth, 45, 3, 3, 'FD');
+      // PATIENT SECTION
+      drawHeader('Patient Information');
 
       const patientName = groupItem.first_name && groupItem.last_name
         ? `${groupItem.first_name} ${groupItem.last_name}`
-        : 'Patient';
-
-      doc.setTextColor(0, 0, 0);
-      doc.setFontSize(11);
-      doc.setFont('helvetica', 'bold');
-      doc.text(`Patient: ${patientName}`, margin + 10, y + 18);
-
-      doc.setFont('helvetica', 'normal');
-      doc.setFontSize(9);
-      doc.setTextColor(100, 100, 100);
+        : '';
       const dob = groupItem.date_of_birth
-        ? new Date(groupItem.date_of_birth).toLocaleDateString('en-US')
-        : 'N/A';
-      doc.text(`DOB: ${dob}`, margin + 10, y + 32);
+        ? (parseLocalDate(groupItem.date_of_birth)?.toLocaleDateString('en-US') || '')
+        : '';
 
-      // Insurance info
-      const insuranceInfo = [
-        opportunity.insurance_bin ? `BIN: ${opportunity.insurance_bin}` : null,
-        opportunity.insurance_group ? `Group: ${opportunity.insurance_group}` : null,
-        opportunity.insurance_pcn ? `PCN: ${opportunity.insurance_pcn}` : null,
-      ].filter(Boolean).join(' | ');
-      if (insuranceInfo) {
-        doc.text(insuranceInfo, pageWidth - margin - 10, y + 25, { align: 'right' });
-      }
+      page.drawText('Patient Name:', { x: margin + 5, y: y - 12, size: 9, font: fontBold });
+      addTextField('patient_name', margin + 80, y - 2, 165, fieldHeight, patientName);
+      page.drawText('Date of Birth:', { x: margin + contentWidth/2 + 5, y: y - 12, size: 9, font: fontBold });
+      addTextField('patient_dob', margin + contentWidth/2 + 75, y - 2, 90, fieldHeight, dob);
+      y -= 22;
 
-      y += 55;
+      page.drawText('Member/Rx ID:', { x: margin + 5, y: y - 12, size: 9, font: fontBold });
+      addTextField('member_id', margin + 80, y - 2, 100, fieldHeight, '');
+      page.drawText('Insurance:', { x: margin + contentWidth/2 + 5, y: y - 12, size: 9, font: fontBold });
+      addTextField('insurance', margin + contentWidth/2 + 60, y - 2, 120, fieldHeight, opportunity.plan_name || '');
+      y -= 28;
 
-      // Opportunity type badge
-      const oppType = (opportunity.opportunity_type || 'opportunity')
-        .replace(/_/g, ' ')
-        .replace(/\b\w/g, l => l.toUpperCase());
-      doc.setFillColor(147, 51, 234);
-      doc.roundedRect(margin, y, 130, 18, 2, 2, 'F');
-      doc.setTextColor(255, 255, 255);
-      doc.setFontSize(8);
-      doc.text(oppType, margin + 5, y + 12);
+      // CURRENT MEDICATION
+      drawHeader('Current Medication');
 
-      y += 28;
+      page.drawText('Drug Name/Strength:', { x: margin + 5, y: y - 12, size: 9, font: fontBold });
+      addTextField('current_drug', margin + 110, y - 2, 200, fieldHeight, opportunity.current_drug_name || '');
+      y -= 22;
+      page.drawText('NDC:', { x: margin + 5, y: y - 12, size: 9, font: fontBold });
+      addTextField('current_ndc', margin + 35, y - 2, 120, fieldHeight, opportunity.current_ndc || '');
+      page.drawText('Days Supply:', { x: margin + 200, y: y - 12, size: 9, font: fontBold });
+      addTextField('current_days', margin + 270, y - 2, 50, fieldHeight, '');
+      page.drawText('Refills:', { x: margin + 340, y: y - 12, size: 9, font: fontBold });
+      addTextField('current_refills', margin + 380, y - 2, 50, fieldHeight, '');
+      y -= 28;
 
-      // Current -> Recommended
-      doc.setTextColor(0, 0, 0);
-      doc.setFontSize(10);
-      doc.setFont('helvetica', 'bold');
-      doc.text('Current Medication:', margin, y);
-      doc.setFont('helvetica', 'normal');
-      doc.text(opportunity.current_drug_name || 'N/A', margin + 110, y);
-      y += 18;
+      // REQUESTED ALTERNATIVE
+      drawHeader('Requested Therapeutic Alternative');
 
-      doc.setFont('helvetica', 'bold');
-      doc.text('Recommended:', margin, y);
-      doc.setFont('helvetica', 'normal');
-      doc.setTextColor(13, 148, 136);
-      doc.text(opportunity.recommended_drug_name || 'N/A', margin + 110, y);
-      y += 25;
+      page.drawText('Drug Name/Strength:', { x: margin + 5, y: y - 12, size: 9, font: fontBold });
+      addTextField('rec_drug', margin + 110, y - 2, 200, fieldHeight, opportunity.recommended_drug_name || '');
+      y -= 22;
+      page.drawText('NDC:', { x: margin + 5, y: y - 12, size: 9, font: fontBold });
+      addTextField('rec_ndc', margin + 35, y - 2, 120, fieldHeight, '');
+      page.drawText('Days Supply:', { x: margin + 200, y: y - 12, size: 9, font: fontBold });
+      addTextField('rec_days', margin + 270, y - 2, 50, fieldHeight, '');
+      page.drawText('Refills:', { x: margin + 340, y: y - 12, size: 9, font: fontBold });
+      addTextField('rec_refills', margin + 380, y - 2, 50, fieldHeight, '');
+      y -= 28;
 
-      // Clinical Rationale
-      doc.setTextColor(0, 0, 0);
-      doc.setFont('helvetica', 'bold');
-      doc.text('Clinical Rationale:', margin, y);
-      y += 15;
+      // INTERCHANGE TYPE
+      drawHeader('Interchange Type');
 
-      doc.setFont('helvetica', 'normal');
-      doc.setFontSize(9);
-      const rationaleText = rationale || 'Formulary optimization opportunity.';
-      const rationaleLines = doc.splitTextToSize(rationaleText, contentWidth - 10);
-      doc.text(rationaleLines, margin + 10, y);
-      y += (rationaleLines.length * 12) + 20;
+      const oppType = (opportunity.opportunity_type || '').toLowerCase();
+      addCheckbox('type_generic', margin + 10, y, oppType.includes('generic'));
+      page.drawText('Generic Substitution', { x: margin + 28, y: y - 10, size: 9, font });
+      addCheckbox('type_therapeutic', margin + 160, y, oppType.includes('therapeutic') || oppType.includes('interchange'));
+      page.drawText('Therapeutic Alternative', { x: margin + 178, y: y - 10, size: 9, font });
+      addCheckbox('type_formulary', margin + 340, y, oppType.includes('formulary'));
+      page.drawText('Formulary Preferred', { x: margin + 358, y: y - 10, size: 9, font });
+      y -= 28;
 
-      // Response section
-      y += 20;
-      doc.setDrawColor(13, 148, 136);
-      doc.setLineWidth(2);
-      doc.line(margin, y, pageWidth - margin, y);
-      y += 25;
+      // CLINICAL RATIONALE
+      drawHeader('Clinical Rationale');
 
-      doc.setTextColor(0, 0, 0);
-      doc.setFontSize(12);
-      doc.setFont('helvetica', 'bold');
-      doc.text('PRESCRIBER RESPONSE', margin, y);
-      y += 25;
+      const rationaleText = rationale || opportunity.clinical_rationale || '';
+      const rationaleField = addTextField('rationale', margin + 5, y - 2, contentWidth - 10, 50, rationaleText);
+      rationaleField.enableMultiline();
+      y -= 60;
 
-      doc.setFontSize(10);
-      doc.setFont('helvetica', 'normal');
+      // PRESCRIBER RESPONSE
+      drawHeader('Prescriber Response');
 
-      // Checkboxes
-      const checkboxY = y;
-      doc.rect(margin, checkboxY, 12, 12);
-      doc.text('APPROVED - Please proceed with the recommended change', margin + 20, checkboxY + 9);
+      addCheckbox('resp_approved', margin + 10, y, false);
+      page.drawText('APPROVED - Change prescription as requested', { x: margin + 28, y: y - 10, size: 9, font });
+      addCheckbox('resp_denied', margin + contentWidth/2 + 10, y, false);
+      page.drawText('DENIED - Continue current medication', { x: margin + contentWidth/2 + 28, y: y - 10, size: 9, font });
+      y -= 22;
 
-      doc.rect(margin, checkboxY + 22, 12, 12);
-      doc.text('DENIED - Please continue current therapy', margin + 20, checkboxY + 31);
+      page.drawText('If denied, reason:', { x: margin + 5, y: y - 12, size: 9, font: fontBold });
+      addTextField('denied_reason', margin + 100, y - 2, contentWidth - 110, fieldHeight, '');
+      y -= 28;
 
-      doc.rect(margin, checkboxY + 44, 12, 12);
-      doc.text('CONTACT ME - Please call to discuss', margin + 20, checkboxY + 53);
+      // AUTHORIZATION
+      drawHeader('Prescriber Authorization');
 
-      y = checkboxY + 80;
+      page.drawText('Prescriber Signature:', { x: margin + 5, y: y - 14, size: 9, font: fontBold });
+      page.drawLine({ start: { x: margin + 110, y: y - 14 }, end: { x: margin + 350, y: y - 14 }, thickness: 1 });
+      page.drawText('Date:', { x: margin + 370, y: y - 14, size: 9, font: fontBold });
+      addTextField('sig_date', margin + 400, y - 4, 80, fieldHeight, '');
+      y -= 28;
 
-      // Comments and signature
-      doc.text('Comments: _______________________________________________', margin, y);
-      y += 35;
-      doc.text('Prescriber Signature: ___________________________ Date: ___________', margin, y);
-      y += 25;
+      // INSTRUCTIONS
+      drawHeader('Response Instructions');
+      const instructionText = pharmacy?.fax
+        ? `Please complete this form and fax back to ${pharmacy.fax}. Thank you for your partnership.`
+        : 'Please complete this form and fax back to the pharmacy. Thank you for your partnership.';
+      page.drawText(instructionText, { x: margin + 5, y: y - 14, size: 9, font });
 
-      // Footer with pharmacy fax number
-      doc.setFontSize(9);
-      doc.setTextColor(100, 100, 100);
-      const faxBackText = pharmacy?.fax
-        ? `Please fax this form back to ${pharmacy.fax}. Thank you for your partnership in patient care.`
-        : 'Please fax this form back to the pharmacy. Thank you for your partnership in patient care.';
-      doc.text(faxBackText, margin, y);
-
-      // Save the PDF
+      // Save PDF
+      const pdfBytes = await pdfDoc.save();
+      const blob = new Blob([new Uint8Array(pdfBytes)], { type: 'application/pdf' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
       const prescriberSlug = (opportunity.prescriber_name || 'prescriber').replace(/[^a-z0-9]/gi, '_');
-      const patientSlug = patientName.replace(/[^a-z0-9]/gi, '_');
-      const filename = `fax_${patientSlug}_${prescriberSlug}_${new Date().toISOString().split('T')[0]}.pdf`;
-      doc.save(filename);
+      const patientSlug = (patientName || 'patient').replace(/[^a-z0-9]/gi, '_');
+      link.download = `TIF_${patientSlug}_${prescriberSlug}_${new Date().toISOString().split('T')[0]}.pdf`;
+      link.click();
+      URL.revokeObjectURL(url);
 
-      // Log to fax history (localStorage)
+      // Log to fax history
       try {
         const faxHistory = JSON.parse(localStorage.getItem('therxos_fax_history') || '[]');
         faxHistory.unshift({
@@ -647,7 +698,6 @@ function SidePanel({
           status: 'pending',
           days_since_generated: 0,
         });
-        // Keep last 100 faxes
         localStorage.setItem('therxos_fax_history', JSON.stringify(faxHistory.slice(0, 100)));
       } catch (e) {
         console.error('Failed to save fax history:', e);
@@ -660,17 +710,259 @@ function SidePanel({
       setGenerating(false);
     }
   }
-  
+
+  // Generate batch fax PDF for multiple opportunities (same patient, same prescriber)
+  async function generateBatchFaxPDF() {
+    const selectedOpps = getSelectedOpportunities();
+    if (selectedOpps.length === 0) {
+      alert('Please select at least one opportunity to include in the fax.');
+      return;
+    }
+    if (!groupItem) return;
+    setGenerating(true);
+
+    try {
+      const pdfDoc = await PDFDocument.create();
+      const page = pdfDoc.addPage([612, 792]); // Letter size
+      const form = pdfDoc.getForm();
+      const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
+      const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+
+      const { width, height } = page.getSize();
+      const margin = 40;
+      const contentWidth = width - (margin * 2);
+      const navyBlue = rgb(30/255, 58/255, 95/255);
+      const lightGray = rgb(245/255, 245/255, 245/255);
+      const fieldHeight = 18;
+
+      let y = height - 40;
+      let fieldCounter = 0;
+
+      // Helper to draw section header
+      const drawHeader = (text: string) => {
+        page.drawRectangle({ x: margin, y: y - 16, width: contentWidth, height: 18, color: navyBlue });
+        page.drawText(text, { x: margin + 5, y: y - 12, size: 10, font: fontBold, color: rgb(1, 1, 1) });
+        y -= 20;
+      };
+
+      // Helper to add text field
+      const addTextField = (name: string, x: number, yPos: number, w: number, h: number, defaultValue: string = '') => {
+        const fieldName = `${name}_${fieldCounter++}`;
+        const textField = form.createTextField(fieldName);
+        textField.addToPage(page, { x, y: yPos - h + 2, width: w, height: h, borderWidth: 1 });
+        if (defaultValue) textField.setText(defaultValue);
+        return textField;
+      };
+
+      // Helper to add checkbox
+      const addCheckbox = (name: string, x: number, yPos: number, checked: boolean = false) => {
+        const fieldName = `${name}_${fieldCounter++}`;
+        const checkbox = form.createCheckBox(fieldName);
+        checkbox.addToPage(page, { x, y: yPos - 10, width: 12, height: 12 });
+        if (checked) checkbox.check();
+        return checkbox;
+      };
+
+      // Title
+      page.drawText('Therapeutic Interchange Request Form', { x: width / 2 - 140, y: y, size: 16, font: fontBold });
+      y -= 18;
+      page.drawText(`(${selectedOpps.length} ${selectedOpps.length === 1 ? 'Request' : 'Requests'})`, { x: width / 2 - 40, y: y, size: 10, font, color: rgb(0.4, 0.4, 0.4) });
+      y -= 20;
+
+      // Date received field
+      page.drawText('Date request received:', { x: width - margin - 180, y: y, size: 9, font });
+      addTextField('date_received', width - margin - 80, y + 4, 75, fieldHeight, '');
+      y -= 18;
+
+      // PHARMACY SECTION
+      drawHeader('Requesting Pharmacy Information');
+
+      // Row 1
+      page.drawText('Date Submitted:', { x: margin + 5, y: y - 12, size: 9, font: fontBold });
+      addTextField('date_submitted', margin + 85, y - 2, 100, fieldHeight, new Date().toLocaleDateString('en-US'));
+      page.drawText('Pharmacy NPI:', { x: margin + contentWidth/2 + 5, y: y - 12, size: 9, font: fontBold });
+      addTextField('pharmacy_npi', margin + contentWidth/2 + 80, y - 2, 100, fieldHeight, pharmacy?.npi || '');
+      y -= 22;
+
+      // Row 2
+      page.drawText('Pharmacy Name:', { x: margin + 5, y: y - 12, size: 9, font: fontBold });
+      addTextField('pharmacy_name', margin + 90, y - 2, 155, fieldHeight, pharmacy?.pharmacy_name || '');
+      page.drawText('Fax:', { x: margin + contentWidth/2 + 5, y: y - 12, size: 9, font: fontBold });
+      addTextField('pharmacy_fax', margin + contentWidth/2 + 30, y - 2, 100, fieldHeight, pharmacy?.fax || '');
+      y -= 26;
+
+      // PRESCRIBER SECTION
+      const prescriberName = selectedOpps[0]?.prescriber_name || 'Unknown Prescriber';
+      drawHeader('Prescriber Information');
+
+      page.drawText('Prescriber Name:', { x: margin + 5, y: y - 12, size: 9, font: fontBold });
+      addTextField('prescriber_name', margin + 95, y - 2, 200, fieldHeight, prescriberName);
+      page.drawText('Prescriber Fax:', { x: margin + contentWidth/2 + 5, y: y - 12, size: 9, font: fontBold });
+      addTextField('prescriber_fax', margin + contentWidth/2 + 85, y - 2, 100, fieldHeight, '');
+      y -= 26;
+
+      // PATIENT SECTION
+      drawHeader('Patient Information');
+
+      const patientName = groupItem.first_name && groupItem.last_name
+        ? `${groupItem.first_name} ${groupItem.last_name}`
+        : 'Patient';
+      const dob = groupItem.date_of_birth
+        ? (parseLocalDate(groupItem.date_of_birth)?.toLocaleDateString('en-US') || '')
+        : '';
+
+      page.drawText('Patient Name:', { x: margin + 5, y: y - 12, size: 9, font: fontBold });
+      addTextField('patient_name', margin + 80, y - 2, 165, fieldHeight, patientName);
+      page.drawText('Date of Birth:', { x: margin + contentWidth/2 + 5, y: y - 12, size: 9, font: fontBold });
+      addTextField('patient_dob', margin + contentWidth/2 + 75, y - 2, 90, fieldHeight, dob);
+      y -= 22;
+
+      const binPcn = [selectedOpps[0]?.insurance_bin, selectedOpps[0]?.insurance_pcn].filter(Boolean).join('/');
+      page.drawText('Insurance:', { x: margin + 5, y: y - 12, size: 9, font: fontBold });
+      addTextField('insurance', margin + 60, y - 2, 185, fieldHeight, selectedOpps[0]?.plan_name || '');
+      page.drawText('BIN/PCN:', { x: margin + contentWidth/2 + 5, y: y - 12, size: 9, font: fontBold });
+      addTextField('bin_pcn', margin + contentWidth/2 + 55, y - 2, 100, fieldHeight, binPcn);
+      y -= 26;
+
+      // MEDICATIONS TABLE
+      drawHeader('Requested Therapeutic Interchanges');
+
+      // Table header
+      const col1Width = contentWidth * 0.50;
+      const col2Width = contentWidth * 0.50;
+      page.drawRectangle({ x: margin, y: y - 18, width: contentWidth, height: 18, color: lightGray });
+      page.drawText('Current Medication', { x: margin + 5, y: y - 12, size: 9, font: fontBold });
+      page.drawText('Recommended Alternative', { x: margin + col1Width + 5, y: y - 12, size: 9, font: fontBold });
+      y -= 20;
+
+      // Table rows with fillable fields for each medication
+      for (let i = 0; i < selectedOpps.length; i++) {
+        const opp = selectedOpps[i];
+        // Draw row borders
+        page.drawRectangle({ x: margin, y: y - 20, width: col1Width, height: 20, borderWidth: 0.5, borderColor: rgb(0.8, 0.8, 0.8) });
+        page.drawRectangle({ x: margin + col1Width, y: y - 20, width: col2Width, height: 20, borderWidth: 0.5, borderColor: rgb(0.8, 0.8, 0.8) });
+
+        // Add fillable text fields
+        addTextField(`current_${i}`, margin + 3, y - 2, col1Width - 6, 16, opp.current_drug_name || '');
+        addTextField(`recommended_${i}`, margin + col1Width + 3, y - 2, col2Width - 6, 16, opp.recommended_drug_name || '');
+        y -= 20;
+      }
+      y -= 8;
+
+      // CLINICAL RATIONALE
+      drawHeader('Clinical Rationale');
+
+      // Build combined rationale text
+      const rationaleLines: string[] = [];
+      for (const opp of selectedOpps.slice(0, 4)) {
+        const rat = (opp.clinical_rationale || '').split('\n')[0].substring(0, 80);
+        rationaleLines.push(`• ${opp.current_drug_name}: ${rat}`);
+      }
+      if (selectedOpps.length > 4) {
+        rationaleLines.push(`... and ${selectedOpps.length - 4} more interchange requests`);
+      }
+      const rationaleText = rationaleLines.join('\n');
+
+      const rationaleField = addTextField('rationale', margin + 5, y - 2, contentWidth - 10, 60, rationaleText);
+      rationaleField.enableMultiline();
+      y -= 68;
+
+      // PRESCRIBER RESPONSE
+      drawHeader('Prescriber Response');
+
+      addCheckbox('resp_approved', margin + 10, y, false);
+      page.drawText('APPROVED - Change prescriptions as requested', { x: margin + 28, y: y - 10, size: 9, font });
+      addCheckbox('resp_denied', margin + contentWidth/2 + 10, y, false);
+      page.drawText('DENIED - Continue current medications', { x: margin + contentWidth/2 + 28, y: y - 10, size: 9, font });
+      y -= 22;
+
+      page.drawText('If denied, reason:', { x: margin + 5, y: y - 12, size: 9, font: fontBold });
+      addTextField('denied_reason', margin + 100, y - 2, contentWidth - 110, fieldHeight, '');
+      y -= 26;
+
+      // AUTHORIZATION
+      drawHeader('Prescriber Authorization');
+
+      page.drawText('Prescriber Signature:', { x: margin + 5, y: y - 14, size: 9, font: fontBold });
+      page.drawLine({ start: { x: margin + 110, y: y - 14 }, end: { x: margin + 350, y: y - 14 }, thickness: 1 });
+      page.drawText('Date:', { x: margin + 370, y: y - 14, size: 9, font: fontBold });
+      addTextField('sig_date', margin + 400, y - 4, 80, fieldHeight, '');
+      y -= 26;
+
+      // INSTRUCTIONS
+      drawHeader('Response Instructions');
+      const instructionText = pharmacy?.fax
+        ? `Please complete this form and fax back to ${pharmacy.fax}. Thank you for your partnership.`
+        : 'Please complete this form and fax back to the pharmacy. Thank you for your partnership.';
+      page.drawText(instructionText, { x: margin + 5, y: y - 14, size: 9, font });
+
+      // Save PDF
+      const pdfBytes = await pdfDoc.save();
+      const blob = new Blob([new Uint8Array(pdfBytes)], { type: 'application/pdf' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      const prescriberSlug = prescriberName.replace(/[^a-z0-9]/gi, '_');
+      const patientSlug = patientName.replace(/[^a-z0-9]/gi, '_');
+      link.download = `TIF_BATCH_${patientSlug}_${prescriberSlug}_${selectedOpps.length}opps_${new Date().toISOString().split('T')[0]}.pdf`;
+      link.click();
+      URL.revokeObjectURL(url);
+
+      // Log to fax history
+      try {
+        const faxHistory = JSON.parse(localStorage.getItem('therxos_fax_history') || '[]');
+        faxHistory.unshift({
+          id: `fax_${Date.now()}`,
+          generated_at: new Date().toISOString(),
+          prescriber_name: prescriberName,
+          patient_name: patientName,
+          patient_id: selectedOpps[0]?.patient_id,
+          opportunity_ids: selectedOpps.map(o => o.opportunity_id),
+          opportunity_count: selectedOpps.length,
+          status: 'pending',
+          days_since_generated: 0,
+        });
+        localStorage.setItem('therxos_fax_history', JSON.stringify(faxHistory.slice(0, 100)));
+      } catch (e) {
+        console.error('Failed to save fax history:', e);
+      }
+
+      // Clear selection after generating
+      setSelectedForFax(new Set());
+
+    } catch (e) {
+      console.error('Batch PDF generation failed:', e);
+      alert('Failed to generate batch PDF. Please try again.');
+    } finally {
+      setGenerating(false);
+    }
+  }
+
   return (
-    <aside className="fixed inset-y-0 right-0 w-[420px] bg-[#0d2137] border-l border-[#1e3a5f] shadow-2xl z-50 flex flex-col">
+    <aside className="fixed inset-y-0 right-0 w-[480px] bg-[#0d2137] border-l border-[#1e3a5f] shadow-2xl z-50 flex flex-col">
       {/* Header */}
       <div className="flex items-center justify-between px-6 py-4 border-b border-[#1e3a5f]">
-        <span className="font-semibold text-white">Opportunity Details</span>
-        <button onClick={onClose} className="text-slate-400 hover:text-white">
-          <X className="w-5 h-5" />
-        </button>
+        <span className="font-semibold text-white">
+          {viewMode === 'batch' ? 'Batch Fax Builder' : 'Opportunity Details'}
+        </span>
+        <div className="flex items-center gap-2">
+          {allOpportunities.length > 1 && (
+            <button
+              onClick={() => {
+                setViewMode(viewMode === 'single' ? 'batch' : 'single');
+                setSelectedForFax(new Set());
+              }}
+              className={`px-3 py-1 text-xs rounded ${viewMode === 'batch' ? 'bg-amber-500 text-white' : 'bg-[#1e3a5f] text-slate-300 hover:bg-[#2d4a6f]'}`}
+            >
+              {viewMode === 'batch' ? 'Single View' : `Batch (${allOpportunities.length})`}
+            </button>
+          )}
+          <button onClick={onClose} className="text-slate-400 hover:text-white">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
       </div>
-      
+
       {/* Content */}
       <div className="flex-1 overflow-y-auto p-6 space-y-6">
         {/* Patient */}
@@ -706,38 +998,102 @@ function SidePanel({
             )}
           </div>
         </div>
-        
-        {/* Opportunity */}
-        <div>
-          <div className="text-xs text-slate-500 uppercase tracking-wider mb-3">Opportunity</div>
-          <div className="bg-[#1e3a5f] rounded-lg p-4">
-            <div className="flex items-start gap-3 mb-4">
-              <div className="w-9 h-9 rounded-lg bg-purple-500/20 flex items-center justify-center">
-                <AlertCircle className="w-5 h-5 text-purple-400" />
-              </div>
-              <div>
-                <div className="font-medium text-white">{rationale}</div>
-                <div className="text-xs text-slate-400 mt-1">{opportunity.opportunity_type?.replace(/_/g, ' ')}</div>
-              </div>
+
+        {/* Batch View - Select opportunities by prescriber */}
+        {viewMode === 'batch' ? (
+          <div>
+            <div className="text-xs text-slate-500 uppercase tracking-wider mb-3">
+              Select Opportunities to Include ({selectedForFax.size} selected)
             </div>
-            <div className="grid grid-cols-2 gap-3 text-sm">
-              <div>
-                <div className="text-slate-500 text-xs">Current</div>
-                <div className="text-white">{opportunity.current_drug_name || 'N/A'}</div>
+            {Object.entries(byPrescriber).map(([prescriber, opps]) => (
+              <div key={prescriber} className="mb-4">
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-medium text-white">{prescriber}</span>
+                    <span className="text-xs text-slate-400">({opps.length} {opps.length === 1 ? 'opp' : 'opps'})</span>
+                  </div>
+                  <button
+                    onClick={() => selectAllForPrescriber(prescriber)}
+                    className="text-xs text-[#14b8a6] hover:text-[#0d9488]"
+                  >
+                    {opps.every(o => selectedForFax.has(o.opportunity_id)) ? 'Deselect All' : 'Select All'}
+                  </button>
+                </div>
+                <div className="space-y-2">
+                  {opps.map(opp => (
+                    <label
+                      key={opp.opportunity_id}
+                      className={`flex items-start gap-3 p-3 rounded-lg cursor-pointer transition-colors ${
+                        selectedForFax.has(opp.opportunity_id)
+                          ? 'bg-[#14b8a6]/20 border border-[#14b8a6]'
+                          : 'bg-[#1e3a5f] hover:bg-[#2d4a6f] border border-transparent'
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={selectedForFax.has(opp.opportunity_id)}
+                        onChange={() => toggleSelection(opp.opportunity_id, prescriber)}
+                        className="mt-1 rounded border-slate-500"
+                      />
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm text-white truncate">{opp.current_drug_name}</span>
+                          <span className="text-slate-500">→</span>
+                          <span className="text-sm text-[#14b8a6] truncate">{opp.recommended_drug_name}</span>
+                        </div>
+                        <div className="text-xs text-slate-400 mt-1">
+                          {opp.opportunity_type?.replace(/_/g, ' ')} • ${Number(opp.potential_margin_gain || 0).toFixed(2)} GP
+                        </div>
+                      </div>
+                    </label>
+                  ))}
+                </div>
               </div>
-              <div>
-                <div className="text-slate-500 text-xs">Recommended</div>
-                <div className="text-[#14b8a6]">{opportunity.recommended_drug_name}</div>
-              </div>
-            </div>
-            {action && (
-              <div className="mt-4 pt-4 border-t border-[#2d4a6f]">
-                <div className="text-xs text-slate-500 mb-1">Action</div>
-                <div className="text-sm text-[#14b8a6]">{action}</div>
+            ))}
+            {selectedForFax.size > 0 && (
+              <div className="mt-4 p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg">
+                <div className="text-sm text-amber-400">
+                  {selectedForFax.size} {selectedForFax.size === 1 ? 'opportunity' : 'opportunities'} selected for batch fax
+                </div>
+                <div className="text-xs text-slate-400 mt-1">
+                  Total GP: ${getSelectedOpportunities().reduce((sum, o) => sum + Number(o.potential_margin_gain || 0), 0).toFixed(2)}
+                </div>
               </div>
             )}
           </div>
-        </div>
+        ) : (
+          /* Single Opportunity View */
+          <div>
+            <div className="text-xs text-slate-500 uppercase tracking-wider mb-3">Opportunity</div>
+            <div className="bg-[#1e3a5f] rounded-lg p-4">
+              <div className="flex items-start gap-3 mb-4">
+                <div className="w-9 h-9 rounded-lg bg-purple-500/20 flex items-center justify-center">
+                  <AlertCircle className="w-5 h-5 text-purple-400" />
+                </div>
+                <div>
+                  <div className="font-medium text-white">{rationale}</div>
+                  <div className="text-xs text-slate-400 mt-1">{opportunity.opportunity_type?.replace(/_/g, ' ')}</div>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3 text-sm">
+                <div>
+                  <div className="text-slate-500 text-xs">Current</div>
+                  <div className="text-white">{opportunity.current_drug_name || 'N/A'}</div>
+                </div>
+                <div>
+                  <div className="text-slate-500 text-xs">Recommended</div>
+                  <div className="text-[#14b8a6]">{opportunity.recommended_drug_name}</div>
+                </div>
+              </div>
+              {action && (
+                <div className="mt-4 pt-4 border-t border-[#2d4a6f]">
+                  <div className="text-xs text-slate-500 mb-1">Action</div>
+                  <div className="text-sm text-[#14b8a6]">{action}</div>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
         
         {/* Value */}
         {showAnyFinancials && (
@@ -804,23 +1160,43 @@ function SidePanel({
       
       {/* Footer Actions */}
       <div className="p-4 border-t border-[#1e3a5f] space-y-2">
-        <button
-          onClick={generateFaxPDF}
-          disabled={generating}
-          className="w-full py-2.5 bg-red-500 hover:bg-red-600 disabled:bg-red-500/50 text-white rounded-lg font-medium flex items-center justify-center gap-2"
-        >
-          {generating ? (
-            <>
-              <RefreshCw className="w-4 h-4 animate-spin" />
-              Generating...
-            </>
-          ) : (
-            <>
-              <FileText className="w-4 h-4" />
-              Generate Fax PDF
-            </>
-          )}
-        </button>
+        {viewMode === 'batch' ? (
+          <button
+            onClick={generateBatchFaxPDF}
+            disabled={generating || selectedForFax.size === 0}
+            className="w-full py-2.5 bg-amber-500 hover:bg-amber-600 disabled:bg-amber-500/50 text-white rounded-lg font-medium flex items-center justify-center gap-2"
+          >
+            {generating ? (
+              <>
+                <RefreshCw className="w-4 h-4 animate-spin" />
+                Generating Batch...
+              </>
+            ) : (
+              <>
+                <FileText className="w-4 h-4" />
+                Generate Batch Fax ({selectedForFax.size} {selectedForFax.size === 1 ? 'opp' : 'opps'})
+              </>
+            )}
+          </button>
+        ) : (
+          <button
+            onClick={generateFaxPDF}
+            disabled={generating}
+            className="w-full py-2.5 bg-red-500 hover:bg-red-600 disabled:bg-red-500/50 text-white rounded-lg font-medium flex items-center justify-center gap-2"
+          >
+            {generating ? (
+              <>
+                <RefreshCw className="w-4 h-4 animate-spin" />
+                Generating...
+              </>
+            ) : (
+              <>
+                <FileText className="w-4 h-4" />
+                Generate Fax PDF
+              </>
+            )}
+          </button>
+        )}
         <button className="w-full py-2.5 bg-[#14b8a6] hover:bg-[#0d9488] text-[#0a1628] rounded-lg font-medium flex items-center justify-center gap-2 opacity-50 cursor-not-allowed" disabled>
           <Send className="w-4 h-4" />
           Send Now (Coming Soon)

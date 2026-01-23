@@ -1,0 +1,515 @@
+'use client';
+
+import { useState, useEffect, useMemo } from 'react';
+import {
+  Crosshair,
+  Plus,
+  Search,
+  ChevronDown,
+  ChevronUp,
+  Pencil,
+  Copy,
+  Trash2,
+  ToggleLeft,
+  ToggleRight,
+  ScanLine,
+  Loader2,
+  Zap,
+  RefreshCw,
+  X,
+  Check,
+} from 'lucide-react';
+
+const API_URL = process.env.NEXT_PUBLIC_API_URL;
+
+interface Trigger {
+  trigger_id: string;
+  trigger_code: string;
+  display_name: string;
+  trigger_type: 'therapeutic_interchange' | 'missing_therapy' | 'ndc_optimization' | 'brand_to_generic' | 'formulation_change' | 'combo_therapy';
+  category: string | null;
+  detection_keywords: string[];
+  exclude_keywords: string[];
+  if_has_keywords: string[];
+  if_not_has_keywords: string[];
+  recommended_drug: string | null;
+  recommended_ndc: string | null;
+  action_instructions: string | null;
+  clinical_rationale: string | null;
+  priority: 'low' | 'medium' | 'high' | 'critical';
+  annual_fills: number;
+  default_gp_value: number | null;
+  is_enabled: boolean;
+  created_at: string;
+  bin_restrictions: string[] | null;
+  group_exclusions: string[] | null;
+  contract_prefix_exclusions: string[] | null;
+  synced_at?: string | null;
+  cms_coverage?: {
+    average_tier: number | null;
+    prior_auth_rate: number;
+    step_therapy_rate: number;
+    quantity_limit_rate: number;
+  } | null;
+  bin_values: {
+    bin: string;
+    group?: string | null;
+    gpValue?: number | null;
+    isExcluded?: boolean;
+    coverageStatus?: 'works' | 'excluded' | 'verified' | 'unknown';
+    verifiedAt?: string | null;
+    verifiedClaimCount?: number;
+    avgReimbursement?: number | null;
+    avgQty?: number | null;
+  }[];
+}
+
+type SortField = 'display_name' | 'trigger_type' | 'default_gp_value' | 'is_enabled';
+
+export default function TriggersPage() {
+  const [triggers, setTriggers] = useState<Trigger[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState('');
+  const [typeFilter, setTypeFilter] = useState<string>('all');
+  const [sort, setSort] = useState<{ field: SortField; direction: 'asc' | 'desc' }>({
+    field: 'display_name',
+    direction: 'asc'
+  });
+  const [expandedTrigger, setExpandedTrigger] = useState<string | null>(null);
+  const [scanningAll, setScanningAll] = useState(false);
+
+  useEffect(() => {
+    fetchTriggers();
+  }, []);
+
+  async function fetchTriggers() {
+    try {
+      const token = localStorage.getItem('therxos_token');
+      const res = await fetch(`${API_URL}/api/admin/triggers`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setTriggers(data.triggers || []);
+      }
+    } catch (err) {
+      console.error('Failed to fetch triggers:', err);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function toggleTrigger(triggerId: string, enabled: boolean) {
+    try {
+      const token = localStorage.getItem('therxos_token');
+      const res = await fetch(`${API_URL}/api/admin/triggers/${triggerId}`, {
+        method: 'PATCH',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ is_enabled: enabled }),
+      });
+      if (res.ok) {
+        setTriggers(prev => prev.map(t =>
+          t.trigger_id === triggerId ? { ...t, is_enabled: enabled } : t
+        ));
+      }
+    } catch (err) {
+      console.error('Failed to toggle trigger:', err);
+    }
+  }
+
+  async function deleteTrigger(triggerId: string) {
+    if (!confirm('Are you sure you want to delete this trigger?')) return;
+    try {
+      const token = localStorage.getItem('therxos_token');
+      const res = await fetch(`${API_URL}/api/admin/triggers/${triggerId}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        setTriggers(prev => prev.filter(t => t.trigger_id !== triggerId));
+      }
+    } catch (err) {
+      console.error('Failed to delete trigger:', err);
+    }
+  }
+
+  async function scanAllCoverage() {
+    setScanningAll(true);
+    try {
+      const token = localStorage.getItem('therxos_token');
+      const res = await fetch(`${API_URL}/api/admin/triggers/scan-all-coverage`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        alert(`Scan complete!\n\nTriggers scanned: ${data.summary?.totalTriggers || 0}\nWith matches: ${data.summary?.triggersWithMatches || 0}`);
+        fetchTriggers(); // Refresh to get updated data
+      }
+    } catch (err) {
+      console.error('Failed to scan coverage:', err);
+      alert('Failed to scan coverage');
+    } finally {
+      setScanningAll(false);
+    }
+  }
+
+  const filteredTriggers = useMemo(() => {
+    let result = [...triggers];
+
+    // Filter by search
+    if (search) {
+      const searchLower = search.toLowerCase();
+      result = result.filter(t =>
+        t.display_name.toLowerCase().includes(searchLower) ||
+        t.trigger_code.toLowerCase().includes(searchLower) ||
+        t.detection_keywords?.some(k => k.toLowerCase().includes(searchLower))
+      );
+    }
+
+    // Filter by type
+    if (typeFilter !== 'all') {
+      result = result.filter(t => t.trigger_type === typeFilter);
+    }
+
+    // Sort
+    const direction = sort.direction === 'asc' ? 1 : -1;
+    result.sort((a, b) => {
+      switch (sort.field) {
+        case 'display_name':
+          return (a.display_name || '').localeCompare(b.display_name || '') * direction;
+        case 'trigger_type':
+          return (a.trigger_type || '').localeCompare(b.trigger_type || '') * direction;
+        case 'default_gp_value':
+          return ((a.default_gp_value || 0) - (b.default_gp_value || 0)) * direction;
+        case 'is_enabled':
+          return ((a.is_enabled ? 1 : 0) - (b.is_enabled ? 1 : 0)) * direction;
+        default:
+          return 0;
+      }
+    });
+
+    return result;
+  }, [triggers, search, typeFilter, sort]);
+
+  const triggerTypes = ['all', 'therapeutic_interchange', 'missing_therapy', 'ndc_optimization', 'brand_to_generic', 'formulation_change', 'combo_therapy'];
+
+  function handleSort(field: SortField) {
+    setSort(prev => ({
+      field,
+      direction: prev.field === field && prev.direction === 'asc' ? 'desc' : 'asc'
+    }));
+  }
+
+  function formatDate(dateStr: string | null | undefined): string {
+    if (!dateStr) return 'Never';
+    return new Date(dateStr).toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+    });
+  }
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="w-8 h-8 border-2 border-blue-500/30 border-t-blue-500 rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      {/* Header */}
+      <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-lg bg-blue-500/20 flex items-center justify-center">
+            <Crosshair className="w-5 h-5 text-blue-400" />
+          </div>
+          <div>
+            <h1 className="text-2xl font-bold text-white">Triggers</h1>
+            <p className="text-sm text-slate-400">
+              {triggers.length} triggers ({triggers.filter(t => t.is_enabled).length} enabled)
+            </p>
+          </div>
+        </div>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={scanAllCoverage}
+            disabled={scanningAll}
+            className="flex items-center gap-2 px-4 py-2 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-400 rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
+          >
+            {scanningAll ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Scanning...
+              </>
+            ) : (
+              <>
+                <ScanLine className="w-4 h-4" />
+                Scan All Coverage
+              </>
+            )}
+          </button>
+          <button
+            onClick={fetchTriggers}
+            className="flex items-center gap-2 px-4 py-2 bg-[#1e3a5f] hover:bg-[#2a4a6f] text-white rounded-lg text-sm font-medium transition-colors"
+          >
+            <RefreshCw className="w-4 h-4" />
+            Refresh
+          </button>
+          <button className="flex items-center gap-2 px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg text-sm font-medium transition-colors">
+            <Plus className="w-4 h-4" />
+            New Trigger
+          </button>
+        </div>
+      </div>
+
+      {/* Filters */}
+      <div className="flex items-center gap-4 mb-6">
+        <div className="flex-1 relative">
+          <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+          <input
+            type="text"
+            placeholder="Search triggers..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="w-full pl-10 pr-4 py-2 bg-[#0d2137] border border-[#1e3a5f] rounded-lg text-sm text-white placeholder-slate-500 focus:outline-none focus:border-blue-500"
+          />
+        </div>
+        <select
+          value={typeFilter}
+          onChange={(e) => setTypeFilter(e.target.value)}
+          className="px-4 py-2 bg-[#0d2137] border border-[#1e3a5f] rounded-lg text-sm text-white focus:outline-none focus:border-blue-500"
+        >
+          {triggerTypes.map(type => (
+            <option key={type} value={type}>
+              {type === 'all' ? 'All Types' : type.replace(/_/g, ' ')}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      {/* Triggers Table */}
+      <div className="bg-[#0d2137] border border-[#1e3a5f] rounded-xl overflow-hidden">
+        <table className="w-full">
+          <thead>
+            <tr className="border-b border-[#1e3a5f]">
+              <th className="w-8 px-4 py-3"></th>
+              <th
+                className="text-left text-xs font-semibold text-slate-400 uppercase tracking-wider px-4 py-3 cursor-pointer hover:text-white"
+                onClick={() => handleSort('display_name')}
+              >
+                Name {sort.field === 'display_name' && (sort.direction === 'asc' ? '↑' : '↓')}
+              </th>
+              <th
+                className="text-left text-xs font-semibold text-slate-400 uppercase tracking-wider px-4 py-3 cursor-pointer hover:text-white"
+                onClick={() => handleSort('trigger_type')}
+              >
+                Type {sort.field === 'trigger_type' && (sort.direction === 'asc' ? '↑' : '↓')}
+              </th>
+              <th className="text-left text-xs font-semibold text-slate-400 uppercase tracking-wider px-4 py-3">
+                Detection Keywords
+              </th>
+              <th
+                className="text-center text-xs font-semibold text-slate-400 uppercase tracking-wider px-4 py-3 cursor-pointer hover:text-white"
+                onClick={() => handleSort('default_gp_value')}
+              >
+                Default GP {sort.field === 'default_gp_value' && (sort.direction === 'asc' ? '↑' : '↓')}
+              </th>
+              <th className="text-center text-xs font-semibold text-slate-400 uppercase tracking-wider px-4 py-3">
+                Synced
+              </th>
+              <th
+                className="text-center text-xs font-semibold text-slate-400 uppercase tracking-wider px-4 py-3 cursor-pointer hover:text-white"
+                onClick={() => handleSort('is_enabled')}
+              >
+                Status {sort.field === 'is_enabled' && (sort.direction === 'asc' ? '↑' : '↓')}
+              </th>
+              <th className="text-center text-xs font-semibold text-slate-400 uppercase tracking-wider px-4 py-3">
+                Actions
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {filteredTriggers.map((trigger) => (
+              <>
+                <tr key={trigger.trigger_id} className="border-b border-[#1e3a5f]/50 hover:bg-[#1e3a5f]/30">
+                  <td className="px-4 py-3">
+                    <button
+                      onClick={() => setExpandedTrigger(expandedTrigger === trigger.trigger_id ? null : trigger.trigger_id)}
+                      className="p-1 hover:bg-[#1e3a5f] rounded text-slate-400"
+                    >
+                      {expandedTrigger === trigger.trigger_id ? (
+                        <ChevronUp className="w-4 h-4" />
+                      ) : (
+                        <ChevronDown className="w-4 h-4" />
+                      )}
+                    </button>
+                  </td>
+                  <td className="px-4 py-3">
+                    <p className="text-sm font-medium text-white">{trigger.display_name}</p>
+                    <p className="text-xs text-slate-500 font-mono">{trigger.trigger_code}</p>
+                  </td>
+                  <td className="px-4 py-3">
+                    <span className={`px-2 py-1 rounded text-xs font-medium ${
+                      trigger.trigger_type === 'therapeutic_interchange' ? 'bg-blue-500/20 text-blue-400'
+                        : trigger.trigger_type === 'missing_therapy' ? 'bg-purple-500/20 text-purple-400'
+                        : trigger.trigger_type === 'ndc_optimization' ? 'bg-amber-500/20 text-amber-400'
+                        : trigger.trigger_type === 'brand_to_generic' ? 'bg-green-500/20 text-green-400'
+                        : trigger.trigger_type === 'formulation_change' ? 'bg-cyan-500/20 text-cyan-400'
+                        : trigger.trigger_type === 'combo_therapy' ? 'bg-pink-500/20 text-pink-400'
+                        : 'bg-slate-500/20 text-slate-400'
+                    }`}>
+                      {trigger.trigger_type.replace(/_/g, ' ')}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3">
+                    <div className="max-w-48 truncate text-xs text-slate-300">
+                      {trigger.detection_keywords?.slice(0, 3).join(', ')}
+                      {(trigger.detection_keywords?.length || 0) > 3 && '...'}
+                    </div>
+                  </td>
+                  <td className="px-4 py-3 text-center">
+                    <span className="text-sm text-emerald-400">
+                      {trigger.default_gp_value ? `$${trigger.default_gp_value}` : '-'}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3 text-center">
+                    <span className="text-xs text-slate-400">
+                      {formatDate(trigger.synced_at)}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3 text-center">
+                    <button
+                      onClick={() => toggleTrigger(trigger.trigger_id, !trigger.is_enabled)}
+                      className={`p-1 rounded transition-colors ${
+                        trigger.is_enabled
+                          ? 'text-emerald-400 hover:bg-emerald-500/20'
+                          : 'text-slate-500 hover:bg-slate-500/20'
+                      }`}
+                    >
+                      {trigger.is_enabled ? (
+                        <ToggleRight className="w-6 h-6" />
+                      ) : (
+                        <ToggleLeft className="w-6 h-6" />
+                      )}
+                    </button>
+                  </td>
+                  <td className="px-4 py-3">
+                    <div className="flex items-center justify-center gap-1">
+                      <button
+                        className="p-1.5 hover:bg-[#1e3a5f] rounded text-slate-400 hover:text-white transition-colors"
+                        title="Edit"
+                      >
+                        <Pencil className="w-4 h-4" />
+                      </button>
+                      <button
+                        className="p-1.5 hover:bg-[#1e3a5f] rounded text-slate-400 hover:text-white transition-colors"
+                        title="Duplicate"
+                      >
+                        <Copy className="w-4 h-4" />
+                      </button>
+                      <button
+                        onClick={() => deleteTrigger(trigger.trigger_id)}
+                        className="p-1.5 hover:bg-red-500/20 rounded text-slate-400 hover:text-red-400 transition-colors"
+                        title="Delete"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+                {/* Expanded Row with Details */}
+                {expandedTrigger === trigger.trigger_id && (
+                  <tr className="bg-[#0a1628]">
+                    <td colSpan={8} className="px-4 py-4">
+                      <div className="grid grid-cols-2 gap-6">
+                        {/* Left Column - Details */}
+                        <div className="space-y-4">
+                          <div>
+                            <h4 className="text-xs font-semibold text-slate-400 uppercase mb-2">Recommended Drug</h4>
+                            <p className="text-sm text-white">{trigger.recommended_drug || 'Not specified'}</p>
+                          </div>
+                          {trigger.clinical_rationale && (
+                            <div>
+                              <h4 className="text-xs font-semibold text-slate-400 uppercase mb-2">Clinical Rationale</h4>
+                              <p className="text-sm text-slate-300">{trigger.clinical_rationale}</p>
+                            </div>
+                          )}
+                          {trigger.cms_coverage && (
+                            <div>
+                              <h4 className="text-xs font-semibold text-slate-400 uppercase mb-2">CMS Medicare Coverage</h4>
+                              <div className="grid grid-cols-4 gap-2">
+                                <div className="bg-[#0d2137] rounded p-2 text-center">
+                                  <p className="text-lg font-bold text-blue-400">
+                                    {trigger.cms_coverage.average_tier ? `T${trigger.cms_coverage.average_tier}` : '-'}
+                                  </p>
+                                  <p className="text-xs text-slate-400">Avg Tier</p>
+                                </div>
+                                <div className="bg-[#0d2137] rounded p-2 text-center">
+                                  <p className="text-lg font-bold text-amber-400">{trigger.cms_coverage.prior_auth_rate}%</p>
+                                  <p className="text-xs text-slate-400">PA Rate</p>
+                                </div>
+                                <div className="bg-[#0d2137] rounded p-2 text-center">
+                                  <p className="text-lg font-bold text-purple-400">{trigger.cms_coverage.step_therapy_rate}%</p>
+                                  <p className="text-xs text-slate-400">ST Rate</p>
+                                </div>
+                                <div className="bg-[#0d2137] rounded p-2 text-center">
+                                  <p className="text-lg font-bold text-cyan-400">{trigger.cms_coverage.quantity_limit_rate}%</p>
+                                  <p className="text-xs text-slate-400">QL Rate</p>
+                                </div>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Right Column - BIN Values */}
+                        <div>
+                          <h4 className="text-xs font-semibold text-slate-400 uppercase mb-2">
+                            BIN/Group Coverage ({trigger.bin_values?.length || 0} entries)
+                          </h4>
+                          <div className="max-h-48 overflow-y-auto space-y-1">
+                            {trigger.bin_values?.slice(0, 10).map((bv, idx) => (
+                              <div key={idx} className="flex items-center justify-between text-xs bg-[#0d2137] rounded px-3 py-2">
+                                <span className="font-mono text-white">
+                                  {bv.bin}{bv.group ? `/${bv.group}` : ''}
+                                </span>
+                                <div className="flex items-center gap-4">
+                                  {bv.avgQty && (
+                                    <span className="text-slate-400">Qty: {bv.avgQty}</span>
+                                  )}
+                                  <span className={`${bv.isExcluded ? 'text-red-400' : 'text-emerald-400'}`}>
+                                    {bv.isExcluded ? 'Excluded' : bv.gpValue ? `$${bv.gpValue}` : 'Works'}
+                                  </span>
+                                  {bv.coverageStatus === 'verified' && (
+                                    <Check className="w-3 h-3 text-emerald-400" />
+                                  )}
+                                </div>
+                              </div>
+                            ))}
+                            {(trigger.bin_values?.length || 0) > 10 && (
+                              <p className="text-xs text-slate-500 text-center py-2">
+                                + {trigger.bin_values.length - 10} more
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </td>
+                  </tr>
+                )}
+              </>
+            ))}
+          </tbody>
+        </table>
+        {filteredTriggers.length === 0 && (
+          <div className="text-center py-8 text-slate-400">No triggers found</div>
+        )}
+      </div>
+    </div>
+  );
+}
