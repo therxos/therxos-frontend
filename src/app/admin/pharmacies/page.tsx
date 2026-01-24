@@ -20,25 +20,27 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL;
 
 interface Pharmacy {
   pharmacy_id: string;
-  client_id: string;
-  pharmacy_name: string;
-  client_name: string;
-  submitter_email: string;
-  state: string;
-  status: 'onboarding' | 'active' | 'suspended' | 'demo';
-  created_at: string;
-  patient_count: number;
-  opportunity_count: number;
-  total_value: number;
-  captured_value: number;
-  user_count: number;
-  last_activity: string;
+  client_id?: string;
+  pharmacy_name?: string;
+  client_name?: string;
+  submitter_email?: string;
+  state?: string;
+  status?: 'onboarding' | 'active' | 'suspended' | 'demo' | null;
+  created_at?: string;
+  patient_count?: number;
+  opportunity_count?: number;
+  total_value?: number;
+  captured_value?: number;
+  user_count?: number;
+  last_activity?: string;
 }
 
-function formatCurrency(value: number): string {
-  if (value >= 1000000) return `$${(value / 1000000).toFixed(1)}M`;
-  if (value >= 1000) return `$${(value / 1000).toFixed(1)}K`;
-  return `$${value.toFixed(0)}`;
+function formatCurrency(value: number | string | null | undefined): string {
+  const num = typeof value === 'string' ? parseFloat(value) : (value ?? 0);
+  if (isNaN(num)) return '$0';
+  if (num >= 1000000) return `$${(num / 1000000).toFixed(1)}M`;
+  if (num >= 1000) return `$${(num / 1000).toFixed(1)}K`;
+  return `$${num.toFixed(0)}`;
 }
 
 function formatDate(dateStr: string): string {
@@ -106,7 +108,8 @@ export default function PharmaciesPage() {
     }
   }
 
-  const filteredPharmacies = pharmacies.filter(p => {
+  const filteredPharmacies = (pharmacies || []).filter(p => {
+    if (!p) return false;
     const matchesSearch =
       (p.pharmacy_name || '').toLowerCase().includes(search.toLowerCase()) ||
       (p.client_name || '').toLowerCase().includes(search.toLowerCase()) ||
@@ -134,7 +137,7 @@ export default function PharmaciesPage() {
           <div>
             <h1 className="text-2xl font-bold text-white">Pharmacies</h1>
             <p className="text-sm text-slate-400">
-              {pharmacies.length} pharmacies ({pharmacies.filter(p => p.status === 'active').length} active)
+              {(pharmacies || []).length} pharmacies ({(pharmacies || []).filter(p => p?.status === 'active').length} active)
             </p>
           </div>
         </div>
@@ -196,7 +199,7 @@ export default function PharmaciesPage() {
                   : pharmacy.status === 'demo' ? 'bg-purple-500/20 text-purple-400'
                   : 'bg-red-500/20 text-red-400'
               }`}>
-                {pharmacy.status}
+                {pharmacy.status || 'unknown'}
               </span>
             </div>
 
@@ -233,8 +236,8 @@ export default function PharmaciesPage() {
 
             <div className="flex items-center justify-between pt-4 border-t border-[#1e3a5f]">
               <div className="text-xs text-slate-500">
-                <p>{pharmacy.state} · {pharmacy.user_count || 0} users</p>
-                <p>Created {formatDate(pharmacy.created_at)}</p>
+                <p>{pharmacy.state || 'N/A'} · {pharmacy.user_count || 0} users</p>
+                <p>Created {formatDate(pharmacy.created_at || '')}</p>
               </div>
               <div className="flex items-center gap-2">
                 <button

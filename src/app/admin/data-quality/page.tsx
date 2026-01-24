@@ -34,11 +34,19 @@ interface DataQualityIssue {
 }
 
 interface QualityStats {
-  total_pending: number;
-  total_resolved: number;
-  total_ignored: number;
-  blocked_margin: number;
-  by_type: { [key: string]: number };
+  overall: {
+    total_issues: number;
+    pending_issues: number;
+    resolved_issues: number;
+    ignored_issues: number;
+    auto_fixed_issues: number;
+  };
+  impact: {
+    affected_opportunities: number;
+    blocked_annual_margin: number;
+  };
+  byType: { issue_type: string; count: number; pending: number }[];
+  recentActivity: { date: string; resolved_count: number }[];
 }
 
 function formatCurrency(value: number): string {
@@ -178,7 +186,7 @@ export default function DataQualityPage() {
           <div>
             <h1 className="text-2xl font-bold text-white">Data Quality</h1>
             <p className="text-sm text-slate-400">
-              {stats?.total_pending || 0} pending issues · {formatCurrency(stats?.blocked_margin || 0)} blocked
+              {stats?.overall?.pending_issues || 0} pending issues · {formatCurrency(stats?.impact?.blocked_annual_margin || 0)} blocked
             </p>
           </div>
         </div>
@@ -199,27 +207,27 @@ export default function DataQualityPage() {
               <AlertCircle className="w-4 h-4" />
               Pending
             </div>
-            <p className="text-2xl font-bold text-amber-400">{stats.total_pending}</p>
+            <p className="text-2xl font-bold text-amber-400">{stats.overall?.pending_issues || 0}</p>
           </div>
           <div className="bg-[#0d2137] border border-[#1e3a5f] rounded-xl p-4">
             <div className="flex items-center gap-2 text-emerald-400 text-xs mb-1">
               <Check className="w-4 h-4" />
               Resolved
             </div>
-            <p className="text-2xl font-bold text-emerald-400">{stats.total_resolved}</p>
+            <p className="text-2xl font-bold text-emerald-400">{stats.overall?.resolved_issues || 0}</p>
           </div>
           <div className="bg-[#0d2137] border border-[#1e3a5f] rounded-xl p-4">
             <div className="flex items-center gap-2 text-slate-400 text-xs mb-1">
               <X className="w-4 h-4" />
               Ignored
             </div>
-            <p className="text-2xl font-bold text-slate-400">{stats.total_ignored}</p>
+            <p className="text-2xl font-bold text-slate-400">{stats.overall?.ignored_issues || 0}</p>
           </div>
           <div className="bg-[#0d2137] border border-red-500/30 rounded-xl p-4">
             <div className="flex items-center gap-2 text-red-400 text-xs mb-1">
               Blocked Margin
             </div>
-            <p className="text-2xl font-bold text-red-400">{formatCurrency(stats.blocked_margin)}</p>
+            <p className="text-2xl font-bold text-red-400">{formatCurrency(stats.impact?.blocked_annual_margin || 0)}</p>
           </div>
         </div>
       )}
