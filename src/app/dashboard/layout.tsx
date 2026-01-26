@@ -236,7 +236,7 @@ export default function DashboardLayout({
       });
 
       if (res.ok) {
-        const data = await res.json();
+        const user = await res.json(); // /api/auth/me returns user directly, not { user: ... }
 
         // Clear impersonation flags
         localStorage.removeItem('therxos_impersonating');
@@ -245,7 +245,7 @@ export default function DashboardLayout({
         // Update Zustand persisted state with super admin data
         localStorage.setItem('therxos-auth', JSON.stringify({
           state: {
-            user: data.user,
+            user: user,
             token: originalToken,
             isAuthenticated: true,
             permissionOverrides: {},
