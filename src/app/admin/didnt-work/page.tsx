@@ -64,7 +64,7 @@ export default function DidntWorkQueuePage() {
     setLoading(true);
     try {
       const token = localStorage.getItem('therxos_token');
-      const res = await fetch(`${API_URL}/api/opportunities/didnt-work`, {
+      const res = await fetch(`${API_URL}/api/admin/didnt-work-queue`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (res.ok) {

@@ -92,7 +92,7 @@ export default function AdminOverviewPage() {
       }
 
       // Fetch didn't work count
-      const didntWorkRes = await fetch(`${API_URL}/api/opportunities/didnt-work`, {
+      const didntWorkRes = await fetch(`${API_URL}/api/admin/didnt-work-queue`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (didntWorkRes.ok) {
