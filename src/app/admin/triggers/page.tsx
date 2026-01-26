@@ -77,6 +77,8 @@ export default function TriggersPage() {
   });
   const [expandedTrigger, setExpandedTrigger] = useState<string | null>(null);
   const [scanningAll, setScanningAll] = useState(false);
+  const [editingTrigger, setEditingTrigger] = useState<Trigger | null>(null);
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     fetchTriggers();
@@ -133,6 +135,55 @@ export default function TriggersPage() {
       }
     } catch (err) {
       console.error('Failed to delete trigger:', err);
+    }
+  }
+
+  async function saveTrigger() {
+    if (!editingTrigger) return;
+    setSaving(true);
+    try {
+      const token = localStorage.getItem('therxos_token');
+      const res = await fetch(`${API_URL}/api/admin/triggers/${editingTrigger.trigger_id}`, {
+        method: 'PUT',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          displayName: editingTrigger.display_name,
+          triggerCode: editingTrigger.trigger_code,
+          triggerType: editingTrigger.trigger_type,
+          category: editingTrigger.category,
+          detectionKeywords: editingTrigger.detection_keywords,
+          excludeKeywords: editingTrigger.exclude_keywords,
+          ifHasKeywords: editingTrigger.if_has_keywords,
+          ifNotHasKeywords: editingTrigger.if_not_has_keywords,
+          recommendedDrug: editingTrigger.recommended_drug,
+          recommendedNdc: editingTrigger.recommended_ndc,
+          clinicalRationale: editingTrigger.clinical_rationale,
+          actionInstructions: editingTrigger.action_instructions,
+          priority: editingTrigger.priority,
+          annualFills: editingTrigger.annual_fills,
+          defaultGpValue: editingTrigger.default_gp_value,
+          isEnabled: editingTrigger.is_enabled,
+          binRestrictions: editingTrigger.bin_restrictions,
+          groupExclusions: editingTrigger.group_exclusions,
+          contractPrefixExclusions: editingTrigger.contract_prefix_exclusions,
+        }),
+      });
+
+      if (res.ok) {
+        setEditingTrigger(null);
+        fetchTriggers();
+      } else {
+        const error = await res.json();
+        alert('Failed to save: ' + (error.error || 'Unknown error'));
+      }
+    } catch (err) {
+      console.error('Failed to save trigger:', err);
+      alert('Failed to save trigger');
+    } finally {
+      setSaving(false);
     }
   }
 
@@ -402,6 +453,7 @@ export default function TriggersPage() {
                   <td className="px-4 py-3">
                     <div className="flex items-center justify-center gap-1">
                       <button
+                        onClick={() => setEditingTrigger(trigger)}
                         className="p-1.5 hover:bg-[#1e3a5f] rounded text-slate-400 hover:text-white transition-colors"
                         title="Edit"
                       >
@@ -510,6 +562,173 @@ export default function TriggersPage() {
           <div className="text-center py-8 text-slate-400">No triggers found</div>
         )}
       </div>
+
+      {/* Edit Modal */}
+      {editingTrigger && (
+        <>
+          <div className="fixed inset-0 bg-black/50 z-40" onClick={() => setEditingTrigger(null)} />
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <div className="bg-[#0d2137] border border-[#1e3a5f] rounded-xl w-full max-w-3xl max-h-[90vh] overflow-y-auto">
+              <div className="flex items-center justify-between p-4 border-b border-[#1e3a5f]">
+                <h2 className="text-lg font-semibold text-white">Edit Trigger</h2>
+                <button onClick={() => setEditingTrigger(null)} className="p-1 hover:bg-[#1e3a5f] rounded">
+                  <X className="w-5 h-5 text-slate-400" />
+                </button>
+              </div>
+
+              <div className="p-4 space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-medium text-slate-400 mb-1">Display Name</label>
+                    <input
+                      type="text"
+                      value={editingTrigger.display_name || ''}
+                      onChange={(e) => setEditingTrigger({ ...editingTrigger, display_name: e.target.value })}
+                      className="w-full px-3 py-2 bg-[#0a1628] border border-[#1e3a5f] rounded-lg text-sm text-white focus:outline-none focus:border-blue-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-slate-400 mb-1">Trigger Code</label>
+                    <input
+                      type="text"
+                      value={editingTrigger.trigger_code || ''}
+                      onChange={(e) => setEditingTrigger({ ...editingTrigger, trigger_code: e.target.value })}
+                      className="w-full px-3 py-2 bg-[#0a1628] border border-[#1e3a5f] rounded-lg text-sm text-white focus:outline-none focus:border-blue-500"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-3 gap-4">
+                  <div>
+                    <label className="block text-xs font-medium text-slate-400 mb-1">Type</label>
+                    <select
+                      value={editingTrigger.trigger_type || ''}
+                      onChange={(e) => setEditingTrigger({ ...editingTrigger, trigger_type: e.target.value as any })}
+                      className="w-full px-3 py-2 bg-[#0a1628] border border-[#1e3a5f] rounded-lg text-sm text-white focus:outline-none focus:border-blue-500"
+                    >
+                      <option value="therapeutic_interchange">Therapeutic Interchange</option>
+                      <option value="missing_therapy">Missing Therapy</option>
+                      <option value="ndc_optimization">NDC Optimization</option>
+                      <option value="brand_to_generic">Brand to Generic</option>
+                      <option value="formulation_change">Formulation Change</option>
+                      <option value="combo_therapy">Combo Therapy</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-slate-400 mb-1">Priority</label>
+                    <select
+                      value={editingTrigger.priority || 'medium'}
+                      onChange={(e) => setEditingTrigger({ ...editingTrigger, priority: e.target.value as any })}
+                      className="w-full px-3 py-2 bg-[#0a1628] border border-[#1e3a5f] rounded-lg text-sm text-white focus:outline-none focus:border-blue-500"
+                    >
+                      <option value="low">Low</option>
+                      <option value="medium">Medium</option>
+                      <option value="high">High</option>
+                      <option value="critical">Critical</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-slate-400 mb-1">Default GP Value ($)</label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={editingTrigger.default_gp_value || ''}
+                      onChange={(e) => setEditingTrigger({ ...editingTrigger, default_gp_value: parseFloat(e.target.value) || null })}
+                      className="w-full px-3 py-2 bg-[#0a1628] border border-[#1e3a5f] rounded-lg text-sm text-white focus:outline-none focus:border-blue-500"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-medium text-slate-400 mb-1">Detection Keywords (comma-separated)</label>
+                  <input
+                    type="text"
+                    value={editingTrigger.detection_keywords?.join(', ') || ''}
+                    onChange={(e) => setEditingTrigger({ ...editingTrigger, detection_keywords: e.target.value.split(',').map(k => k.trim()).filter(Boolean) })}
+                    className="w-full px-3 py-2 bg-[#0a1628] border border-[#1e3a5f] rounded-lg text-sm text-white focus:outline-none focus:border-blue-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-medium text-slate-400 mb-1">Exclude Keywords (comma-separated)</label>
+                  <input
+                    type="text"
+                    value={editingTrigger.exclude_keywords?.join(', ') || ''}
+                    onChange={(e) => setEditingTrigger({ ...editingTrigger, exclude_keywords: e.target.value.split(',').map(k => k.trim()).filter(Boolean) })}
+                    className="w-full px-3 py-2 bg-[#0a1628] border border-[#1e3a5f] rounded-lg text-sm text-white focus:outline-none focus:border-blue-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-medium text-slate-400 mb-1">Recommended Drug</label>
+                  <input
+                    type="text"
+                    value={editingTrigger.recommended_drug || ''}
+                    onChange={(e) => setEditingTrigger({ ...editingTrigger, recommended_drug: e.target.value })}
+                    className="w-full px-3 py-2 bg-[#0a1628] border border-[#1e3a5f] rounded-lg text-sm text-white focus:outline-none focus:border-blue-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-medium text-slate-400 mb-1">Clinical Rationale</label>
+                  <textarea
+                    value={editingTrigger.clinical_rationale || ''}
+                    onChange={(e) => setEditingTrigger({ ...editingTrigger, clinical_rationale: e.target.value })}
+                    rows={3}
+                    className="w-full px-3 py-2 bg-[#0a1628] border border-[#1e3a5f] rounded-lg text-sm text-white focus:outline-none focus:border-blue-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-medium text-slate-400 mb-1">Group Exclusions (comma-separated)</label>
+                  <input
+                    type="text"
+                    value={editingTrigger.group_exclusions?.join(', ') || ''}
+                    onChange={(e) => setEditingTrigger({ ...editingTrigger, group_exclusions: e.target.value.split(',').map(k => k.trim()).filter(Boolean) })}
+                    className="w-full px-3 py-2 bg-[#0a1628] border border-[#1e3a5f] rounded-lg text-sm text-white focus:outline-none focus:border-blue-500"
+                    placeholder="e.g., RX1234, RX5678"
+                  />
+                </div>
+
+                <div className="flex items-center gap-3">
+                  <label className="text-xs font-medium text-slate-400">Enabled</label>
+                  <button
+                    type="button"
+                    onClick={() => setEditingTrigger({ ...editingTrigger, is_enabled: !editingTrigger.is_enabled })}
+                    className={`p-1 rounded transition-colors ${
+                      editingTrigger.is_enabled
+                        ? 'text-emerald-400 hover:bg-emerald-500/20'
+                        : 'text-slate-500 hover:bg-slate-500/20'
+                    }`}
+                  >
+                    {editingTrigger.is_enabled ? (
+                      <ToggleRight className="w-8 h-8" />
+                    ) : (
+                      <ToggleLeft className="w-8 h-8" />
+                    )}
+                  </button>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-3 p-4 border-t border-[#1e3a5f]">
+                <button
+                  onClick={() => setEditingTrigger(null)}
+                  className="px-4 py-2 text-sm font-medium text-slate-400 hover:text-white transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={saveTrigger}
+                  disabled={saving}
+                  className="px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
+                >
+                  {saving ? 'Saving...' : 'Save Changes'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 }

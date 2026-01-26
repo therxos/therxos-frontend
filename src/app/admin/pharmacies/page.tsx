@@ -8,8 +8,7 @@ import {
   Eye,
   Pencil,
   Mail,
-  FileDown,
-  ExternalLink,
+  X,
   RefreshCw,
   Users,
   Activity,
@@ -25,6 +24,14 @@ interface Pharmacy {
   client_name?: string;
   submitter_email?: string;
   state?: string;
+  address?: string;
+  city?: string;
+  zip?: string;
+  phone?: string;
+  fax?: string;
+  pharmacy_npi?: string;
+  ncpdp?: string;
+  pms_system?: string;
   status?: 'onboarding' | 'active' | 'suspended' | 'demo' | null;
   created_at?: string;
   patient_count?: number;
@@ -57,6 +64,8 @@ export default function PharmaciesPage() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [editingPharmacy, setEditingPharmacy] = useState<Pharmacy | null>(null);
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     fetchPharmacies();
@@ -98,7 +107,6 @@ export default function PharmaciesPage() {
         localStorage.setItem('therxos_impersonating', 'true');
         localStorage.setItem('therxos_original_token', token || '');
 
-        // Update Zustand persisted state to avoid stale pharmacy data on reload
         localStorage.setItem('therxos-auth', JSON.stringify({
           state: {
             user: data.user,
@@ -117,6 +125,48 @@ export default function PharmaciesPage() {
     } catch (err) {
       console.error('Failed to impersonate:', err);
       alert('Failed to view as pharmacy');
+    }
+  }
+
+  async function savePharmacy() {
+    if (!editingPharmacy) return;
+    setSaving(true);
+    try {
+      const token = localStorage.getItem('therxos_token');
+      const res = await fetch(`${API_URL}/api/admin/pharmacies/${editingPharmacy.pharmacy_id}`, {
+        method: 'PUT',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          pharmacyName: editingPharmacy.pharmacy_name,
+          pharmacyNpi: editingPharmacy.pharmacy_npi,
+          ncpdp: editingPharmacy.ncpdp,
+          state: editingPharmacy.state,
+          address: editingPharmacy.address,
+          city: editingPharmacy.city,
+          zip: editingPharmacy.zip,
+          phone: editingPharmacy.phone,
+          fax: editingPharmacy.fax,
+          pmsSystem: editingPharmacy.pms_system,
+          status: editingPharmacy.status,
+          submitterEmail: editingPharmacy.submitter_email,
+        }),
+      });
+
+      if (res.ok) {
+        setEditingPharmacy(null);
+        fetchPharmacies();
+      } else {
+        const error = await res.json();
+        alert('Failed to save: ' + (error.error || 'Unknown error'));
+      }
+    } catch (err) {
+      console.error('Failed to save pharmacy:', err);
+      alert('Failed to save pharmacy');
+    } finally {
+      setSaving(false);
     }
   }
 
@@ -260,6 +310,7 @@ export default function PharmaciesPage() {
                   <Eye className="w-4 h-4" />
                 </button>
                 <button
+                  onClick={() => setEditingPharmacy(pharmacy)}
                   className="p-2 hover:bg-[#1e3a5f] rounded text-slate-400 hover:text-white transition-colors"
                   title="Edit pharmacy"
                 >
@@ -281,6 +332,177 @@ export default function PharmaciesPage() {
         <div className="text-center py-12 text-slate-400">
           No pharmacies found matching your criteria
         </div>
+      )}
+
+      {/* Edit Modal */}
+      {editingPharmacy && (
+        <>
+          <div className="fixed inset-0 bg-black/50 z-40" onClick={() => setEditingPharmacy(null)} />
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <div className="bg-[#0d2137] border border-[#1e3a5f] rounded-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+              <div className="flex items-center justify-between p-4 border-b border-[#1e3a5f]">
+                <h2 className="text-lg font-semibold text-white">Edit Pharmacy</h2>
+                <button onClick={() => setEditingPharmacy(null)} className="p-1 hover:bg-[#1e3a5f] rounded">
+                  <X className="w-5 h-5 text-slate-400" />
+                </button>
+              </div>
+
+              <div className="p-4 space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-medium text-slate-400 mb-1">Pharmacy Name</label>
+                    <input
+                      type="text"
+                      value={editingPharmacy.pharmacy_name || ''}
+                      onChange={(e) => setEditingPharmacy({ ...editingPharmacy, pharmacy_name: e.target.value })}
+                      className="w-full px-3 py-2 bg-[#0a1628] border border-[#1e3a5f] rounded-lg text-sm text-white focus:outline-none focus:border-teal-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-slate-400 mb-1">Status</label>
+                    <select
+                      value={editingPharmacy.status || ''}
+                      onChange={(e) => setEditingPharmacy({ ...editingPharmacy, status: e.target.value as any })}
+                      className="w-full px-3 py-2 bg-[#0a1628] border border-[#1e3a5f] rounded-lg text-sm text-white focus:outline-none focus:border-teal-500"
+                    >
+                      <option value="active">Active</option>
+                      <option value="onboarding">Onboarding</option>
+                      <option value="demo">Demo</option>
+                      <option value="suspended">Suspended</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-medium text-slate-400 mb-1">NPI</label>
+                    <input
+                      type="text"
+                      value={editingPharmacy.pharmacy_npi || ''}
+                      onChange={(e) => setEditingPharmacy({ ...editingPharmacy, pharmacy_npi: e.target.value })}
+                      className="w-full px-3 py-2 bg-[#0a1628] border border-[#1e3a5f] rounded-lg text-sm text-white focus:outline-none focus:border-teal-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-slate-400 mb-1">NCPDP</label>
+                    <input
+                      type="text"
+                      value={editingPharmacy.ncpdp || ''}
+                      onChange={(e) => setEditingPharmacy({ ...editingPharmacy, ncpdp: e.target.value })}
+                      className="w-full px-3 py-2 bg-[#0a1628] border border-[#1e3a5f] rounded-lg text-sm text-white focus:outline-none focus:border-teal-500"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-medium text-slate-400 mb-1">Address</label>
+                  <input
+                    type="text"
+                    value={editingPharmacy.address || ''}
+                    onChange={(e) => setEditingPharmacy({ ...editingPharmacy, address: e.target.value })}
+                    className="w-full px-3 py-2 bg-[#0a1628] border border-[#1e3a5f] rounded-lg text-sm text-white focus:outline-none focus:border-teal-500"
+                  />
+                </div>
+
+                <div className="grid grid-cols-3 gap-4">
+                  <div>
+                    <label className="block text-xs font-medium text-slate-400 mb-1">City</label>
+                    <input
+                      type="text"
+                      value={editingPharmacy.city || ''}
+                      onChange={(e) => setEditingPharmacy({ ...editingPharmacy, city: e.target.value })}
+                      className="w-full px-3 py-2 bg-[#0a1628] border border-[#1e3a5f] rounded-lg text-sm text-white focus:outline-none focus:border-teal-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-slate-400 mb-1">State</label>
+                    <input
+                      type="text"
+                      value={editingPharmacy.state || ''}
+                      onChange={(e) => setEditingPharmacy({ ...editingPharmacy, state: e.target.value })}
+                      className="w-full px-3 py-2 bg-[#0a1628] border border-[#1e3a5f] rounded-lg text-sm text-white focus:outline-none focus:border-teal-500"
+                      maxLength={2}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-slate-400 mb-1">ZIP</label>
+                    <input
+                      type="text"
+                      value={editingPharmacy.zip || ''}
+                      onChange={(e) => setEditingPharmacy({ ...editingPharmacy, zip: e.target.value })}
+                      className="w-full px-3 py-2 bg-[#0a1628] border border-[#1e3a5f] rounded-lg text-sm text-white focus:outline-none focus:border-teal-500"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-medium text-slate-400 mb-1">Phone</label>
+                    <input
+                      type="text"
+                      value={editingPharmacy.phone || ''}
+                      onChange={(e) => setEditingPharmacy({ ...editingPharmacy, phone: e.target.value })}
+                      className="w-full px-3 py-2 bg-[#0a1628] border border-[#1e3a5f] rounded-lg text-sm text-white focus:outline-none focus:border-teal-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-slate-400 mb-1">Fax</label>
+                    <input
+                      type="text"
+                      value={editingPharmacy.fax || ''}
+                      onChange={(e) => setEditingPharmacy({ ...editingPharmacy, fax: e.target.value })}
+                      className="w-full px-3 py-2 bg-[#0a1628] border border-[#1e3a5f] rounded-lg text-sm text-white focus:outline-none focus:border-teal-500"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-medium text-slate-400 mb-1">PMS System</label>
+                    <select
+                      value={editingPharmacy.pms_system || ''}
+                      onChange={(e) => setEditingPharmacy({ ...editingPharmacy, pms_system: e.target.value })}
+                      className="w-full px-3 py-2 bg-[#0a1628] border border-[#1e3a5f] rounded-lg text-sm text-white focus:outline-none focus:border-teal-500"
+                    >
+                      <option value="">Select PMS</option>
+                      <option value="pioneer">Pioneer Rx</option>
+                      <option value="rx30">Rx30</option>
+                      <option value="liberty">Liberty</option>
+                      <option value="pharmsoft">PharmSoft</option>
+                      <option value="outcomes">Outcomes</option>
+                      <option value="other">Other</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-slate-400 mb-1">Contact Email</label>
+                    <input
+                      type="email"
+                      value={editingPharmacy.submitter_email || ''}
+                      onChange={(e) => setEditingPharmacy({ ...editingPharmacy, submitter_email: e.target.value })}
+                      className="w-full px-3 py-2 bg-[#0a1628] border border-[#1e3a5f] rounded-lg text-sm text-white focus:outline-none focus:border-teal-500"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-3 p-4 border-t border-[#1e3a5f]">
+                <button
+                  onClick={() => setEditingPharmacy(null)}
+                  className="px-4 py-2 text-sm font-medium text-slate-400 hover:text-white transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={savePharmacy}
+                  disabled={saving}
+                  className="px-4 py-2 bg-teal-500 hover:bg-teal-600 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
+                >
+                  {saving ? 'Saving...' : 'Save Changes'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </>
       )}
     </div>
   );

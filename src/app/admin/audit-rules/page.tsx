@@ -10,6 +10,7 @@ import {
   Trash2,
   ToggleLeft,
   ToggleRight,
+  X,
 } from 'lucide-react';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL;
@@ -42,6 +43,8 @@ export default function AuditRulesPage() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState<string>('all');
+  const [editingRule, setEditingRule] = useState<AuditRule | null>(null);
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     fetchRules();
@@ -99,6 +102,57 @@ export default function AuditRulesPage() {
       }
     } catch (err) {
       console.error('Failed to delete rule:', err);
+    }
+  }
+
+  async function saveRule() {
+    if (!editingRule) return;
+    setSaving(true);
+    try {
+      const token = localStorage.getItem('therxos_token');
+      const res = await fetch(`${API_URL}/api/admin/audit-rules/${editingRule.rule_id}`, {
+        method: 'PUT',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          ruleCode: editingRule.rule_code,
+          ruleName: editingRule.rule_name,
+          ruleDescription: editingRule.rule_description,
+          ruleType: editingRule.rule_type,
+          drugKeywords: editingRule.drug_keywords,
+          ndcPattern: editingRule.ndc_pattern,
+          expectedQuantity: editingRule.expected_quantity,
+          minQuantity: editingRule.min_quantity,
+          maxQuantity: editingRule.max_quantity,
+          quantityTolerance: editingRule.quantity_tolerance,
+          minDaysSupply: editingRule.min_days_supply,
+          maxDaysSupply: editingRule.max_days_supply,
+          allowedDawCodes: editingRule.allowed_daw_codes,
+          hasGenericAvailable: editingRule.has_generic_available,
+          gpThreshold: editingRule.gp_threshold,
+          severity: editingRule.severity,
+          auditRiskScore: editingRule.audit_risk_score,
+          isEnabled: editingRule.is_enabled,
+        }),
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        setRules(prev => prev.map(r =>
+          r.rule_id === editingRule.rule_id ? data.rule : r
+        ));
+        setEditingRule(null);
+      } else {
+        const error = await res.json();
+        alert(error.error || 'Failed to save rule');
+      }
+    } catch (err) {
+      console.error('Failed to save rule:', err);
+      alert('Failed to save rule');
+    } finally {
+      setSaving(false);
     }
   }
 
@@ -242,6 +296,7 @@ export default function AuditRulesPage() {
                 <td className="px-4 py-3">
                   <div className="flex items-center justify-center gap-1">
                     <button
+                      onClick={() => setEditingRule({ ...rule })}
                       className="p-1.5 hover:bg-[#1e3a5f] rounded text-slate-400 hover:text-white transition-colors"
                       title="Edit"
                     >
@@ -264,6 +319,252 @@ export default function AuditRulesPage() {
           <div className="text-center py-8 text-slate-400">No audit rules found</div>
         )}
       </div>
+
+      {/* Edit Modal */}
+      {editingRule && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-[#0d2137] border border-[#1e3a5f] rounded-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between p-4 border-b border-[#1e3a5f]">
+              <h2 className="text-lg font-semibold text-white">Edit Audit Rule</h2>
+              <button
+                onClick={() => setEditingRule(null)}
+                className="p-1 hover:bg-[#1e3a5f] rounded text-slate-400 hover:text-white"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-4 space-y-4">
+              {/* Basic Info */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm text-slate-400 mb-1">Rule Name</label>
+                  <input
+                    type="text"
+                    value={editingRule.rule_name}
+                    onChange={(e) => setEditingRule({ ...editingRule, rule_name: e.target.value })}
+                    className="w-full px-3 py-2 bg-[#1e3a5f] border border-[#2a4a6f] rounded-lg text-sm text-white"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm text-slate-400 mb-1">Rule Code</label>
+                  <input
+                    type="text"
+                    value={editingRule.rule_code}
+                    onChange={(e) => setEditingRule({ ...editingRule, rule_code: e.target.value })}
+                    className="w-full px-3 py-2 bg-[#1e3a5f] border border-[#2a4a6f] rounded-lg text-sm text-white font-mono"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm text-slate-400 mb-1">Description</label>
+                <textarea
+                  value={editingRule.rule_description || ''}
+                  onChange={(e) => setEditingRule({ ...editingRule, rule_description: e.target.value })}
+                  rows={2}
+                  className="w-full px-3 py-2 bg-[#1e3a5f] border border-[#2a4a6f] rounded-lg text-sm text-white"
+                />
+              </div>
+
+              {/* Type and Severity */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm text-slate-400 mb-1">Rule Type</label>
+                  <select
+                    value={editingRule.rule_type}
+                    onChange={(e) => setEditingRule({ ...editingRule, rule_type: e.target.value as AuditRule['rule_type'] })}
+                    className="w-full px-3 py-2 bg-[#1e3a5f] border border-[#2a4a6f] rounded-lg text-sm text-white"
+                  >
+                    <option value="quantity_mismatch">Quantity Mismatch</option>
+                    <option value="days_supply_mismatch">Days Supply Mismatch</option>
+                    <option value="daw_violation">DAW Violation</option>
+                    <option value="sig_quantity_mismatch">Sig Quantity Mismatch</option>
+                    <option value="high_gp_risk">High GP Risk</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm text-slate-400 mb-1">Severity</label>
+                  <select
+                    value={editingRule.severity}
+                    onChange={(e) => setEditingRule({ ...editingRule, severity: e.target.value as AuditRule['severity'] })}
+                    className="w-full px-3 py-2 bg-[#1e3a5f] border border-[#2a4a6f] rounded-lg text-sm text-white"
+                  >
+                    <option value="critical">Critical</option>
+                    <option value="warning">Warning</option>
+                    <option value="info">Info</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Drug Target */}
+              <div>
+                <label className="block text-sm text-slate-400 mb-1">Drug Keywords (comma separated)</label>
+                <input
+                  type="text"
+                  value={editingRule.drug_keywords?.join(', ') || ''}
+                  onChange={(e) => setEditingRule({
+                    ...editingRule,
+                    drug_keywords: e.target.value ? e.target.value.split(',').map(s => s.trim()) : null
+                  })}
+                  placeholder="e.g., LISINOPRIL, METFORMIN"
+                  className="w-full px-3 py-2 bg-[#1e3a5f] border border-[#2a4a6f] rounded-lg text-sm text-white"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm text-slate-400 mb-1">NDC Pattern</label>
+                <input
+                  type="text"
+                  value={editingRule.ndc_pattern || ''}
+                  onChange={(e) => setEditingRule({ ...editingRule, ndc_pattern: e.target.value || null })}
+                  placeholder="e.g., 00378%"
+                  className="w-full px-3 py-2 bg-[#1e3a5f] border border-[#2a4a6f] rounded-lg text-sm text-white font-mono"
+                />
+              </div>
+
+              {/* Quantity Rules */}
+              <div className="grid grid-cols-4 gap-4">
+                <div>
+                  <label className="block text-sm text-slate-400 mb-1">Expected Qty</label>
+                  <input
+                    type="number"
+                    value={editingRule.expected_quantity ?? ''}
+                    onChange={(e) => setEditingRule({ ...editingRule, expected_quantity: e.target.value ? Number(e.target.value) : null })}
+                    className="w-full px-3 py-2 bg-[#1e3a5f] border border-[#2a4a6f] rounded-lg text-sm text-white"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm text-slate-400 mb-1">Min Qty</label>
+                  <input
+                    type="number"
+                    value={editingRule.min_quantity ?? ''}
+                    onChange={(e) => setEditingRule({ ...editingRule, min_quantity: e.target.value ? Number(e.target.value) : null })}
+                    className="w-full px-3 py-2 bg-[#1e3a5f] border border-[#2a4a6f] rounded-lg text-sm text-white"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm text-slate-400 mb-1">Max Qty</label>
+                  <input
+                    type="number"
+                    value={editingRule.max_quantity ?? ''}
+                    onChange={(e) => setEditingRule({ ...editingRule, max_quantity: e.target.value ? Number(e.target.value) : null })}
+                    className="w-full px-3 py-2 bg-[#1e3a5f] border border-[#2a4a6f] rounded-lg text-sm text-white"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm text-slate-400 mb-1">Qty Tolerance</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={editingRule.quantity_tolerance}
+                    onChange={(e) => setEditingRule({ ...editingRule, quantity_tolerance: Number(e.target.value) })}
+                    className="w-full px-3 py-2 bg-[#1e3a5f] border border-[#2a4a6f] rounded-lg text-sm text-white"
+                  />
+                </div>
+              </div>
+
+              {/* Days Supply */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm text-slate-400 mb-1">Min Days Supply</label>
+                  <input
+                    type="number"
+                    value={editingRule.min_days_supply ?? ''}
+                    onChange={(e) => setEditingRule({ ...editingRule, min_days_supply: e.target.value ? Number(e.target.value) : null })}
+                    className="w-full px-3 py-2 bg-[#1e3a5f] border border-[#2a4a6f] rounded-lg text-sm text-white"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm text-slate-400 mb-1">Max Days Supply</label>
+                  <input
+                    type="number"
+                    value={editingRule.max_days_supply ?? ''}
+                    onChange={(e) => setEditingRule({ ...editingRule, max_days_supply: e.target.value ? Number(e.target.value) : null })}
+                    className="w-full px-3 py-2 bg-[#1e3a5f] border border-[#2a4a6f] rounded-lg text-sm text-white"
+                  />
+                </div>
+              </div>
+
+              {/* DAW and GP */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm text-slate-400 mb-1">Allowed DAW Codes (comma separated)</label>
+                  <input
+                    type="text"
+                    value={editingRule.allowed_daw_codes?.join(', ') || ''}
+                    onChange={(e) => setEditingRule({
+                      ...editingRule,
+                      allowed_daw_codes: e.target.value ? e.target.value.split(',').map(s => s.trim()) : null
+                    })}
+                    placeholder="e.g., 0, 1, 4"
+                    className="w-full px-3 py-2 bg-[#1e3a5f] border border-[#2a4a6f] rounded-lg text-sm text-white"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm text-slate-400 mb-1">GP Threshold ($)</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={editingRule.gp_threshold}
+                    onChange={(e) => setEditingRule({ ...editingRule, gp_threshold: Number(e.target.value) })}
+                    className="w-full px-3 py-2 bg-[#1e3a5f] border border-[#2a4a6f] rounded-lg text-sm text-white"
+                  />
+                </div>
+              </div>
+
+              {/* Audit Risk Score and Toggles */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm text-slate-400 mb-1">Audit Risk Score</label>
+                  <input
+                    type="number"
+                    value={editingRule.audit_risk_score ?? ''}
+                    onChange={(e) => setEditingRule({ ...editingRule, audit_risk_score: e.target.value ? Number(e.target.value) : null })}
+                    className="w-full px-3 py-2 bg-[#1e3a5f] border border-[#2a4a6f] rounded-lg text-sm text-white"
+                  />
+                </div>
+                <div className="flex items-center gap-4 pt-6">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={editingRule.has_generic_available || false}
+                      onChange={(e) => setEditingRule({ ...editingRule, has_generic_available: e.target.checked })}
+                      className="w-4 h-4 rounded bg-[#1e3a5f] border-[#2a4a6f]"
+                    />
+                    <span className="text-sm text-slate-300">Generic Available</span>
+                  </label>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={editingRule.is_enabled}
+                      onChange={(e) => setEditingRule({ ...editingRule, is_enabled: e.target.checked })}
+                      className="w-4 h-4 rounded bg-[#1e3a5f] border-[#2a4a6f]"
+                    />
+                    <span className="text-sm text-slate-300">Enabled</span>
+                  </label>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-3 p-4 border-t border-[#1e3a5f]">
+              <button
+                onClick={() => setEditingRule(null)}
+                className="px-4 py-2 bg-slate-600 hover:bg-slate-500 text-white rounded-lg text-sm font-medium transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={saveRule}
+                disabled={saving}
+                className="px-4 py-2 bg-purple-500 hover:bg-purple-600 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
+              >
+                {saving ? 'Saving...' : 'Save Changes'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
