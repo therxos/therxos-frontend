@@ -214,7 +214,16 @@ export default function DashboardLayout({
   // Return to super admin view
   async function exitImpersonation() {
     const originalToken = localStorage.getItem('therxos_original_token');
-    if (!originalToken) return;
+
+    // Clear impersonation flags first
+    localStorage.removeItem('therxos_impersonating');
+    localStorage.removeItem('therxos_original_token');
+
+    if (!originalToken) {
+      // No original token - go to admin anyway, it will redirect to login if needed
+      window.location.href = '/admin';
+      return;
+    }
 
     try {
       // Fetch super admin user data with original token
@@ -222,13 +231,20 @@ export default function DashboardLayout({
         headers: { Authorization: `Bearer ${originalToken}` },
       });
 
-      if (!res.ok) throw new Error('Token invalid');
+      if (res.ok) {
+        const data = await res.json();
 
-      const data = await res.json();
-
-      // Clear impersonation flags
-      localStorage.removeItem('therxos_impersonating');
-      localStorage.removeItem('therxos_original_token');
+        // Update Zustand persisted state with super admin data
+        localStorage.setItem('therxos-auth', JSON.stringify({
+          state: {
+            user: data.user,
+            token: originalToken,
+            isAuthenticated: true,
+            permissionOverrides: {},
+          },
+          version: 0,
+        }));
+      }
 
       // Restore token
       localStorage.setItem('therxos_token', originalToken);
@@ -237,9 +253,9 @@ export default function DashboardLayout({
       window.location.href = '/admin';
     } catch (err) {
       console.error('Exit impersonation failed:', err);
-      // Clear everything and go to login
-      localStorage.clear();
-      window.location.href = '/login';
+      // Still try to go to admin - the token is restored, let admin page handle auth
+      localStorage.setItem('therxos_token', originalToken);
+      window.location.href = '/admin';
     }
   }
 

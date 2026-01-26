@@ -97,6 +97,18 @@ export default function PharmaciesPage() {
         localStorage.setItem('therxos_token', data.token);
         localStorage.setItem('therxos_impersonating', 'true');
         localStorage.setItem('therxos_original_token', token || '');
+
+        // Update Zustand persisted state to avoid stale pharmacy data on reload
+        localStorage.setItem('therxos-auth', JSON.stringify({
+          state: {
+            user: data.user,
+            token: data.token,
+            isAuthenticated: true,
+            permissionOverrides: {},
+          },
+          version: 0,
+        }));
+
         window.location.href = '/dashboard';
       } else {
         const error = await res.json();
