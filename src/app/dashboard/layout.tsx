@@ -129,16 +129,20 @@ export default function DashboardLayout({
 
   // Fetch pharmacies for super_admin switcher
   const { data: pharmaciesData } = useQuery({
-    queryKey: ['admin-pharmacies'],
+    queryKey: ['admin-pharmacies', isImpersonating],
     queryFn: async () => {
-      const token = localStorage.getItem('therxos_token');
+      // When impersonating, use the original super admin token
+      const token = isImpersonating
+        ? localStorage.getItem('therxos_original_token')
+        : localStorage.getItem('therxos_token');
+      if (!token) throw new Error('No token available');
       const res = await fetch(`${API_URL}/api/admin/pharmacies`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (!res.ok) throw new Error('Failed to fetch pharmacies');
       return res.json();
     },
-    enabled: isSuperAdmin || isImpersonating,
+    enabled: (isSuperAdmin || isImpersonating) && typeof window !== 'undefined',
   });
 
   // Fetch pharmacy settings for permission overrides
@@ -215,24 +219,28 @@ export default function DashboardLayout({
   async function exitImpersonation() {
     const originalToken = localStorage.getItem('therxos_original_token');
 
-    // Clear impersonation flags first
-    localStorage.removeItem('therxos_impersonating');
-    localStorage.removeItem('therxos_original_token');
-
     if (!originalToken) {
-      // No original token - go to admin anyway, it will redirect to login if needed
-      window.location.href = '/admin';
+      // No original token - clear everything and go to login
+      localStorage.removeItem('therxos_impersonating');
+      localStorage.removeItem('therxos_original_token');
+      localStorage.removeItem('therxos_token');
+      localStorage.removeItem('therxos-auth');
+      window.location.href = '/login';
       return;
     }
 
     try {
-      // Fetch super admin user data with original token
+      // Fetch super admin user data with original token BEFORE clearing anything
       const res = await fetch(`${API_URL}/api/auth/me`, {
         headers: { Authorization: `Bearer ${originalToken}` },
       });
 
       if (res.ok) {
         const data = await res.json();
+
+        // Clear impersonation flags
+        localStorage.removeItem('therxos_impersonating');
+        localStorage.removeItem('therxos_original_token');
 
         // Update Zustand persisted state with super admin data
         localStorage.setItem('therxos-auth', JSON.stringify({
@@ -244,18 +252,29 @@ export default function DashboardLayout({
           },
           version: 0,
         }));
+
+        // Restore token
+        localStorage.setItem('therxos_token', originalToken);
+
+        // Use hard navigation to ensure fresh page load with restored auth
+        window.location.href = '/admin';
+      } else {
+        // Token invalid - clear everything and go to login
+        console.error('Exit impersonation - token invalid, status:', res.status);
+        localStorage.removeItem('therxos_impersonating');
+        localStorage.removeItem('therxos_original_token');
+        localStorage.removeItem('therxos_token');
+        localStorage.removeItem('therxos-auth');
+        window.location.href = '/login';
       }
-
-      // Restore token
-      localStorage.setItem('therxos_token', originalToken);
-
-      // Use hard navigation to ensure fresh page load with restored auth
-      window.location.href = '/admin';
     } catch (err) {
       console.error('Exit impersonation failed:', err);
-      // Still try to go to admin - the token is restored, let admin page handle auth
-      localStorage.setItem('therxos_token', originalToken);
-      window.location.href = '/admin';
+      // Network error - clear everything and go to login
+      localStorage.removeItem('therxos_impersonating');
+      localStorage.removeItem('therxos_original_token');
+      localStorage.removeItem('therxos_token');
+      localStorage.removeItem('therxos-auth');
+      window.location.href = '/login';
     }
   }
 
