@@ -1326,12 +1326,11 @@ export default function OpportunitiesPage() {
         didnt_work: getCount("Didn't Work"),
         flagged: getCount('Flagged'),
         denied: getCount('Denied'),
-        // Backend now returns annual_margin_gain directly (already annual values)
-        total_annual: activeMargin,
-        not_submitted_annual: getMargin('Not Submitted'),
-        submitted_annual: getMargin('Submitted'),
-        approved_annual: getMargin('Approved'),
-        completed_annual: getMargin('Completed'),
+        total_annual: activeMargin * 12,
+        not_submitted_annual: getMargin('Not Submitted') * 12,
+        submitted_annual: getMargin('Submitted') * 12,
+        approved_annual: getMargin('Approved') * 12,
+        completed_annual: getMargin('Completed') * 12,
       };
       setStats(calcStats);
       setLastSync(new Date());
@@ -1715,6 +1714,8 @@ export default function OpportunitiesPage() {
                     <span className="text-emerald-400 font-medium">Approved: {formatCurrency(stats.approved_annual)}</span>
                     <span className="text-slate-500">•</span>
                     <span className="text-green-400 font-medium">Completed: {formatCurrency(stats.completed_annual)}</span>
+                    <span className="text-slate-500">•</span>
+                    <span className="text-teal-400 font-medium">Captured: {formatCurrency(stats.approved_annual + stats.completed_annual)}</span>
                   </>
                 )}
               </div>
