@@ -68,7 +68,10 @@ interface MonthlyStats {
     name: string;
     role: string;
     actioned_count: number;
+    approved_count: number;
+    approved_value: number;
     completed_count: number;
+    completed_value: number;
     captured_value: number;
     avg_value_per_capture: number;
   }[];
