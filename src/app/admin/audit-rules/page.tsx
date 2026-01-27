@@ -11,9 +11,21 @@ import {
   ToggleLeft,
   ToggleRight,
   X,
+  ChevronDown,
+  ChevronUp,
+  Zap,
+  Loader2,
 } from 'lucide-react';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL;
+
+interface PharmacyStat {
+  pharmacy_id: string;
+  pharmacy_name: string;
+  risk_count: number;
+  patient_count: number;
+  total_exposure: number;
+}
 
 interface AuditRule {
   rule_id: string;
@@ -36,6 +48,10 @@ interface AuditRule {
   audit_risk_score: number | null;
   is_enabled: boolean;
   created_at: string;
+  pharmacy_stats?: PharmacyStat[];
+  total_risks?: number;
+  total_patients?: number;
+  total_exposure?: number;
 }
 
 export default function AuditRulesPage() {
@@ -45,10 +61,53 @@ export default function AuditRulesPage() {
   const [typeFilter, setTypeFilter] = useState<string>('all');
   const [editingRule, setEditingRule] = useState<AuditRule | null>(null);
   const [saving, setSaving] = useState(false);
+  const [expandedRule, setExpandedRule] = useState<string | null>(null);
+  const [scanningPharmacy, setScanningPharmacy] = useState<string | null>(null);
+  const [pharmacies, setPharmacies] = useState<{ pharmacy_id: string; pharmacy_name: string }[]>([]);
 
   useEffect(() => {
     fetchRules();
+    fetchPharmacies();
   }, []);
+
+  async function fetchPharmacies() {
+    try {
+      const token = localStorage.getItem('therxos_token');
+      const res = await fetch(`${API_URL}/api/admin/pharmacies`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setPharmacies(data.pharmacies || []);
+      }
+    } catch (err) {
+      console.error('Failed to fetch pharmacies:', err);
+    }
+  }
+
+  async function scanPharmacyForRule(ruleId: string, pharmacyId: string, pharmacyName: string) {
+    setScanningPharmacy(pharmacyId);
+    try {
+      const token = localStorage.getItem('therxos_token');
+      const res = await fetch(`${API_URL}/api/admin/audit-rules/${ruleId}/scan-pharmacy/${pharmacyId}`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        alert(`Scan complete for ${pharmacyName}!\n\nFlags created: ${data.flagsCreated || 0}\nPatients affected: ${data.patientsAffected || 0}`);
+        fetchRules();
+      } else {
+        const error = await res.json();
+        alert('Scan failed: ' + (error.error || 'Unknown error'));
+      }
+    } catch (err) {
+      console.error('Failed to scan pharmacy:', err);
+      alert('Failed to scan pharmacy');
+    } finally {
+      setScanningPharmacy(null);
+    }
+  }
 
   async function fetchRules() {
     setLoading(true);
@@ -234,9 +293,11 @@ export default function AuditRulesPage() {
         <table className="w-full">
           <thead>
             <tr className="border-b border-[#1e3a5f]">
+              <th className="w-8 px-4 py-3"></th>
               <th className="text-left text-xs font-semibold text-slate-400 uppercase tracking-wider px-4 py-3">Rule</th>
               <th className="text-left text-xs font-semibold text-slate-400 uppercase tracking-wider px-4 py-3">Type</th>
               <th className="text-left text-xs font-semibold text-slate-400 uppercase tracking-wider px-4 py-3">Drug Target</th>
+              <th className="text-center text-xs font-semibold text-slate-400 uppercase tracking-wider px-4 py-3">Risks</th>
               <th className="text-center text-xs font-semibold text-slate-400 uppercase tracking-wider px-4 py-3">Severity</th>
               <th className="text-center text-xs font-semibold text-slate-400 uppercase tracking-wider px-4 py-3">Status</th>
               <th className="text-center text-xs font-semibold text-slate-400 uppercase tracking-wider px-4 py-3">Actions</th>
@@ -244,7 +305,20 @@ export default function AuditRulesPage() {
           </thead>
           <tbody>
             {filteredRules.map((rule) => (
+              <>
               <tr key={rule.rule_id} className="border-b border-[#1e3a5f]/50 hover:bg-[#1e3a5f]/30">
+                <td className="px-4 py-3">
+                  <button
+                    onClick={() => setExpandedRule(expandedRule === rule.rule_id ? null : rule.rule_id)}
+                    className="p-1 hover:bg-[#1e3a5f] rounded text-slate-400"
+                  >
+                    {expandedRule === rule.rule_id ? (
+                      <ChevronUp className="w-4 h-4" />
+                    ) : (
+                      <ChevronDown className="w-4 h-4" />
+                    )}
+                  </button>
+                </td>
                 <td className="px-4 py-3">
                   <p className="text-sm font-medium text-white">{rule.rule_name}</p>
                   <p className="text-xs text-slate-500 font-mono">{rule.rule_code}</p>
@@ -267,6 +341,13 @@ export default function AuditRulesPage() {
                   <div className="max-w-48 truncate text-xs text-slate-300">
                     {rule.drug_keywords?.slice(0, 3).join(', ') || rule.ndc_pattern || 'All drugs'}
                   </div>
+                </td>
+                <td className="px-4 py-3 text-center">
+                  {rule.total_risks && rule.total_risks > 0 ? (
+                    <span className="text-sm font-medium text-amber-400">{rule.total_risks}</span>
+                  ) : (
+                    <span className="text-sm text-slate-500">0</span>
+                  )}
                 </td>
                 <td className="px-4 py-3 text-center">
                   <span className={`px-2 py-1 rounded text-xs font-medium ${
@@ -312,6 +393,64 @@ export default function AuditRulesPage() {
                   </div>
                 </td>
               </tr>
+              {/* Expanded Row with Pharmacy Stats */}
+              {expandedRule === rule.rule_id && (
+                <tr className="bg-[#0a1628]">
+                  <td colSpan={8} className="px-4 py-4">
+                    <div className="mb-3">
+                      <h4 className="text-xs font-semibold text-slate-400 uppercase">
+                        Pharmacy Audit Risks ({rule.total_risks || 0} total, {rule.total_patients || 0} patients, ${((rule.total_exposure || 0) / 1000).toFixed(1)}k exposure)
+                      </h4>
+                    </div>
+                    <div className="grid grid-cols-2 lg:grid-cols-3 gap-2">
+                      {pharmacies.map((pharmacy) => {
+                        const stats = rule.pharmacy_stats?.find(p => p.pharmacy_id === pharmacy.pharmacy_id);
+                        return (
+                          <div
+                            key={pharmacy.pharmacy_id}
+                            className={`flex items-center justify-between px-3 py-2 rounded-lg border text-xs ${
+                              stats && stats.risk_count > 0
+                                ? 'bg-amber-500/10 border-amber-500/30'
+                                : 'bg-[#0d2137] border-[#1e3a5f]'
+                            }`}
+                          >
+                            <div className="flex items-center gap-2 min-w-0">
+                              <span className="text-white truncate">{pharmacy.pharmacy_name}</span>
+                            </div>
+                            <div className="flex items-center gap-3 flex-shrink-0">
+                              {stats && stats.risk_count > 0 ? (
+                                <>
+                                  <span className="text-slate-400">{stats.risk_count} risks</span>
+                                  <span className="text-slate-500">{stats.patient_count} pts</span>
+                                  <span className="text-amber-400">${(stats.total_exposure / 1000).toFixed(1)}k</span>
+                                </>
+                              ) : (
+                                <span className="text-slate-500">0 risks</span>
+                              )}
+                              <button
+                                onClick={() => scanPharmacyForRule(rule.rule_id, pharmacy.pharmacy_id, pharmacy.pharmacy_name)}
+                                disabled={scanningPharmacy === pharmacy.pharmacy_id}
+                                className="p-1 hover:bg-amber-500/20 rounded text-slate-400 hover:text-amber-400 transition-colors disabled:opacity-50"
+                                title="Scan this pharmacy"
+                              >
+                                {scanningPharmacy === pharmacy.pharmacy_id ? (
+                                  <Loader2 className="w-3 h-3 animate-spin" />
+                                ) : (
+                                  <Zap className="w-3 h-3" />
+                                )}
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                      {pharmacies.length === 0 && (
+                        <p className="text-xs text-slate-500 col-span-3">No pharmacies available</p>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              )}
+              </>
             ))}
           </tbody>
         </table>
