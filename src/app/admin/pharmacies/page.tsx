@@ -13,6 +13,15 @@ import {
   Users,
   Activity,
   DollarSign,
+  FileText,
+  Shield,
+  Key,
+  CreditCard,
+  Check,
+  Copy,
+  Download,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL;
@@ -40,6 +49,17 @@ interface Pharmacy {
   captured_value?: number;
   user_count?: number;
   last_activity?: string;
+  // Document tracking
+  baa_signed_at?: string;
+  service_agreement_signed_at?: string;
+  stripe_customer_id?: string;
+}
+
+interface TempCredentials {
+  email: string;
+  tempPassword: string;
+  firstName: string;
+  isNewUser: boolean;
 }
 
 function formatCurrency(value: number | string | null | undefined): string {
@@ -66,6 +86,10 @@ export default function PharmaciesPage() {
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [editingPharmacy, setEditingPharmacy] = useState<Pharmacy | null>(null);
   const [saving, setSaving] = useState(false);
+  const [expandedPharmacy, setExpandedPharmacy] = useState<string | null>(null);
+  const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [tempCredentials, setTempCredentials] = useState<TempCredentials | null>(null);
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     fetchPharmacies();
@@ -168,6 +192,129 @@ export default function PharmaciesPage() {
     } finally {
       setSaving(false);
     }
+  }
+
+  async function createTempLogin(pharmacyId: string) {
+    setActionLoading(`temp-${pharmacyId}`);
+    try {
+      const token = localStorage.getItem('therxos_token');
+      const res = await fetch(`${API_URL}/api/admin/pharmacies/${pharmacyId}/create-temp-login`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setTempCredentials(data.credentials);
+      } else {
+        alert('Failed to create temp login: ' + (data.error || 'Unknown error'));
+      }
+    } catch (err) {
+      console.error('Create temp login error:', err);
+      alert('Failed to create temp login');
+    } finally {
+      setActionLoading(null);
+    }
+  }
+
+  async function downloadDocument(pharmacyId: string, docType: 'baa' | 'service-agreement') {
+    setActionLoading(`${docType}-${pharmacyId}`);
+    try {
+      const token = localStorage.getItem('therxos_token');
+      const res = await fetch(`${API_URL}/api/admin/pharmacies/${pharmacyId}/download-${docType}`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      if (res.ok) {
+        const blob = await res.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        const contentDisposition = res.headers.get('content-disposition');
+        const filename = contentDisposition
+          ? contentDisposition.split('filename="')[1]?.replace('"', '') || `${docType}.docx`
+          : `${docType}.docx`;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(url);
+      } else {
+        const data = await res.json();
+        alert('Failed to download: ' + (data.error || 'Unknown error'));
+      }
+    } catch (err) {
+      console.error('Download error:', err);
+      alert('Failed to download document');
+    } finally {
+      setActionLoading(null);
+    }
+  }
+
+  async function createStripeCheckout(pharmacyId: string, clientId: string) {
+    setActionLoading(`stripe-${pharmacyId}`);
+    try {
+      const token = localStorage.getItem('therxos_token');
+
+      // First create Stripe customer if needed
+      await fetch(`${API_URL}/api/admin/clients/${clientId}/create-stripe-customer`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      // Then create checkout session
+      const res = await fetch(`${API_URL}/api/admin/clients/${clientId}/create-checkout`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json();
+
+      if (res.ok && data.checkoutUrl) {
+        // Copy to clipboard
+        await navigator.clipboard.writeText(data.checkoutUrl);
+        alert('Stripe checkout link copied to clipboard!\n\n' + data.checkoutUrl);
+      } else {
+        alert('Failed to create checkout: ' + (data.error || 'Unknown error'));
+      }
+    } catch (err) {
+      console.error('Stripe checkout error:', err);
+      alert('Failed to create Stripe checkout');
+    } finally {
+      setActionLoading(null);
+    }
+  }
+
+  async function markDocumentSigned(pharmacyId: string, docType: 'baa' | 'service_agreement') {
+    setActionLoading(`sign-${docType}-${pharmacyId}`);
+    try {
+      const token = localStorage.getItem('therxos_token');
+      const res = await fetch(`${API_URL}/api/admin/pharmacies/${pharmacyId}/mark-document-signed`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ documentType: docType }),
+      });
+
+      if (res.ok) {
+        fetchPharmacies();
+      } else {
+        const data = await res.json();
+        alert('Failed to mark as signed: ' + (data.error || 'Unknown error'));
+      }
+    } catch (err) {
+      console.error('Mark signed error:', err);
+      alert('Failed to mark document as signed');
+    } finally {
+      setActionLoading(null);
+    }
+  }
+
+  function copyToClipboard(text: string) {
+    navigator.clipboard.writeText(text);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
   }
 
   const filteredPharmacies = (pharmacies || []).filter(p => {
@@ -317,13 +464,133 @@ export default function PharmaciesPage() {
                   <Pencil className="w-4 h-4" />
                 </button>
                 <button
+                  onClick={() => setExpandedPharmacy(expandedPharmacy === pharmacy.pharmacy_id ? null : pharmacy.pharmacy_id)}
                   className="p-2 hover:bg-[#1e3a5f] rounded text-slate-400 hover:text-white transition-colors"
-                  title="Send email"
+                  title={expandedPharmacy === pharmacy.pharmacy_id ? 'Collapse actions' : 'Expand actions'}
                 >
-                  <Mail className="w-4 h-4" />
+                  {expandedPharmacy === pharmacy.pharmacy_id ? (
+                    <ChevronUp className="w-4 h-4" />
+                  ) : (
+                    <ChevronDown className="w-4 h-4" />
+                  )}
                 </button>
               </div>
             </div>
+
+            {/* Expanded Actions Panel */}
+            {expandedPharmacy === pharmacy.pharmacy_id && (
+              <div className="mt-4 pt-4 border-t border-[#1e3a5f] space-y-4">
+                {/* Document Status */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="bg-[#0a1628] rounded-lg p-3">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-xs text-slate-400">BAA</span>
+                      {pharmacy.baa_signed_at ? (
+                        <span className="flex items-center gap-1 text-xs text-emerald-400">
+                          <Check className="w-3 h-3" />
+                          Signed
+                        </span>
+                      ) : (
+                        <span className="text-xs text-amber-400">Not signed</span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => downloadDocument(pharmacy.pharmacy_id, 'baa')}
+                        disabled={actionLoading === `baa-${pharmacy.pharmacy_id}`}
+                        className="flex-1 flex items-center justify-center gap-1 px-2 py-1.5 bg-[#1e3a5f] hover:bg-[#2a4a6f] rounded text-xs text-white transition-colors disabled:opacity-50"
+                      >
+                        <Download className="w-3 h-3" />
+                        {actionLoading === `baa-${pharmacy.pharmacy_id}` ? 'Loading...' : 'Download'}
+                      </button>
+                      {!pharmacy.baa_signed_at && (
+                        <button
+                          onClick={() => markDocumentSigned(pharmacy.pharmacy_id, 'baa')}
+                          disabled={actionLoading === `sign-baa-${pharmacy.pharmacy_id}`}
+                          className="px-2 py-1.5 bg-emerald-500/20 hover:bg-emerald-500/30 rounded text-xs text-emerald-400 transition-colors disabled:opacity-50"
+                        >
+                          Mark Signed
+                        </button>
+                      )}
+                    </div>
+                    {pharmacy.baa_signed_at && (
+                      <p className="text-xs text-slate-500 mt-1">
+                        {formatDate(pharmacy.baa_signed_at)}
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="bg-[#0a1628] rounded-lg p-3">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-xs text-slate-400">Service Agreement</span>
+                      {pharmacy.service_agreement_signed_at ? (
+                        <span className="flex items-center gap-1 text-xs text-emerald-400">
+                          <Check className="w-3 h-3" />
+                          Signed
+                        </span>
+                      ) : (
+                        <span className="text-xs text-amber-400">Not signed</span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => downloadDocument(pharmacy.pharmacy_id, 'service-agreement')}
+                        disabled={actionLoading === `service-agreement-${pharmacy.pharmacy_id}`}
+                        className="flex-1 flex items-center justify-center gap-1 px-2 py-1.5 bg-[#1e3a5f] hover:bg-[#2a4a6f] rounded text-xs text-white transition-colors disabled:opacity-50"
+                      >
+                        <Download className="w-3 h-3" />
+                        {actionLoading === `service-agreement-${pharmacy.pharmacy_id}` ? 'Loading...' : 'Download'}
+                      </button>
+                      {!pharmacy.service_agreement_signed_at && (
+                        <button
+                          onClick={() => markDocumentSigned(pharmacy.pharmacy_id, 'service_agreement')}
+                          disabled={actionLoading === `sign-service_agreement-${pharmacy.pharmacy_id}`}
+                          className="px-2 py-1.5 bg-emerald-500/20 hover:bg-emerald-500/30 rounded text-xs text-emerald-400 transition-colors disabled:opacity-50"
+                        >
+                          Mark Signed
+                        </button>
+                      )}
+                    </div>
+                    {pharmacy.service_agreement_signed_at && (
+                      <p className="text-xs text-slate-500 mt-1">
+                        {formatDate(pharmacy.service_agreement_signed_at)}
+                      </p>
+                    )}
+                  </div>
+                </div>
+
+                {/* Action Buttons */}
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    onClick={() => createTempLogin(pharmacy.pharmacy_id)}
+                    disabled={actionLoading === `temp-${pharmacy.pharmacy_id}`}
+                    className="flex items-center gap-2 px-3 py-2 bg-purple-500/20 hover:bg-purple-500/30 text-purple-400 rounded-lg text-sm transition-colors disabled:opacity-50"
+                  >
+                    <Key className="w-4 h-4" />
+                    {actionLoading === `temp-${pharmacy.pharmacy_id}` ? 'Creating...' : 'Create Temp Login'}
+                  </button>
+
+                  <button
+                    onClick={() => createStripeCheckout(pharmacy.pharmacy_id, pharmacy.client_id || '')}
+                    disabled={actionLoading === `stripe-${pharmacy.pharmacy_id}` || !pharmacy.client_id}
+                    className="flex items-center gap-2 px-3 py-2 bg-blue-500/20 hover:bg-blue-500/30 text-blue-400 rounded-lg text-sm transition-colors disabled:opacity-50"
+                  >
+                    <CreditCard className="w-4 h-4" />
+                    {actionLoading === `stripe-${pharmacy.pharmacy_id}` ? 'Creating...' : 'Stripe Checkout Link'}
+                  </button>
+
+                  {pharmacy.submitter_email && (
+                    <a
+                      href={`mailto:${pharmacy.submitter_email}`}
+                      className="flex items-center gap-2 px-3 py-2 bg-[#1e3a5f] hover:bg-[#2a4a6f] text-white rounded-lg text-sm transition-colors"
+                    >
+                      <Mail className="w-4 h-4" />
+                      Email Client
+                    </a>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
         ))}
       </div>
@@ -332,6 +599,83 @@ export default function PharmaciesPage() {
         <div className="text-center py-12 text-slate-400">
           No pharmacies found matching your criteria
         </div>
+      )}
+
+      {/* Temp Credentials Modal */}
+      {tempCredentials && (
+        <>
+          <div className="fixed inset-0 bg-black/50 z-40" onClick={() => setTempCredentials(null)} />
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <div className="bg-[#0d2137] border border-[#1e3a5f] rounded-xl w-full max-w-md">
+              <div className="flex items-center justify-between p-4 border-b border-[#1e3a5f]">
+                <h2 className="text-lg font-semibold text-white flex items-center gap-2">
+                  <Key className="w-5 h-5 text-purple-400" />
+                  {tempCredentials.isNewUser ? 'New Login Created' : 'Password Reset'}
+                </h2>
+                <button onClick={() => setTempCredentials(null)} className="p-1 hover:bg-[#1e3a5f] rounded">
+                  <X className="w-5 h-5 text-slate-400" />
+                </button>
+              </div>
+
+              <div className="p-4 space-y-4">
+                <div className="bg-[#0a1628] rounded-lg p-4 space-y-3">
+                  <div>
+                    <label className="block text-xs text-slate-400 mb-1">Email</label>
+                    <div className="flex items-center gap-2">
+                      <code className="flex-1 text-sm text-teal-400 bg-[#1e3a5f] px-3 py-2 rounded">
+                        {tempCredentials.email}
+                      </code>
+                      <button
+                        onClick={() => copyToClipboard(tempCredentials.email)}
+                        className="p-2 hover:bg-[#1e3a5f] rounded text-slate-400 hover:text-white"
+                      >
+                        <Copy className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs text-slate-400 mb-1">Temporary Password</label>
+                    <div className="flex items-center gap-2">
+                      <code className="flex-1 text-sm text-amber-400 bg-[#1e3a5f] px-3 py-2 rounded font-mono">
+                        {tempCredentials.tempPassword}
+                      </code>
+                      <button
+                        onClick={() => copyToClipboard(tempCredentials.tempPassword)}
+                        className="p-2 hover:bg-[#1e3a5f] rounded text-slate-400 hover:text-white"
+                      >
+                        <Copy className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                <button
+                  onClick={() => {
+                    copyToClipboard(`Email: ${tempCredentials.email}\nPassword: ${tempCredentials.tempPassword}`);
+                  }}
+                  className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-teal-500 hover:bg-teal-600 text-white rounded-lg text-sm font-medium transition-colors"
+                >
+                  {copied ? (
+                    <>
+                      <Check className="w-4 h-4" />
+                      Copied!
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="w-4 h-4" />
+                      Copy Both
+                    </>
+                  )}
+                </button>
+
+                <p className="text-xs text-slate-400 text-center">
+                  User will be prompted to change password on first login
+                </p>
+              </div>
+            </div>
+          </div>
+        </>
       )}
 
       {/* Edit Modal */}
