@@ -264,8 +264,8 @@ export default function DashboardPage() {
     pending_opportunities: dashboardData?.pending_opportunities || pendingOpps,
     pending_annual: dashboardData?.pending_margin ? dashboardData.pending_margin * 12 : pendingAnnual,
     pending_monthly: dashboardData?.pending_margin || pendingMonthly,
-    captured_annual: capturedAnnual,
-    captured_monthly: capturedMonthly,
+    captured_annual: dashboardData?.captured_value || capturedAnnual,
+    captured_monthly: (dashboardData?.captured_value || capturedAnnual) / 12,
     total_patients: dashboardData?.total_patients || 0,
     patients_with_opps: dashboardData?.patients_with_opportunities || Object.keys(byPatient).length,
   };
