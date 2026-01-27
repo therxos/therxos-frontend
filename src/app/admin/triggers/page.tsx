@@ -22,6 +22,14 @@ import {
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL;
 
+interface PharmacyStat {
+  pharmacy_id: string;
+  pharmacy_name: string;
+  opportunity_count: number;
+  patient_count: number;
+  total_margin: number;
+}
+
 interface Trigger {
   trigger_id: string;
   trigger_code: string;
@@ -62,6 +70,10 @@ interface Trigger {
     avgReimbursement?: number | null;
     avgQty?: number | null;
   }[];
+  pharmacy_stats?: PharmacyStat[];
+  total_opportunities?: number;
+  total_patients?: number;
+  total_margin?: number;
 }
 
 type SortField = 'display_name' | 'trigger_type' | 'default_gp_value' | 'is_enabled';
@@ -631,29 +643,56 @@ export default function TriggersPage() {
                         </div>
                       </div>
 
-                      {/* Scan Pharmacies Section */}
+                      {/* Per-Pharmacy Opportunity Stats */}
                       <div className="mt-4 pt-4 border-t border-[#1e3a5f]">
-                        <h4 className="text-xs font-semibold text-slate-400 uppercase mb-3">
-                          Scan Pharmacies for Opportunities
-                        </h4>
-                        <div className="flex flex-wrap gap-2">
-                          {pharmacies.map((pharmacy) => (
-                            <button
-                              key={pharmacy.pharmacy_id}
-                              onClick={() => scanPharmacyForTrigger(trigger.trigger_id, pharmacy.pharmacy_id, pharmacy.pharmacy_name)}
-                              disabled={scanningPharmacy === pharmacy.pharmacy_id}
-                              className="flex items-center gap-2 px-3 py-1.5 bg-[#0d2137] hover:bg-[#1e3a5f] border border-[#1e3a5f] rounded-lg text-xs text-white transition-colors disabled:opacity-50"
-                            >
-                              {scanningPharmacy === pharmacy.pharmacy_id ? (
-                                <Loader2 className="w-3 h-3 animate-spin" />
-                              ) : (
-                                <Zap className="w-3 h-3 text-amber-400" />
-                              )}
-                              {pharmacy.pharmacy_name}
-                            </button>
-                          ))}
+                        <div className="flex items-center justify-between mb-3">
+                          <h4 className="text-xs font-semibold text-slate-400 uppercase">
+                            Pharmacy Opportunities ({trigger.total_opportunities || 0} total, {trigger.total_patients || 0} patients, ${((trigger.total_margin || 0) / 1000).toFixed(1)}k margin)
+                          </h4>
+                        </div>
+                        <div className="grid grid-cols-2 lg:grid-cols-3 gap-2 mb-4">
+                          {pharmacies.map((pharmacy) => {
+                            const stats = trigger.pharmacy_stats?.find(p => p.pharmacy_id === pharmacy.pharmacy_id);
+                            return (
+                              <div
+                                key={pharmacy.pharmacy_id}
+                                className={`flex items-center justify-between px-3 py-2 rounded-lg border text-xs ${
+                                  stats && stats.opportunity_count > 0
+                                    ? 'bg-emerald-500/10 border-emerald-500/30'
+                                    : 'bg-[#0d2137] border-[#1e3a5f]'
+                                }`}
+                              >
+                                <div className="flex items-center gap-2 min-w-0">
+                                  <span className="text-white truncate">{pharmacy.pharmacy_name}</span>
+                                </div>
+                                <div className="flex items-center gap-3 flex-shrink-0">
+                                  {stats && stats.opportunity_count > 0 ? (
+                                    <>
+                                      <span className="text-slate-400">{stats.opportunity_count} opps</span>
+                                      <span className="text-slate-500">{stats.patient_count} pts</span>
+                                      <span className="text-emerald-400">${(stats.total_margin / 1000).toFixed(1)}k</span>
+                                    </>
+                                  ) : (
+                                    <span className="text-slate-500">0 opps</span>
+                                  )}
+                                  <button
+                                    onClick={() => scanPharmacyForTrigger(trigger.trigger_id, pharmacy.pharmacy_id, pharmacy.pharmacy_name)}
+                                    disabled={scanningPharmacy === pharmacy.pharmacy_id}
+                                    className="p-1 hover:bg-amber-500/20 rounded text-slate-400 hover:text-amber-400 transition-colors disabled:opacity-50"
+                                    title="Scan this pharmacy"
+                                  >
+                                    {scanningPharmacy === pharmacy.pharmacy_id ? (
+                                      <Loader2 className="w-3 h-3 animate-spin" />
+                                    ) : (
+                                      <Zap className="w-3 h-3" />
+                                    )}
+                                  </button>
+                                </div>
+                              </div>
+                            );
+                          })}
                           {pharmacies.length === 0 && (
-                            <p className="text-xs text-slate-500">No pharmacies available</p>
+                            <p className="text-xs text-slate-500 col-span-3">No pharmacies available</p>
                           )}
                         </div>
                       </div>
