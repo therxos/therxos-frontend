@@ -619,9 +619,11 @@ export default function ReportsPage() {
                   <th className="pb-3 pr-4">Staff Member</th>
                   <th className="pb-3 pr-4">Role</th>
                   <th className="pb-3 pr-4 text-right">Actioned</th>
+                  <th className="pb-3 pr-4 text-right">Approved</th>
+                  <th className="pb-3 pr-4 text-right">Approved Value</th>
                   <th className="pb-3 pr-4 text-right">Completed</th>
-                  <th className="pb-3 pr-4 text-right">Value Captured</th>
-                  <th className="pb-3 text-right">Avg per Capture</th>
+                  <th className="pb-3 pr-4 text-right">Completed Value</th>
+                  <th className="pb-3 text-right">Total Captured</th>
                 </tr>
               </thead>
               <tbody>
@@ -641,9 +643,11 @@ export default function ReportsPage() {
                       </span>
                     </td>
                     <td className="py-3 pr-4 text-right text-blue-400 font-medium">{staff.actioned_count}</td>
-                    <td className="py-3 pr-4 text-right text-emerald-400 font-medium">{staff.completed_count}</td>
-                    <td className="py-3 pr-4 text-right text-emerald-400 font-bold">{formatCurrency(staff.captured_value)}</td>
-                    <td className="py-3 text-right text-teal-400">{formatCurrency(staff.avg_value_per_capture)}</td>
+                    <td className="py-3 pr-4 text-right text-emerald-400 font-medium">{staff.approved_count || 0}</td>
+                    <td className="py-3 pr-4 text-right text-emerald-400 font-medium">{formatCurrency(staff.approved_value || 0)}</td>
+                    <td className="py-3 pr-4 text-right text-green-400 font-medium">{staff.completed_count}</td>
+                    <td className="py-3 pr-4 text-right text-green-400 font-medium">{formatCurrency(staff.completed_value || 0)}</td>
+                    <td className="py-3 text-right text-teal-400 font-bold">{formatCurrency(staff.captured_value)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -655,12 +659,20 @@ export default function ReportsPage() {
                       {(stats?.staff_performance || []).reduce((sum, s) => sum + s.actioned_count, 0)}
                     </td>
                     <td className="py-3 pr-4 text-right text-emerald-400 font-bold">
-                      {(stats?.staff_performance || []).reduce((sum, s) => sum + s.completed_count, 0)}
+                      {(stats?.staff_performance || []).reduce((sum, s) => sum + (s.approved_count || 0), 0)}
                     </td>
                     <td className="py-3 pr-4 text-right text-emerald-400 font-bold">
+                      {formatCurrency((stats?.staff_performance || []).reduce((sum, s) => sum + (s.approved_value || 0), 0))}
+                    </td>
+                    <td className="py-3 pr-4 text-right text-green-400 font-bold">
+                      {(stats?.staff_performance || []).reduce((sum, s) => sum + s.completed_count, 0)}
+                    </td>
+                    <td className="py-3 pr-4 text-right text-green-400 font-bold">
+                      {formatCurrency((stats?.staff_performance || []).reduce((sum, s) => sum + (s.completed_value || 0), 0))}
+                    </td>
+                    <td className="py-3 text-right text-teal-400 font-bold">
                       {formatCurrency((stats?.staff_performance || []).reduce((sum, s) => sum + s.captured_value, 0))}
                     </td>
-                    <td className="py-3 text-right text-teal-400">-</td>
                   </tr>
                 </tfoot>
               )}
