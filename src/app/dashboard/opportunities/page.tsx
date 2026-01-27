@@ -1714,8 +1714,6 @@ export default function OpportunitiesPage() {
                     <span className="text-emerald-400 font-medium">Approved: {formatCurrency(stats.approved_annual)}</span>
                     <span className="text-slate-500">•</span>
                     <span className="text-green-400 font-medium">Completed: {formatCurrency(stats.completed_annual)}</span>
-                    <span className="text-slate-500">•</span>
-                    <span className="text-teal-400 font-medium">Captured: {formatCurrency(stats.approved_annual + stats.completed_annual)}</span>
                   </>
                 )}
               </div>
