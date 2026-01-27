@@ -25,6 +25,7 @@ import {
   Flag,
   Zap,
   Database,
+  Copy,
 } from 'lucide-react';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL;
@@ -168,6 +169,7 @@ export default function AdminLayout({
     { name: 'Audit Rules', href: '/admin/audit-rules', icon: ShieldAlert },
     { name: "Didn't Work Queue", href: '/admin/didnt-work', icon: AlertCircle },
     { name: 'Data Quality', href: '/admin/data-quality', icon: Database },
+    { name: 'Deduplication', href: '/admin/deduplication', icon: Copy },
     { name: 'Opportunity Approval', href: '/admin/opportunity-approval', icon: ShieldCheck },
     { name: 'Coverage Scanner', href: '/admin/coverage', icon: Zap },
   ];
