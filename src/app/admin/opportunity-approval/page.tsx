@@ -31,6 +31,7 @@ interface PendingOpportunityType {
   source: string;
   source_details: Record<string, unknown>;
   affected_pharmacies: string[];
+  affected_pharmacy_names?: string[]; // Resolved pharmacy names
   total_patient_count: number;
   estimated_annual_margin: number;
   status: 'pending' | 'approved' | 'rejected';
@@ -598,7 +599,17 @@ export default function OpportunityApprovalPage() {
                   <span className="text-sm text-white font-medium">{item.total_patient_count || 0}</span>
                 </td>
                 <td className="px-4 py-3 text-center">
-                  <span className="text-sm text-slate-300">{item.affected_pharmacies?.length || 0}</span>
+                  <div className="flex flex-col items-center">
+                    {item.affected_pharmacy_names && item.affected_pharmacy_names.length > 0 ? (
+                      <span className="text-sm text-slate-300" title={item.affected_pharmacy_names.join(', ')}>
+                        {item.affected_pharmacy_names.length === 1
+                          ? item.affected_pharmacy_names[0]
+                          : `${item.affected_pharmacy_names[0]} +${item.affected_pharmacy_names.length - 1}`}
+                      </span>
+                    ) : (
+                      <span className="text-sm text-slate-500">{item.affected_pharmacies?.length || 0}</span>
+                    )}
+                  </div>
                 </td>
                 <td className="px-4 py-3 text-center">
                   <span className="text-sm text-emerald-400 font-semibold">
@@ -891,7 +902,18 @@ export default function OpportunityApprovalPage() {
                 </div>
 
                 {/* Affected Pharmacies */}
-                {itemDetails.affected_pharmacies && itemDetails.affected_pharmacies.length > 0 && (
+                {itemDetails.affected_pharmacies_resolved && itemDetails.affected_pharmacies_resolved.length > 0 ? (
+                  <div>
+                    <p className="text-xs text-slate-500 uppercase tracking-wider mb-2">Affected Pharmacies</p>
+                    <div className="flex flex-wrap gap-2">
+                      {itemDetails.affected_pharmacies_resolved.map((ph: { pharmacy_id: string; pharmacy_name: string }, i: number) => (
+                        <span key={i} className="px-2 py-1 bg-[#1e3a5f] text-white text-xs rounded">
+                          {ph.pharmacy_name}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                ) : itemDetails.affected_pharmacies && itemDetails.affected_pharmacies.length > 0 && (
                   <div>
                     <p className="text-xs text-slate-500 uppercase tracking-wider mb-2">Affected Pharmacies</p>
                     <div className="flex flex-wrap gap-2">
@@ -904,8 +926,103 @@ export default function OpportunityApprovalPage() {
                   </div>
                 )}
 
-                {/* Sample Data */}
-                {itemDetails.sample_data && Object.keys(itemDetails.sample_data).length > 0 && (
+                {/* Current Drug Breakdown - What triggered these opportunities */}
+                {itemDetails.current_drug_breakdown && itemDetails.current_drug_breakdown.length > 0 && (
+                  <div>
+                    <p className="text-xs text-slate-500 uppercase tracking-wider mb-2">Current Drugs (What Triggered This)</p>
+                    <div className="bg-[#0a1628] border border-[#1e3a5f] rounded-lg overflow-hidden">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="border-b border-[#1e3a5f]">
+                            <th className="text-left px-3 py-2 text-xs text-slate-400">Current Drug</th>
+                            <th className="text-right px-3 py-2 text-xs text-slate-400">Count</th>
+                            <th className="text-right px-3 py-2 text-xs text-slate-400">Est. Margin</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {itemDetails.current_drug_breakdown.map((drug: { current_drug_name: string; count: number; total_margin: number }, i: number) => (
+                            <tr key={i} className="border-b border-[#1e3a5f]/50">
+                              <td className="px-3 py-2 text-white">{drug.current_drug_name || 'Unknown'}</td>
+                              <td className="px-3 py-2 text-right text-slate-300">{drug.count}</td>
+                              <td className="px-3 py-2 text-right text-emerald-400">{formatCurrency(drug.total_margin || 0)}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+
+                {/* BIN/Group Breakdown - Insurance context */}
+                {itemDetails.bin_breakdown && itemDetails.bin_breakdown.length > 0 && (
+                  <div>
+                    <p className="text-xs text-slate-500 uppercase tracking-wider mb-2">Insurance BIN/Group Breakdown</p>
+                    <div className="bg-[#0a1628] border border-[#1e3a5f] rounded-lg overflow-hidden">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="border-b border-[#1e3a5f]">
+                            <th className="text-left px-3 py-2 text-xs text-slate-400">BIN</th>
+                            <th className="text-left px-3 py-2 text-xs text-slate-400">Group</th>
+                            <th className="text-left px-3 py-2 text-xs text-slate-400">Plan</th>
+                            <th className="text-right px-3 py-2 text-xs text-slate-400">Count</th>
+                            <th className="text-right px-3 py-2 text-xs text-slate-400">Margin</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {itemDetails.bin_breakdown.slice(0, 10).map((bin: { bin: string; grp: string; plan_name: string; count: number; total_margin: number }, i: number) => (
+                            <tr key={i} className="border-b border-[#1e3a5f]/50">
+                              <td className="px-3 py-2 text-white font-mono text-xs">{bin.bin || 'N/A'}</td>
+                              <td className="px-3 py-2 text-slate-300 font-mono text-xs">{bin.grp || '-'}</td>
+                              <td className="px-3 py-2 text-slate-400 text-xs truncate max-w-[150px]">{bin.plan_name || '-'}</td>
+                              <td className="px-3 py-2 text-right text-slate-300">{bin.count}</td>
+                              <td className="px-3 py-2 text-right text-emerald-400">{formatCurrency(bin.total_margin || 0)}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                      {itemDetails.bin_breakdown.length > 10 && (
+                        <p className="text-xs text-slate-500 p-2 text-center">
+                          +{itemDetails.bin_breakdown.length - 10} more BIN/Group combinations
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Sample Opportunities */}
+                {itemDetails.sample_opportunities && itemDetails.sample_opportunities.length > 0 && (
+                  <div>
+                    <p className="text-xs text-slate-500 uppercase tracking-wider mb-2">Sample Opportunities ({itemDetails.sample_opportunities.length})</p>
+                    <div className="bg-[#0a1628] border border-[#1e3a5f] rounded-lg overflow-hidden max-h-[300px] overflow-y-auto">
+                      <table className="w-full text-sm">
+                        <thead className="sticky top-0 bg-[#0a1628]">
+                          <tr className="border-b border-[#1e3a5f]">
+                            <th className="text-left px-3 py-2 text-xs text-slate-400">Patient</th>
+                            <th className="text-left px-3 py-2 text-xs text-slate-400">Current Drug</th>
+                            <th className="text-left px-3 py-2 text-xs text-slate-400">Prescriber</th>
+                            <th className="text-left px-3 py-2 text-xs text-slate-400">BIN</th>
+                            <th className="text-right px-3 py-2 text-xs text-slate-400">Margin</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {itemDetails.sample_opportunities.map((opp: any, i: number) => (
+                            <tr key={i} className="border-b border-[#1e3a5f]/50">
+                              <td className="px-3 py-2 text-white text-xs">{opp.patient_name || 'Unknown'}</td>
+                              <td className="px-3 py-2 text-slate-300 text-xs truncate max-w-[150px]">{opp.current_drug_name || '-'}</td>
+                              <td className="px-3 py-2 text-slate-400 text-xs truncate max-w-[100px]">{opp.prescriber_name || '-'}</td>
+                              <td className="px-3 py-2 text-slate-400 font-mono text-xs">{opp.insurance_bin || '-'}</td>
+                              <td className="px-3 py-2 text-right text-emerald-400">{formatCurrency(opp.annual_margin_gain || 0)}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+
+                {/* Legacy Sample Data (fallback) */}
+                {(!itemDetails.current_drug_breakdown || itemDetails.current_drug_breakdown.length === 0) &&
+                  itemDetails.sample_data && Object.keys(itemDetails.sample_data).length > 0 && (
                   <div>
                     <p className="text-xs text-slate-500 uppercase tracking-wider mb-2">Sample Data</p>
                     <div className="bg-[#0a1628] border border-[#1e3a5f] rounded-lg p-4">
