@@ -32,6 +32,7 @@ interface PendingOpportunityType {
   source_details: Record<string, unknown>;
   affected_pharmacies: string[];
   affected_pharmacy_names?: string[]; // Resolved pharmacy names
+  existing_trigger?: { trigger_id: string; trigger_name: string; display_name: string } | null;
   total_patient_count: number;
   estimated_annual_margin: number;
   status: 'pending' | 'approved' | 'rejected';
@@ -370,7 +371,7 @@ export default function OpportunityApprovalPage() {
   const totalPending = counts.pending || 0;
   const totalApproved = counts.approved || 0;
   const totalRejected = counts.rejected || 0;
-  const totalPendingMargin = items.filter(i => i.status === 'pending').reduce((sum, i) => sum + (i.estimated_annual_margin || 0), 0);
+  const totalPendingMargin = items.filter(i => i.status === 'pending').reduce((sum, i) => sum + (Number(i.estimated_annual_margin) || 0), 0);
 
   if (loading) {
     return (
@@ -584,7 +585,14 @@ export default function OpportunityApprovalPage() {
                 </td>
                 <td className="px-4 py-3">
                   <p className="text-sm font-medium text-white">{item.recommended_drug_name}</p>
-                  <p className="text-xs text-slate-500">Added {formatDate(item.created_at)}</p>
+                  <div className="flex items-center gap-2">
+                    <p className="text-xs text-slate-500">Added {formatDate(item.created_at)}</p>
+                    {item.existing_trigger && (
+                      <span className="px-1.5 py-0.5 bg-blue-500/20 text-blue-400 text-xs rounded" title={`Trigger already exists: ${item.existing_trigger.display_name}`}>
+                        Has Trigger
+                      </span>
+                    )}
+                  </div>
                 </td>
                 <td className="px-4 py-3">
                   <span className={`px-2 py-1 rounded text-xs font-medium ${
@@ -699,9 +707,19 @@ export default function OpportunityApprovalPage() {
                 </div>
                 <div>
                   <span className="text-slate-500">Est. Margin:</span>
-                  <span className="text-emerald-400 ml-2">{formatCurrency(selectedItem.estimated_annual_margin)}</span>
+                  <span className="text-emerald-400 ml-2">{formatCurrency(selectedItem.estimated_annual_margin || 0)}</span>
                 </div>
               </div>
+              {selectedItem.existing_trigger && (
+                <div className="mt-3 p-2 bg-blue-500/10 border border-blue-500/30 rounded">
+                  <p className="text-xs text-blue-400">
+                    A trigger already exists for this drug: <strong>{selectedItem.existing_trigger.display_name}</strong>
+                  </p>
+                  <p className="text-xs text-slate-400 mt-1">
+                    Approving will link to the existing trigger instead of creating a duplicate.
+                  </p>
+                </div>
+              )}
             </div>
 
             <div className="mb-4">
