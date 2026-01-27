@@ -11,6 +11,7 @@ import {
   Crosshair,
   Shield,
   ShieldAlert,
+  ShieldCheck,
   AlertCircle,
   BarChart3,
   Users,
@@ -167,6 +168,7 @@ export default function AdminLayout({
     { name: 'Audit Rules', href: '/admin/audit-rules', icon: ShieldAlert },
     { name: "Didn't Work Queue", href: '/admin/didnt-work', icon: AlertCircle },
     { name: 'Data Quality', href: '/admin/data-quality', icon: Database },
+    { name: 'Opportunity Approval', href: '/admin/opportunity-approval', icon: ShieldCheck },
     { name: 'Coverage Scanner', href: '/admin/coverage', icon: Zap },
   ];
 
