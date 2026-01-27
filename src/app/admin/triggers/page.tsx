@@ -79,10 +79,29 @@ export default function TriggersPage() {
   const [scanningAll, setScanningAll] = useState(false);
   const [editingTrigger, setEditingTrigger] = useState<Trigger | null>(null);
   const [saving, setSaving] = useState(false);
+  const [scanningTrigger, setScanningTrigger] = useState<string | null>(null);
+  const [scanningPharmacy, setScanningPharmacy] = useState<string | null>(null);
+  const [pharmacies, setPharmacies] = useState<{ pharmacy_id: string; pharmacy_name: string }[]>([]);
 
   useEffect(() => {
     fetchTriggers();
+    fetchPharmacies();
   }, []);
+
+  async function fetchPharmacies() {
+    try {
+      const token = localStorage.getItem('therxos_token');
+      const res = await fetch(`${API_URL}/api/admin/pharmacies`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setPharmacies(data.pharmacies || []);
+      }
+    } catch (err) {
+      console.error('Failed to fetch pharmacies:', err);
+    }
+  }
 
   async function fetchTriggers() {
     try {
@@ -205,6 +224,54 @@ export default function TriggersPage() {
       alert('Failed to scan coverage');
     } finally {
       setScanningAll(false);
+    }
+  }
+
+  async function scanTriggerCoverage(triggerId: string) {
+    setScanningTrigger(triggerId);
+    try {
+      const token = localStorage.getItem('therxos_token');
+      const res = await fetch(`${API_URL}/api/admin/triggers/${triggerId}/scan-coverage`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        alert(`Coverage scan complete!\n\nBIN/Groups found: ${data.binCount || 0}\nMatching prescriptions: ${data.prescriptionCount || 0}`);
+        fetchTriggers();
+      } else {
+        const error = await res.json();
+        alert('Scan failed: ' + (error.error || 'Unknown error'));
+      }
+    } catch (err) {
+      console.error('Failed to scan trigger coverage:', err);
+      alert('Failed to scan coverage');
+    } finally {
+      setScanningTrigger(null);
+    }
+  }
+
+  async function scanPharmacyForTrigger(triggerId: string, pharmacyId: string, pharmacyName: string) {
+    setScanningPharmacy(pharmacyId);
+    try {
+      const token = localStorage.getItem('therxos_token');
+      const res = await fetch(`${API_URL}/api/admin/triggers/${triggerId}/scan-pharmacy/${pharmacyId}`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        alert(`Scan complete for ${pharmacyName}!\n\nOpportunities created: ${data.opportunitiesCreated || 0}\nPatients matched: ${data.patientsMatched || 0}`);
+        fetchTriggers();
+      } else {
+        const error = await res.json();
+        alert('Scan failed: ' + (error.error || 'Unknown error'));
+      }
+    } catch (err) {
+      console.error('Failed to scan pharmacy:', err);
+      alert('Failed to scan pharmacy');
+    } finally {
+      setScanningPharmacy(null);
     }
   }
 
@@ -453,6 +520,18 @@ export default function TriggersPage() {
                   <td className="px-4 py-3">
                     <div className="flex items-center justify-center gap-1">
                       <button
+                        onClick={() => scanTriggerCoverage(trigger.trigger_id)}
+                        disabled={scanningTrigger === trigger.trigger_id}
+                        className="p-1.5 hover:bg-emerald-500/20 rounded text-slate-400 hover:text-emerald-400 transition-colors disabled:opacity-50"
+                        title="Scan Coverage"
+                      >
+                        {scanningTrigger === trigger.trigger_id ? (
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                        ) : (
+                          <ScanLine className="w-4 h-4" />
+                        )}
+                      </button>
+                      <button
                         onClick={() => setEditingTrigger(trigger)}
                         className="p-1.5 hover:bg-[#1e3a5f] rounded text-slate-400 hover:text-white transition-colors"
                         title="Edit"
@@ -549,6 +628,33 @@ export default function TriggersPage() {
                               </p>
                             )}
                           </div>
+                        </div>
+                      </div>
+
+                      {/* Scan Pharmacies Section */}
+                      <div className="mt-4 pt-4 border-t border-[#1e3a5f]">
+                        <h4 className="text-xs font-semibold text-slate-400 uppercase mb-3">
+                          Scan Pharmacies for Opportunities
+                        </h4>
+                        <div className="flex flex-wrap gap-2">
+                          {pharmacies.map((pharmacy) => (
+                            <button
+                              key={pharmacy.pharmacy_id}
+                              onClick={() => scanPharmacyForTrigger(trigger.trigger_id, pharmacy.pharmacy_id, pharmacy.pharmacy_name)}
+                              disabled={scanningPharmacy === pharmacy.pharmacy_id}
+                              className="flex items-center gap-2 px-3 py-1.5 bg-[#0d2137] hover:bg-[#1e3a5f] border border-[#1e3a5f] rounded-lg text-xs text-white transition-colors disabled:opacity-50"
+                            >
+                              {scanningPharmacy === pharmacy.pharmacy_id ? (
+                                <Loader2 className="w-3 h-3 animate-spin" />
+                              ) : (
+                                <Zap className="w-3 h-3 text-amber-400" />
+                              )}
+                              {pharmacy.pharmacy_name}
+                            </button>
+                          ))}
+                          {pharmacies.length === 0 && (
+                            <p className="text-xs text-slate-500">No pharmacies available</p>
+                          )}
                         </div>
                       </div>
                     </td>
