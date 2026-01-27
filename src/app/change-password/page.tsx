@@ -181,8 +181,8 @@ export default function ChangePasswordPage() {
 
         <p className="text-center text-sm mt-8" style={{ color: 'var(--slate-500)' }}>
           Need help? Contact{' '}
-          <a href="mailto:support@therxos.app" className="hover:text-[var(--teal-400)]" style={{ color: 'var(--teal-500)' }}>
-            support@therxos.app
+          <a href="mailto:stan@therxos.com" className="hover:text-[var(--teal-400)]" style={{ color: 'var(--teal-500)' }}>
+            stan@therxos.com
           </a>
         </p>
       </div>
