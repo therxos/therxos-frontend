@@ -133,16 +133,19 @@ export default function DidntWorkQueuePage() {
     setProcessingOpp(oppId);
     try {
       const token = localStorage.getItem('therxos_token');
-      const res = await fetch(`${API_URL}/api/opportunities/${oppId}/status`, {
-        method: 'PUT',
+      const res = await fetch(`${API_URL}/api/opportunities/${oppId}`, {
+        method: 'PATCH',
         headers: {
           Authorization: `Bearer ${token}`,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ status: 'Not Submitted', notes: 'Reset from admin queue' }),
+        body: JSON.stringify({ status: 'Not Submitted', staffNotes: 'Reset from admin queue' }),
       });
       if (res.ok) {
         setQueue(prev => prev.filter(o => o.opportunity_id !== oppId));
+      } else {
+        const error = await res.json();
+        alert('Failed to reset: ' + (error.error || 'Unknown error'));
       }
     } catch (err) {
       console.error('Failed to reset:', err);
