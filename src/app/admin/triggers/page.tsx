@@ -679,14 +679,37 @@ export default function TriggersPage() {
                   />
                 </div>
 
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-medium text-slate-400 mb-1">BIN Restrictions (comma-separated)</label>
+                    <input
+                      type="text"
+                      value={editingTrigger.bin_restrictions?.join(', ') || ''}
+                      onChange={(e) => setEditingTrigger({ ...editingTrigger, bin_restrictions: e.target.value.split(',').map(k => k.trim()).filter(Boolean) })}
+                      className="w-full px-3 py-2 bg-[#0a1628] border border-[#1e3a5f] rounded-lg text-sm text-white focus:outline-none focus:border-blue-500"
+                      placeholder="e.g., 004336, 610014"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-slate-400 mb-1">Group Exclusions (comma-separated)</label>
+                    <input
+                      type="text"
+                      value={editingTrigger.group_exclusions?.join(', ') || ''}
+                      onChange={(e) => setEditingTrigger({ ...editingTrigger, group_exclusions: e.target.value.split(',').map(k => k.trim()).filter(Boolean) })}
+                      className="w-full px-3 py-2 bg-[#0a1628] border border-[#1e3a5f] rounded-lg text-sm text-white focus:outline-none focus:border-blue-500"
+                      placeholder="e.g., RX1234, RX5678"
+                    />
+                  </div>
+                </div>
+
                 <div>
-                  <label className="block text-xs font-medium text-slate-400 mb-1">Group Exclusions (comma-separated)</label>
+                  <label className="block text-xs font-medium text-slate-400 mb-1">Contract Prefix Exclusions (comma-separated)</label>
                   <input
                     type="text"
-                    value={editingTrigger.group_exclusions?.join(', ') || ''}
-                    onChange={(e) => setEditingTrigger({ ...editingTrigger, group_exclusions: e.target.value.split(',').map(k => k.trim()).filter(Boolean) })}
+                    value={editingTrigger.contract_prefix_exclusions?.join(', ') || ''}
+                    onChange={(e) => setEditingTrigger({ ...editingTrigger, contract_prefix_exclusions: e.target.value.split(',').map(k => k.trim()).filter(Boolean) })}
                     className="w-full px-3 py-2 bg-[#0a1628] border border-[#1e3a5f] rounded-lg text-sm text-white focus:outline-none focus:border-blue-500"
-                    placeholder="e.g., RX1234, RX5678"
+                    placeholder="e.g., S, H, R"
                   />
                 </div>
 
