@@ -216,7 +216,7 @@ export default function PharmaciesPage() {
     }
   }
 
-  async function downloadDocument(pharmacyId: string, docType: 'baa' | 'service-agreement') {
+  async function downloadDocument(pharmacyId: string, docType: 'baa' | 'service-agreement' | 'onboarding-guide') {
     setActionLoading(`${docType}-${pharmacyId}`);
     try {
       const token = localStorage.getItem('therxos_token');
@@ -577,6 +577,15 @@ export default function PharmaciesPage() {
                   >
                     <CreditCard className="w-4 h-4" />
                     {actionLoading === `stripe-${pharmacy.pharmacy_id}` ? 'Creating...' : 'Stripe Checkout Link'}
+                  </button>
+
+                  <button
+                    onClick={() => downloadDocument(pharmacy.pharmacy_id, 'onboarding-guide')}
+                    disabled={actionLoading === `onboarding-guide-${pharmacy.pharmacy_id}`}
+                    className="flex items-center gap-2 px-3 py-2 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-400 rounded-lg text-sm transition-colors disabled:opacity-50"
+                  >
+                    <FileText className="w-4 h-4" />
+                    {actionLoading === `onboarding-guide-${pharmacy.pharmacy_id}` ? 'Generating...' : 'Onboarding Guide'}
                   </button>
 
                   {pharmacy.submitter_email && (
