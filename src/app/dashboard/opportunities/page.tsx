@@ -62,6 +62,9 @@ interface Opportunity {
   contract_id?: string;
   plan_name?: string;
   prescriber_name?: string;
+  coverage_confidence?: 'verified' | 'likely' | 'unknown' | 'excluded';
+  verified_claim_count?: number;
+  avg_reimbursement?: number;
 }
 
 interface GroupedItem {
@@ -216,6 +219,48 @@ function InsuranceTags({ opp, size = 'sm' }: { opp: Opportunity; size?: 'sm' | '
         </span>
       )}
     </div>
+  );
+}
+
+// Coverage Confidence Badge - shows how confident we are this opportunity will be paid
+function CoverageConfidenceBadge({ confidence, size = 'sm' }: { confidence?: string; size?: 'sm' | 'xs' }) {
+  const config: Record<string, { bg: string; text: string; label: string; tooltip: string }> = {
+    verified: {
+      bg: 'bg-emerald-500/20',
+      text: 'text-emerald-400',
+      label: 'Verified',
+      tooltip: 'Paid claims found for this BIN+Group'
+    },
+    likely: {
+      bg: 'bg-yellow-500/20',
+      text: 'text-yellow-400',
+      label: 'Likely',
+      tooltip: 'Paid claims on this BIN, but Group unverified. Test first.'
+    },
+    unknown: {
+      bg: 'bg-slate-500/20',
+      text: 'text-slate-400',
+      label: 'Unknown',
+      tooltip: 'No coverage data available for this insurance'
+    },
+    excluded: {
+      bg: 'bg-red-500/20',
+      text: 'text-red-400',
+      label: 'Excluded',
+      tooltip: 'Known not to work for this BIN+Group'
+    }
+  };
+
+  const level = confidence && config[confidence] ? confidence : 'unknown';
+  const { bg, text, label, tooltip } = config[level];
+  const sizeClass = size === 'xs' ? 'text-[10px] px-1.5 py-0.5' : 'text-xs px-2 py-0.5';
+
+  return (
+    <span className={`${sizeClass} ${bg} ${text} rounded font-medium cursor-default`} title={tooltip}>
+      {level === 'verified' && <span className="mr-0.5">&#10003;</span>}
+      {level === 'excluded' && <span className="mr-0.5">&#10007;</span>}
+      {label}
+    </span>
   );
 }
 
@@ -1585,6 +1630,7 @@ export default function OpportunitiesPage() {
               <th>Annual</th>
               <th>Prescriber</th>
               <th>Status</th>
+              <th>Coverage</th>
               <th>BIN</th>
             </tr>
           </thead>
@@ -1598,6 +1644,7 @@ export default function OpportunitiesPage() {
                 <td class="value">${formatCurrency(getAnnualValue(opp))}</td>
                 <td>${opp.prescriber_name || 'Unknown'}</td>
                 <td><span class="status status-${opp.status.toLowerCase().replace(/\s+/g, '-')}">${opp.status}</span></td>
+                <td>${opp.coverage_confidence === 'verified' ? 'Verified' : opp.coverage_confidence === 'likely' ? 'Likely' : opp.coverage_confidence === 'excluded' ? 'Excluded' : 'Unknown'}</td>
                 <td>${opp.insurance_bin || '-'}</td>
               </tr>
             `).join('')}
@@ -1954,7 +2001,10 @@ export default function OpportunitiesPage() {
                             : group.label}
                         </span>
                         {groupBy === 'patient' && group.opportunities[0] && (
-                          <InsuranceTags opp={group.opportunities[0]} size="sm" />
+                          <div className="flex items-center gap-1.5">
+                            <CoverageConfidenceBadge confidence={group.opportunities[0].coverage_confidence} size="xs" />
+                            <InsuranceTags opp={group.opportunities[0]} size="sm" />
+                          </div>
                         )}
                         {group.sublabel && (
                           <span className="text-xs text-slate-400">({group.sublabel})</span>
@@ -2012,7 +2062,10 @@ export default function OpportunitiesPage() {
                                   <div className="font-medium text-white">
                                     {formatPatientName(opp.patient_first_name, opp.patient_last_name, opp.patient_hash, isDemo)}
                                   </div>
-                                  <InsuranceTags opp={opp} size="xs" />
+                                  <div className="flex items-center gap-1.5 mt-0.5">
+                                    <CoverageConfidenceBadge confidence={opp.coverage_confidence} size="xs" />
+                                    <InsuranceTags opp={opp} size="xs" />
+                                  </div>
                                 </td>
                               )}
                               <td className="px-5 py-3">

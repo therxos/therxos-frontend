@@ -74,6 +74,12 @@ interface Trigger {
   total_opportunities?: number;
   total_patients?: number;
   total_margin?: number;
+  confidence_distribution?: {
+    verified: number;
+    likely: number;
+    unknown: number;
+    excluded: number;
+  };
 }
 
 type SortField = 'display_name' | 'trigger_type' | 'default_gp_value' | 'is_enabled';
@@ -666,6 +672,38 @@ export default function TriggersPage() {
                           </div>
                         </div>
                       </div>
+
+                      {/* Coverage Confidence Distribution */}
+                      {trigger.confidence_distribution && (trigger.confidence_distribution.verified > 0 || trigger.confidence_distribution.likely > 0 || trigger.confidence_distribution.excluded > 0) && (() => {
+                        const cd = trigger.confidence_distribution!;
+                        const total = cd.verified + cd.likely + cd.unknown + cd.excluded;
+                        if (total === 0) return null;
+                        return (
+                          <div className="mt-4 pt-4 border-t border-[#1e3a5f]">
+                            <h4 className="text-xs font-semibold text-slate-400 uppercase mb-2">Coverage Confidence</h4>
+                            <div className="flex h-3 rounded-full overflow-hidden bg-slate-700/50 mb-2">
+                              {cd.verified > 0 && (
+                                <div className="bg-emerald-500" style={{ width: `${(cd.verified / total) * 100}%` }} title={`Verified: ${cd.verified}`} />
+                              )}
+                              {cd.likely > 0 && (
+                                <div className="bg-yellow-500" style={{ width: `${(cd.likely / total) * 100}%` }} title={`Likely: ${cd.likely}`} />
+                              )}
+                              {cd.unknown > 0 && (
+                                <div className="bg-slate-500" style={{ width: `${(cd.unknown / total) * 100}%` }} title={`Unknown: ${cd.unknown}`} />
+                              )}
+                              {cd.excluded > 0 && (
+                                <div className="bg-red-500" style={{ width: `${(cd.excluded / total) * 100}%` }} title={`Excluded: ${cd.excluded}`} />
+                              )}
+                            </div>
+                            <div className="flex gap-4 text-[10px]">
+                              <span className="text-emerald-400">Verified: {cd.verified}</span>
+                              <span className="text-yellow-400">Likely: {cd.likely}</span>
+                              <span className="text-slate-400">Unknown: {cd.unknown}</span>
+                              <span className="text-red-400">Excluded: {cd.excluded}</span>
+                            </div>
+                          </div>
+                        );
+                      })()}
 
                       {/* Per-Pharmacy Opportunity Stats */}
                       <div className="mt-4 pt-4 border-t border-[#1e3a5f]">
