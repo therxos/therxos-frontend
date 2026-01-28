@@ -2001,10 +2001,7 @@ export default function OpportunitiesPage() {
                             : group.label}
                         </span>
                         {groupBy === 'patient' && group.opportunities[0] && (
-                          <div className="flex items-center gap-1.5">
-                            <CoverageConfidenceBadge confidence={group.opportunities[0].coverage_confidence} size="xs" />
-                            <InsuranceTags opp={group.opportunities[0]} size="sm" />
-                          </div>
+                          <InsuranceTags opp={group.opportunities[0]} size="sm" />
                         )}
                         {group.sublabel && (
                           <span className="text-xs text-slate-400">({group.sublabel})</span>
@@ -2062,15 +2059,15 @@ export default function OpportunitiesPage() {
                                   <div className="font-medium text-white">
                                     {formatPatientName(opp.patient_first_name, opp.patient_last_name, opp.patient_hash, isDemo)}
                                   </div>
-                                  <div className="flex items-center gap-1.5 mt-0.5">
-                                    <CoverageConfidenceBadge confidence={opp.coverage_confidence} size="xs" />
-                                    <InsuranceTags opp={opp} size="xs" />
-                                  </div>
+                                  <InsuranceTags opp={opp} size="xs" />
                                 </td>
                               )}
                               <td className="px-5 py-3">
-                                <div className="text-white font-medium">
-                                  {opp.current_drug_name || 'N/A'} → <span className="text-[#14b8a6]">{opp.recommended_drug_name}</span>
+                                <div className="flex items-center gap-2">
+                                  <span className="text-white font-medium">
+                                    {opp.current_drug_name || 'N/A'} → <span className="text-[#14b8a6]">{opp.recommended_drug_name}</span>
+                                  </span>
+                                  <CoverageConfidenceBadge confidence={opp.coverage_confidence} size="xs" />
                                 </div>
                               </td>
                               <td className="px-5 py-3">
