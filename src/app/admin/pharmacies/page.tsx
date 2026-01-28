@@ -104,8 +104,17 @@ function formatRelativeTime(dateStr: string): string {
 }
 
 function getPollSourceLabel(pmsSystem: string | undefined): string {
-  if (pmsSystem === 'rx30') return 'Microsoft / Outcomes';
-  return 'Gmail / SPP';
+  switch (pmsSystem?.toLowerCase()) {
+    case 'pioneer':
+    case 'pioneerrx':
+      return 'Gmail / SPP';
+    case 'rx30':
+      return 'Microsoft / Outcomes';
+    case 'primerx':
+      return 'Not configured';
+    default:
+      return 'Not configured';
+  }
 }
 
 export default function PharmaciesPage() {
@@ -348,12 +357,20 @@ export default function PharmaciesPage() {
   }
 
   async function triggerPoll(pharmacyId: string, pmsSystem: string | undefined) {
+    const pms = pmsSystem?.toLowerCase();
+    let endpoint: string;
+    if (pms === 'rx30') {
+      endpoint = `${API_URL}/api/automation/poll-outcomes`;
+    } else if (pms === 'pioneer' || pms === 'pioneerrx') {
+      endpoint = `${API_URL}/api/automation/poll-spp`;
+    } else {
+      alert(`Polling not configured for PMS: ${pmsSystem || 'unknown'}`);
+      return;
+    }
+
     setPollingPharmacy(pharmacyId);
     try {
       const token = localStorage.getItem('therxos_token');
-      const endpoint = pmsSystem === 'rx30'
-        ? `${API_URL}/api/automation/poll-outcomes`
-        : `${API_URL}/api/automation/poll-spp`;
 
       const res = await fetch(endpoint, {
         method: 'POST',
