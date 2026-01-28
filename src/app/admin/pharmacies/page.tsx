@@ -53,6 +53,14 @@ interface Pharmacy {
   baa_signed_at?: string;
   service_agreement_signed_at?: string;
   stripe_customer_id?: string;
+  // Polling
+  last_poll?: {
+    run_type: string;
+    completed_at: string;
+    status: string;
+    summary: any;
+  } | null;
+  last_data_received?: string;
 }
 
 interface TempCredentials {
@@ -79,6 +87,27 @@ function formatDate(dateStr: string): string {
   });
 }
 
+function formatRelativeTime(dateStr: string): string {
+  if (!dateStr) return 'N/A';
+  const date = new Date(dateStr);
+  const now = new Date();
+  const diffMs = now.getTime() - date.getTime();
+  const diffMins = Math.floor(diffMs / 60000);
+  const diffHours = Math.floor(diffMs / 3600000);
+  const diffDays = Math.floor(diffMs / 86400000);
+
+  if (diffMins < 1) return 'Just now';
+  if (diffMins < 60) return `${diffMins}m ago`;
+  if (diffHours < 24) return `${diffHours}h ago`;
+  if (diffDays < 7) return `${diffDays}d ago`;
+  return formatDate(dateStr);
+}
+
+function getPollSourceLabel(pmsSystem: string | undefined): string {
+  if (pmsSystem === 'rx30') return 'Microsoft / Outcomes';
+  return 'Gmail / SPP';
+}
+
 export default function PharmaciesPage() {
   const [pharmacies, setPharmacies] = useState<Pharmacy[]>([]);
   const [loading, setLoading] = useState(true);
@@ -90,6 +119,7 @@ export default function PharmaciesPage() {
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [tempCredentials, setTempCredentials] = useState<TempCredentials | null>(null);
   const [copied, setCopied] = useState(false);
+  const [pollingPharmacy, setPollingPharmacy] = useState<string | null>(null);
 
   useEffect(() => {
     fetchPharmacies();
@@ -315,6 +345,38 @@ export default function PharmaciesPage() {
     navigator.clipboard.writeText(text);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
+  }
+
+  async function triggerPoll(pharmacyId: string, pmsSystem: string | undefined) {
+    setPollingPharmacy(pharmacyId);
+    try {
+      const token = localStorage.getItem('therxos_token');
+      const endpoint = pmsSystem === 'rx30'
+        ? `${API_URL}/api/automation/poll-outcomes`
+        : `${API_URL}/api/automation/poll-spp`;
+
+      const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ pharmacyId, daysBack: 1 }),
+      });
+
+      const data = await res.json();
+      if (res.ok) {
+        alert(`Poll completed: ${data.message || 'Success'}`);
+        fetchPharmacies();
+      } else {
+        alert('Poll failed: ' + (data.error || 'Unknown error'));
+      }
+    } catch (err) {
+      console.error('Poll trigger error:', err);
+      alert('Failed to trigger poll');
+    } finally {
+      setPollingPharmacy(null);
+    }
   }
 
   const filteredPharmacies = (pharmacies || []).filter(p => {
@@ -557,6 +619,49 @@ export default function PharmaciesPage() {
                       </p>
                     )}
                   </div>
+                </div>
+
+                {/* Data Pipeline / Polling */}
+                <div className="bg-[#0a1628] rounded-lg p-3">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-xs font-medium text-slate-300">Data Pipeline</span>
+                    <span className="text-xs text-slate-500">
+                      {getPollSourceLabel(pharmacy.pms_system)}
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3 mb-3">
+                    <div>
+                      <p className="text-xs text-slate-500">Last Poll</p>
+                      <p className="text-sm text-white">
+                        {pharmacy.last_poll?.completed_at
+                          ? formatRelativeTime(pharmacy.last_poll.completed_at)
+                          : 'Never'}
+                      </p>
+                      {pharmacy.last_poll?.run_type && (
+                        <p className="text-xs text-slate-500 mt-0.5">
+                          {pharmacy.last_poll.run_type.replace(/_/g, ' ')}
+                        </p>
+                      )}
+                    </div>
+                    <div>
+                      <p className="text-xs text-slate-500">Last Data Received</p>
+                      <p className="text-sm text-white">
+                        {pharmacy.last_data_received
+                          ? formatRelativeTime(pharmacy.last_data_received)
+                          : 'No data'}
+                      </p>
+                    </div>
+                  </div>
+
+                  <button
+                    onClick={() => triggerPoll(pharmacy.pharmacy_id, pharmacy.pms_system)}
+                    disabled={pollingPharmacy === pharmacy.pharmacy_id}
+                    className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-[#1e3a5f] hover:bg-[#2a4a6f] text-white rounded-lg text-xs font-medium transition-colors disabled:opacity-50"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${pollingPharmacy === pharmacy.pharmacy_id ? 'animate-spin' : ''}`} />
+                    {pollingPharmacy === pharmacy.pharmacy_id ? 'Polling...' : 'Poll Now'}
+                  </button>
                 </div>
 
                 {/* Action Buttons */}
