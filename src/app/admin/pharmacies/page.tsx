@@ -383,7 +383,15 @@ export default function PharmaciesPage() {
 
       const data = await res.json();
       if (res.ok) {
-        alert(`Poll completed: ${data.message || 'Success'}`);
+        const emails = data.emailsProcessed ?? 0;
+        const records = data.totalRecordsIngested ?? 0;
+        const completed = data.totalOpportunitiesCompleted ?? 0;
+        const newOpps = data.totalNewOpportunities ?? 0;
+        const parts = [`Emails: ${emails}`, `Records: ${records}`];
+        if (newOpps > 0) parts.push(`New opps: ${newOpps}`);
+        if (completed > 0) parts.push(`Auto-completed: ${completed}`);
+        if (emails === 0) parts.push('No new emails found');
+        alert(`Poll complete\n${parts.join('\n')}`);
         fetchPharmacies();
       } else {
         alert('Poll failed: ' + (data.error || 'Unknown error'));
