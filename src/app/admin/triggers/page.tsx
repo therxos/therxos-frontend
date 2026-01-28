@@ -263,6 +263,30 @@ export default function TriggersPage() {
     }
   }
 
+  async function scanAllPharmaciesForTrigger(triggerId: string, triggerName: string) {
+    setScanningTrigger(triggerId);
+    try {
+      const token = localStorage.getItem('therxos_token');
+      const res = await fetch(`${API_URL}/api/admin/triggers/${triggerId}/scan`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        alert(`Scan complete for "${triggerName}"!\n\nPharmacies scanned: ${data.pharmaciesScanned || 0}\nOpportunities created: ${data.opportunitiesCreated || 0}\nPatients matched: ${data.patientsMatched || 0}`);
+        fetchTriggers();
+      } else {
+        const error = await res.json();
+        alert('Scan failed: ' + (error.error || 'Unknown error'));
+      }
+    } catch (err) {
+      console.error('Failed to scan all pharmacies:', err);
+      alert('Failed to scan all pharmacies');
+    } finally {
+      setScanningTrigger(null);
+    }
+  }
+
   async function scanPharmacyForTrigger(triggerId: string, pharmacyId: string, pharmacyName: string) {
     setScanningPharmacy(pharmacyId);
     try {
@@ -649,6 +673,18 @@ export default function TriggersPage() {
                           <h4 className="text-xs font-semibold text-slate-400 uppercase">
                             Pharmacy Opportunities ({trigger.total_opportunities || 0} total, {trigger.total_patients || 0} patients, ${((trigger.total_margin || 0) / 1000).toFixed(1)}k margin)
                           </h4>
+                          <button
+                            onClick={() => scanAllPharmaciesForTrigger(trigger.trigger_id, trigger.display_name)}
+                            disabled={scanningTrigger === trigger.trigger_id}
+                            className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-500/20 hover:bg-amber-500/30 text-amber-400 rounded-lg text-xs font-medium transition-colors disabled:opacity-50"
+                          >
+                            {scanningTrigger === trigger.trigger_id ? (
+                              <Loader2 className="w-3 h-3 animate-spin" />
+                            ) : (
+                              <Zap className="w-3 h-3" />
+                            )}
+                            {scanningTrigger === trigger.trigger_id ? 'Scanning...' : 'Scan All Pharmacies'}
+                          </button>
                         </div>
                         <div className="grid grid-cols-2 lg:grid-cols-3 gap-2 mb-4">
                           {pharmacies.map((pharmacy) => {
