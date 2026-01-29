@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import Link from 'next/link';
 import {
   TrendingUp,
@@ -10,6 +10,7 @@ import {
   Users,
   ChevronDown,
   ChevronUp,
+  ChevronRight,
 } from 'lucide-react';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL;
@@ -29,6 +30,21 @@ interface Winner {
   avg_reimbursement: number;
 }
 
+interface DrugGroup {
+  drug_name: string;
+  entries: Winner[];
+  total_fills: number;
+  total_patients: number;
+  avg_gp: number;
+  total_profit: number;
+  avg_acq_cost: number;
+  avg_reimbursement: number;
+  best_gp: number;
+  bin_count: number;
+}
+
+type GroupSortField = 'drug_name' | 'bin_count' | 'total_fills' | 'total_patients' | 'avg_gp' | 'total_profit' | 'avg_acq_cost' | 'avg_reimbursement' | 'best_gp';
+
 function formatCurrency(value: number): string {
   return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(value);
 }
@@ -37,14 +53,50 @@ function formatCurrencyExact(value: number): string {
   return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(value);
 }
 
+function buildGroups(winners: Winner[]): DrugGroup[] {
+  const map = new Map<string, Winner[]>();
+  for (const w of winners) {
+    const key = w.drug_name;
+    if (!map.has(key)) map.set(key, []);
+    map.get(key)!.push(w);
+  }
+
+  const groups: DrugGroup[] = [];
+  for (const [drug_name, entries] of map) {
+    const total_fills = entries.reduce((s, e) => s + e.fill_count, 0);
+    const total_profit = entries.reduce((s, e) => s + e.total_profit, 0);
+    groups.push({
+      drug_name,
+      entries: entries.sort((a, b) => b.total_profit - a.total_profit),
+      total_fills,
+      total_patients: entries.reduce((s, e) => s + e.patient_count, 0),
+      avg_gp: total_fills > 0 ? total_profit / total_fills : 0,
+      total_profit,
+      avg_acq_cost: total_fills > 0
+        ? entries.reduce((s, e) => s + e.avg_acq_cost * e.fill_count, 0) / total_fills
+        : 0,
+      avg_reimbursement: total_fills > 0
+        ? entries.reduce((s, e) => s + e.avg_reimbursement * e.fill_count, 0) / total_fills
+        : 0,
+      best_gp: Math.max(...entries.map(e => e.best_gp)),
+      bin_count: entries.length,
+    });
+  }
+  return groups;
+}
+
 export default function PositiveGPScanPage() {
   const [loading, setLoading] = useState(false);
   const [winners, setWinners] = useState<Winner[] | null>(null);
   const [totalProfit, setTotalProfit] = useState(0);
   const [totalPatients, setTotalPatients] = useState(0);
 
-  const [sortField, setSortField] = useState<keyof Winner | null>(null);
+  const [sortField, setSortField] = useState<GroupSortField>('total_profit');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
+  const [expandedDrugs, setExpandedDrugs] = useState<Set<string>>(new Set());
+
+  const [filterBin, setFilterBin] = useState('');
+  const [filterGroup, setFilterGroup] = useState('');
 
   const [showConfig, setShowConfig] = useState(false);
   const [minFills, setMinFills] = useState(3);
@@ -54,13 +106,14 @@ export default function PositiveGPScanPage() {
   async function fetchWinners() {
     setLoading(true);
     setWinners(null);
+    setExpandedDrugs(new Set());
     try {
       const token = localStorage.getItem('therxos_token');
       const params = new URLSearchParams({
         minFills: String(minFills),
         minAvgGP: String(minAvgGP),
         lookbackDays: String(lookbackDays),
-        limit: '200',
+        limit: '500',
       });
       const res = await fetch(`${API_URL}/api/admin/positive-gp-winners?${params}`, {
         headers: { Authorization: `Bearer ${token}` },
@@ -82,27 +135,52 @@ export default function PositiveGPScanPage() {
     }
   }
 
-  function toggleSort(field: keyof Winner) {
+  const filteredWinners = useMemo(() => {
+    if (!winners) return null;
+    return winners.filter(w => {
+      if (filterBin && !w.insurance_bin.toLowerCase().includes(filterBin.toLowerCase())) return false;
+      if (filterGroup && !(w.insurance_group || '').toLowerCase().includes(filterGroup.toLowerCase())) return false;
+      return true;
+    });
+  }, [winners, filterBin, filterGroup]);
+
+  const groups = useMemo(() => {
+    if (!filteredWinners) return null;
+    return buildGroups(filteredWinners);
+  }, [filteredWinners]);
+
+  const sortedGroups = useMemo(() => {
+    if (!groups) return null;
+    return [...groups].sort((a, b) => {
+      const av = a[sortField];
+      const bv = b[sortField];
+      if (av == null && bv == null) return 0;
+      if (av == null) return 1;
+      if (bv == null) return -1;
+      const cmp = typeof av === 'string' ? av.localeCompare(bv as string) : (av as number) - (bv as number);
+      return sortDir === 'asc' ? cmp : -cmp;
+    });
+  }, [groups, sortField, sortDir]);
+
+  function toggleSort(field: GroupSortField) {
     if (sortField === field) {
       setSortDir(d => d === 'asc' ? 'desc' : 'asc');
     } else {
       setSortField(field);
-      setSortDir(field === 'drug_name' || field === 'insurance_bin' || field === 'insurance_group' ? 'asc' : 'desc');
+      setSortDir(field === 'drug_name' ? 'asc' : 'desc');
     }
   }
 
-  const sortedWinners = winners ? [...winners].sort((a, b) => {
-    if (!sortField) return 0;
-    const av = a[sortField];
-    const bv = b[sortField];
-    if (av == null && bv == null) return 0;
-    if (av == null) return 1;
-    if (bv == null) return -1;
-    const cmp = typeof av === 'string' ? av.localeCompare(bv as string) : (av as number) - (bv as number);
-    return sortDir === 'asc' ? cmp : -cmp;
-  }) : null;
+  function toggleExpand(drugName: string) {
+    setExpandedDrugs(prev => {
+      const next = new Set(prev);
+      if (next.has(drugName)) next.delete(drugName);
+      else next.add(drugName);
+      return next;
+    });
+  }
 
-  const SortHeader = ({ field, label, align = 'right' }: { field: keyof Winner; label: string; align?: string }) => (
+  const SortHeader = ({ field, label, align = 'right' }: { field: GroupSortField; label: string; align?: string }) => (
     <th
       className={`${align === 'left' ? 'text-left' : 'text-right'} py-2 px-3 cursor-pointer hover:text-slate-200 select-none transition-colors`}
       onClick={() => toggleSort(field)}
@@ -117,6 +195,8 @@ export default function PositiveGPScanPage() {
       </span>
     </th>
   );
+
+  const uniqueDrugCount = groups?.length || 0;
 
   return (
     <div>
@@ -146,8 +226,8 @@ export default function PositiveGPScanPage() {
       <div className="bg-[#0d2137] border border-[#1e3a5f] rounded-xl p-4 mb-6">
         <h3 className="text-sm font-semibold text-slate-300 mb-2">What this shows</h3>
         <p className="text-xs text-slate-400">
-          Drugs with the highest average gross profit per fill, grouped by BIN/GROUP. These are your best-performing scripts -
-          use this data to identify which drugs to steer patients toward within the same therapeutic class when doing therapeutic interchanges.
+          Drugs with the highest average gross profit per fill, grouped by drug name. Click any drug to expand and see the individual BIN/GROUP breakdowns.
+          Use this data to identify which drugs to steer patients toward within the same therapeutic class when doing therapeutic interchanges.
         </p>
       </div>
 
@@ -202,15 +282,43 @@ export default function PositiveGPScanPage() {
         </button>
       </div>
 
+      {/* BIN/GROUP Filter */}
+      {winners !== null && winners.length > 0 && (
+        <div className="flex items-center gap-3 mb-4">
+          <input
+            type="text"
+            placeholder="Filter by BIN..."
+            value={filterBin}
+            onChange={e => setFilterBin(e.target.value)}
+            className="px-3 py-1.5 bg-[#0a1628] border border-[#1e3a5f] rounded-lg text-sm text-white placeholder-slate-500 w-40"
+          />
+          <input
+            type="text"
+            placeholder="Filter by GROUP..."
+            value={filterGroup}
+            onChange={e => setFilterGroup(e.target.value)}
+            className="px-3 py-1.5 bg-[#0a1628] border border-[#1e3a5f] rounded-lg text-sm text-white placeholder-slate-500 w-40"
+          />
+          {(filterBin || filterGroup) && (
+            <button
+              onClick={() => { setFilterBin(''); setFilterGroup(''); }}
+              className="text-xs text-slate-400 hover:text-white transition-colors"
+            >
+              Clear filters
+            </button>
+          )}
+        </div>
+      )}
+
       {/* Results */}
-      {winners !== null && (
+      {sortedGroups !== null && (
         <div className="bg-[#0d2137] border border-[#1e3a5f] rounded-xl overflow-hidden">
           <div className="p-4 border-b border-[#1e3a5f] flex items-center justify-between">
             <div className="flex items-center gap-3">
               <h3 className="text-sm font-semibold text-white">
-                Top Winners ({winners.length})
+                Top Winners ({uniqueDrugCount} drugs)
               </h3>
-              {winners.length > 0 && (
+              {uniqueDrugCount > 0 && (
                 <div className="flex items-center gap-4 text-xs text-slate-400">
                   <span className="flex items-center gap-1">
                     <DollarSign className="w-3 h-3 text-emerald-400" />
@@ -224,7 +332,7 @@ export default function PositiveGPScanPage() {
               )}
             </div>
           </div>
-          {winners.length === 0 ? (
+          {uniqueDrugCount === 0 ? (
             <div className="p-8 text-center">
               <p className="text-sm text-slate-300">No drugs matched the current thresholds.</p>
             </div>
@@ -233,11 +341,11 @@ export default function PositiveGPScanPage() {
               <table className="w-full text-xs">
                 <thead>
                   <tr className="text-slate-400 border-b border-[#1e3a5f]">
+                    <th className="w-6 py-2 px-1"></th>
                     <SortHeader field="drug_name" label="Drug Name" align="left" />
-                    <SortHeader field="insurance_bin" label="BIN" align="left" />
-                    <SortHeader field="insurance_group" label="GROUP" align="left" />
-                    <SortHeader field="fill_count" label="Fills" />
-                    <SortHeader field="patient_count" label="Patients" />
+                    <SortHeader field="bin_count" label="BINs" />
+                    <SortHeader field="total_fills" label="Fills" />
+                    <SortHeader field="total_patients" label="Patients" />
                     <SortHeader field="avg_gp" label="Avg GP" />
                     <SortHeader field="total_profit" label="Total Profit" />
                     <SortHeader field="avg_acq_cost" label="Avg Acq Cost" />
@@ -246,20 +354,19 @@ export default function PositiveGPScanPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {(sortedWinners || []).map((w, i) => (
-                    <tr key={i} className="border-b border-[#1e3a5f]/50 hover:bg-[#1e3a5f]/20">
-                      <td className="py-2 px-3 text-white font-medium">{w.drug_name}</td>
-                      <td className="py-2 px-3 text-slate-300">{w.insurance_bin}</td>
-                      <td className="py-2 px-3 text-slate-300">{w.insurance_group || '-'}</td>
-                      <td className="py-2 px-3 text-right text-slate-300">{w.fill_count}</td>
-                      <td className="py-2 px-3 text-right text-slate-300">{w.patient_count}</td>
-                      <td className="py-2 px-3 text-right text-emerald-400 font-semibold">{formatCurrencyExact(w.avg_gp)}</td>
-                      <td className="py-2 px-3 text-right text-emerald-400 font-semibold">{formatCurrency(w.total_profit)}</td>
-                      <td className="py-2 px-3 text-right text-slate-300">{formatCurrencyExact(w.avg_acq_cost)}</td>
-                      <td className="py-2 px-3 text-right text-slate-300">{formatCurrencyExact(w.avg_reimbursement)}</td>
-                      <td className="py-2 px-3 text-right text-emerald-400">{formatCurrencyExact(w.best_gp)}</td>
-                    </tr>
-                  ))}
+                  {sortedGroups.map((g) => {
+                    const isExpanded = expandedDrugs.has(g.drug_name);
+                    const hasMultiple = g.entries.length > 1;
+                    return (
+                      <GroupRows
+                        key={g.drug_name}
+                        group={g}
+                        isExpanded={isExpanded}
+                        hasMultiple={hasMultiple}
+                        onToggle={() => toggleExpand(g.drug_name)}
+                      />
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -267,5 +374,71 @@ export default function PositiveGPScanPage() {
         </div>
       )}
     </div>
+  );
+}
+
+function GroupRows({ group: g, isExpanded, hasMultiple, onToggle }: {
+  group: DrugGroup;
+  isExpanded: boolean;
+  hasMultiple: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <>
+      {/* Main drug row */}
+      <tr
+        className={`border-b border-[#1e3a5f]/50 ${hasMultiple ? 'cursor-pointer hover:bg-[#1e3a5f]/30' : 'hover:bg-[#1e3a5f]/20'} ${isExpanded ? 'bg-[#1e3a5f]/20' : ''}`}
+        onClick={hasMultiple ? onToggle : undefined}
+      >
+        <td className="py-2 px-1 text-center">
+          {hasMultiple && (
+            isExpanded
+              ? <ChevronDown className="w-3.5 h-3.5 text-slate-400 inline" />
+              : <ChevronRight className="w-3.5 h-3.5 text-slate-400 inline" />
+          )}
+        </td>
+        <td className="py-2 px-3 text-white font-medium">
+          {g.drug_name}
+          {!hasMultiple && g.entries[0] && (
+            <span className="ml-2 text-slate-500 font-normal">{g.entries[0].insurance_bin}/{g.entries[0].insurance_group || '-'}</span>
+          )}
+        </td>
+        <td className="py-2 px-3 text-right">
+          {hasMultiple ? (
+            <span className="inline-flex items-center justify-center px-1.5 py-0.5 bg-[#1e3a5f] rounded text-slate-300 text-[10px] font-semibold">
+              {g.bin_count}
+            </span>
+          ) : (
+            <span className="text-slate-500">1</span>
+          )}
+        </td>
+        <td className="py-2 px-3 text-right text-slate-300">{g.total_fills}</td>
+        <td className="py-2 px-3 text-right text-slate-300">{g.total_patients}</td>
+        <td className="py-2 px-3 text-right text-emerald-400 font-semibold">{formatCurrencyExact(g.avg_gp)}</td>
+        <td className="py-2 px-3 text-right text-emerald-400 font-semibold">{formatCurrency(g.total_profit)}</td>
+        <td className="py-2 px-3 text-right text-slate-300">{formatCurrencyExact(g.avg_acq_cost)}</td>
+        <td className="py-2 px-3 text-right text-slate-300">{formatCurrencyExact(g.avg_reimbursement)}</td>
+        <td className="py-2 px-3 text-right text-emerald-400">{formatCurrencyExact(g.best_gp)}</td>
+      </tr>
+      {/* Expanded BIN/GROUP rows */}
+      {isExpanded && g.entries.map((w, i) => (
+        <tr key={i} className="border-b border-[#0a1628]/80 bg-[#0a1628]/60">
+          <td className="py-1.5 px-1"></td>
+          <td className="py-1.5 px-3 pl-8 text-slate-400">
+            <span className="text-slate-500 font-mono">{w.insurance_bin}</span>
+            <span className="text-slate-600 mx-1">/</span>
+            <span className="text-slate-500 font-mono">{w.insurance_group || '-'}</span>
+          </td>
+          <td className="py-1.5 px-3"></td>
+          <td className="py-1.5 px-3 text-right text-slate-400">{w.fill_count}</td>
+          <td className="py-1.5 px-3 text-right text-slate-400">{w.patient_count}</td>
+          <td className="py-1.5 px-3 text-right text-emerald-400/80">{formatCurrencyExact(w.avg_gp)}</td>
+          <td className="py-1.5 px-3 text-right text-emerald-400/80">{formatCurrencyExact(w.total_profit)}</td>
+          <td className="py-1.5 px-3 text-right text-slate-400">{formatCurrencyExact(w.avg_acq_cost)}</td>
+          <td className="py-1.5 px-3 text-right text-slate-400">{formatCurrencyExact(w.avg_reimbursement)}</td>
+          <td className="py-1.5 px-3 text-right text-emerald-400/80">{formatCurrencyExact(w.best_gp)}</td>
+        </tr>
+      ))}
+    </>
   );
 }
