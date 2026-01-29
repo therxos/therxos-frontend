@@ -708,7 +708,7 @@ export default function TriggersPage() {
                         <div>
                           {(() => {
                             const filtered = (trigger.bin_values || [])
-                              .filter(bv => !bv.isExcluded && (bv.gpValue || 0) >= 15)
+                              .filter(bv => !bv.isExcluded && (bv.gpValue || 0) >= 15 && !bv.bin?.startsWith('MEDICARE:'))
                               .sort((a, b) => (b.gpValue || 0) - (a.gpValue || 0));
                             return (
                               <>
