@@ -103,6 +103,8 @@ export default function TriggersPage() {
   const [scanningTrigger, setScanningTrigger] = useState<string | null>(null);
   const [scanningPharmacy, setScanningPharmacy] = useState<string | null>(null);
   const [pharmacies, setPharmacies] = useState<{ pharmacy_id: string; pharmacy_name: string }[]>([]);
+  const [refreshing, setRefreshing] = useState(false);
+  const [isNewTrigger, setIsNewTrigger] = useState(false);
 
   useEffect(() => {
     fetchTriggers();
@@ -141,6 +143,7 @@ export default function TriggersPage() {
   }
 
   async function fetchTriggers() {
+    setRefreshing(true);
     try {
       const token = localStorage.getItem('therxos_token');
       const res = await fetch(`${API_URL}/api/admin/triggers`, {
@@ -149,11 +152,14 @@ export default function TriggersPage() {
       if (res.ok) {
         const data = await res.json();
         setTriggers(data.triggers || []);
+      } else {
+        console.error('Failed to fetch triggers:', res.status);
       }
     } catch (err) {
       console.error('Failed to fetch triggers:', err);
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
   }
 
@@ -194,44 +200,76 @@ export default function TriggersPage() {
     }
   }
 
+  function createNewTrigger() {
+    setIsNewTrigger(true);
+    setEditingTrigger({
+      trigger_id: '',
+      trigger_code: '',
+      display_name: '',
+      trigger_type: 'therapeutic_interchange',
+      category: null,
+      detection_keywords: [],
+      exclude_keywords: [],
+      if_has_keywords: [],
+      if_not_has_keywords: [],
+      recommended_drug: null,
+      recommended_ndc: null,
+      action_instructions: null,
+      clinical_rationale: null,
+      priority: 'medium',
+      annual_fills: 12,
+      default_gp_value: null,
+      is_enabled: true,
+      bin_restrictions: [],
+      group_exclusions: [],
+      contract_prefix_exclusions: [],
+      bin_values: [],
+    } as Trigger);
+  }
+
   async function saveTrigger() {
     if (!editingTrigger) return;
     setSaving(true);
     // Parse comma-separated raw text into arrays
     const parseCSV = (key: string) => (rawKeywords[key] || '').split(',').map(k => k.trim()).filter(Boolean);
+    const payload = {
+      displayName: editingTrigger.display_name,
+      triggerCode: editingTrigger.trigger_code,
+      triggerType: editingTrigger.trigger_type,
+      category: editingTrigger.category,
+      detectionKeywords: parseCSV('detection_keywords'),
+      excludeKeywords: parseCSV('exclude_keywords'),
+      ifHasKeywords: parseCSV('if_has_keywords'),
+      ifNotHasKeywords: parseCSV('if_not_has_keywords'),
+      recommendedDrug: editingTrigger.recommended_drug,
+      recommendedNdc: editingTrigger.recommended_ndc,
+      clinicalRationale: editingTrigger.clinical_rationale,
+      actionInstructions: editingTrigger.action_instructions,
+      priority: editingTrigger.priority,
+      annualFills: editingTrigger.annual_fills,
+      defaultGpValue: editingTrigger.default_gp_value,
+      isEnabled: editingTrigger.is_enabled,
+      binRestrictions: parseCSV('bin_restrictions'),
+      groupExclusions: parseCSV('group_exclusions'),
+      contractPrefixExclusions: parseCSV('contract_prefix_exclusions'),
+    };
     try {
       const token = localStorage.getItem('therxos_token');
-      const res = await fetch(`${API_URL}/api/admin/triggers/${editingTrigger.trigger_id}`, {
-        method: 'PUT',
+      const url = isNewTrigger
+        ? `${API_URL}/api/admin/triggers`
+        : `${API_URL}/api/admin/triggers/${editingTrigger.trigger_id}`;
+      const res = await fetch(url, {
+        method: isNewTrigger ? 'POST' : 'PUT',
         headers: {
           Authorization: `Bearer ${token}`,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          displayName: editingTrigger.display_name,
-          triggerCode: editingTrigger.trigger_code,
-          triggerType: editingTrigger.trigger_type,
-          category: editingTrigger.category,
-          detectionKeywords: parseCSV('detection_keywords'),
-          excludeKeywords: parseCSV('exclude_keywords'),
-          ifHasKeywords: parseCSV('if_has_keywords'),
-          ifNotHasKeywords: parseCSV('if_not_has_keywords'),
-          recommendedDrug: editingTrigger.recommended_drug,
-          recommendedNdc: editingTrigger.recommended_ndc,
-          clinicalRationale: editingTrigger.clinical_rationale,
-          actionInstructions: editingTrigger.action_instructions,
-          priority: editingTrigger.priority,
-          annualFills: editingTrigger.annual_fills,
-          defaultGpValue: editingTrigger.default_gp_value,
-          isEnabled: editingTrigger.is_enabled,
-          binRestrictions: parseCSV('bin_restrictions'),
-          groupExclusions: parseCSV('group_exclusions'),
-          contractPrefixExclusions: parseCSV('contract_prefix_exclusions'),
-        }),
+        body: JSON.stringify(payload),
       });
 
       if (res.ok) {
         setEditingTrigger(null);
+        setIsNewTrigger(false);
         fetchTriggers();
       } else {
         const error = await res.json();
@@ -437,12 +475,16 @@ export default function TriggersPage() {
           </button>
           <button
             onClick={fetchTriggers}
-            className="flex items-center gap-2 px-4 py-2 bg-[#1e3a5f] hover:bg-[#2a4a6f] text-white rounded-lg text-sm font-medium transition-colors"
+            disabled={refreshing}
+            className="flex items-center gap-2 px-4 py-2 bg-[#1e3a5f] hover:bg-[#2a4a6f] text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
           >
-            <RefreshCw className="w-4 h-4" />
-            Refresh
+            {refreshing ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
+            {refreshing ? 'Loading...' : 'Refresh'}
           </button>
-          <button className="flex items-center gap-2 px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg text-sm font-medium transition-colors">
+          <button
+            onClick={createNewTrigger}
+            className="flex items-center gap-2 px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg text-sm font-medium transition-colors"
+          >
             <Plus className="w-4 h-4" />
             New Trigger
           </button>
@@ -817,12 +859,12 @@ export default function TriggersPage() {
       {/* Edit Modal */}
       {editingTrigger && (
         <>
-          <div className="fixed inset-0 bg-black/50 z-40" onClick={() => setEditingTrigger(null)} />
+          <div className="fixed inset-0 bg-black/50 z-40" onClick={() => { setEditingTrigger(null); setIsNewTrigger(false); }} />
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
             <div className="bg-[#0d2137] border border-[#1e3a5f] rounded-xl w-full max-w-3xl max-h-[90vh] overflow-y-auto">
               <div className="flex items-center justify-between p-4 border-b border-[#1e3a5f]">
-                <h2 className="text-lg font-semibold text-white">Edit Trigger</h2>
-                <button onClick={() => setEditingTrigger(null)} className="p-1 hover:bg-[#1e3a5f] rounded">
+                <h2 className="text-lg font-semibold text-white">{isNewTrigger ? 'New Trigger' : 'Edit Trigger'}</h2>
+                <button onClick={() => { setEditingTrigger(null); setIsNewTrigger(false); }} className="p-1 hover:bg-[#1e3a5f] rounded">
                   <X className="w-5 h-5 text-slate-400" />
                 </button>
               </div>
@@ -1009,7 +1051,7 @@ export default function TriggersPage() {
 
               <div className="flex items-center justify-end gap-3 p-4 border-t border-[#1e3a5f]">
                 <button
-                  onClick={() => setEditingTrigger(null)}
+                  onClick={() => { setEditingTrigger(null); setIsNewTrigger(false); }}
                   className="px-4 py-2 text-sm font-medium text-slate-400 hover:text-white transition-colors"
                 >
                   Cancel
@@ -1019,7 +1061,7 @@ export default function TriggersPage() {
                   disabled={saving}
                   className="px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
                 >
-                  {saving ? 'Saving...' : 'Save Changes'}
+                  {saving ? 'Saving...' : isNewTrigger ? 'Create Trigger' : 'Save Changes'}
                 </button>
               </div>
             </div>
