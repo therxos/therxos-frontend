@@ -96,6 +96,8 @@ export default function OpportunityApprovalPage() {
   // Negative GP scan state
   const [scanning, setScanning] = useState(false);
   const [scanResult, setScanResult] = useState<any>(null);
+  const [equivalency, setEquivalency] = useState<any>(null);
+  const [eqOpen, setEqOpen] = useState(true);
   const [showScanResult, setShowScanResult] = useState(false);
 
   // Patient opportunities drill-down
@@ -814,6 +816,18 @@ export default function OpportunityApprovalPage() {
                         setSelectedItem(item);
                         setShowDetailsModal(true);
                         fetchItemDetails(item.pending_type_id);
+                        // Fetch equivalency table for this drug
+                        if (item.recommended_drug_name) {
+                          const token = localStorage.getItem('therxos_token');
+                          fetch(`${API_URL}/api/opportunities/equivalency?drug=${encodeURIComponent(item.recommended_drug_name)}`, {
+                            headers: { Authorization: `Bearer ${token}` },
+                          })
+                            .then(r => r.ok ? r.json() : null)
+                            .then(data => setEquivalency(data?.table ? data : null))
+                            .catch(() => setEquivalency(null));
+                        } else {
+                          setEquivalency(null);
+                        }
                       }}
                       className="p-1.5 hover:bg-[#1e3a5f] rounded text-slate-400 hover:text-white transition-colors"
                       title="View Details"
@@ -1116,6 +1130,51 @@ export default function OpportunityApprovalPage() {
                         </tbody>
                       </table>
                     </div>
+                  </div>
+                )}
+
+                {/* Dosing Equivalency Table */}
+                {equivalency?.table && (
+                  <div>
+                    <button
+                      onClick={() => setEqOpen(!eqOpen)}
+                      className="flex items-center gap-2 text-xs text-slate-500 uppercase tracking-wider mb-2 hover:text-slate-300 transition-colors"
+                    >
+                      {eqOpen ? <ArrowUp className="w-3 h-3" /> : <ArrowDown className="w-3 h-3" />}
+                      Dosing Equivalency — {equivalency.table.className}
+                    </button>
+                    {eqOpen && (
+                      <div className="bg-[#0a1628] border border-[#1e3a5f] rounded-lg overflow-hidden">
+                        <table className="w-full text-sm">
+                          <thead>
+                            <tr className="border-b border-[#1e3a5f]">
+                              {equivalency.table.columns.map((col: string, i: number) => (
+                                <th key={i} className={`px-3 py-2 text-xs text-slate-400 ${i === 0 ? 'text-left' : 'text-center'}`}>
+                                  {col}
+                                </th>
+                              ))}
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {equivalency.table.rows.map((row: { drug: string; values: string[] }, i: number) => (
+                              <tr key={i} className={`border-b border-[#1e3a5f]/50 ${i === equivalency.matchedRow ? 'bg-[#14b8a6]/15' : ''}`}>
+                                <td className={`px-3 py-2 font-medium ${i === equivalency.matchedRow ? 'text-[#14b8a6]' : 'text-white'}`}>
+                                  {row.drug}
+                                </td>
+                                {row.values.map((val: string, j: number) => (
+                                  <td key={j} className="px-3 py-2 text-center text-slate-400">{val}</td>
+                                ))}
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                        {equivalency.table.note && (
+                          <div className="px-3 py-1.5 text-xs text-slate-500 border-t border-[#1e3a5f]">
+                            {equivalency.table.note}
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 )}
 
