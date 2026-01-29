@@ -1443,6 +1443,10 @@ export default function OpportunitiesPage() {
           key = opp.prescriber_name || 'unknown';
           label = opp.prescriber_name || 'Unknown Prescriber';
           break;
+        case 'drug':
+          key = (opp.recommended_drug_name || 'unknown').toLowerCase();
+          label = opp.recommended_drug_name || 'Unknown Drug';
+          break;
         default: // patient
           key = opp.patient_id;
           label = opp.patient_hash || opp.patient_id.slice(0, 8);
@@ -1970,6 +1974,7 @@ export default function OpportunitiesPage() {
               <option value="category">Category</option>
               <option value="contract">Contract</option>
               <option value="prescriber">Prescriber</option>
+              <option value="drug">Drug</option>
             </select>
           </div>
           <button onClick={() => setExpanded(new Set(groupedItems.map(g => g.id)))} className="text-sm text-slate-400 hover:text-white ml-4">

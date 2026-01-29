@@ -76,6 +76,14 @@ export default function UploadPage() {
   const [intakeResults, setIntakeResults] = useState<IntakeResult | null>(null);
   const [addingToQueue, setAddingToQueue] = useState<string | null>(null);
 
+  // Manual insurance entry (pre-processing)
+  const [manualBin, setManualBin] = useState('');
+  const [manualPcn, setManualPcn] = useState('');
+  const [manualGroup, setManualGroup] = useState('');
+
+  // Editable insurance (post-processing)
+  const [editedInsurance, setEditedInsurance] = useState<{ bin: string; pcn: string; group: string }>({ bin: '', pcn: '', group: '' });
+
   const { data: ingestionStatus } = useQuery({
     queryKey: ['ingestion-status', user?.pharmacyId],
     queryFn: () => analyticsApi.ingestionStatus().then((r) => r.data),
@@ -116,6 +124,9 @@ export default function UploadPage() {
       const formData = new FormData();
       formData.append('file', file);
       formData.append('pharmacyId', user?.pharmacyId || '');
+      if (manualBin.trim()) formData.append('manualBin', manualBin.trim());
+      if (manualPcn.trim()) formData.append('manualPcn', manualPcn.trim());
+      if (manualGroup.trim()) formData.append('manualGroup', manualGroup.trim());
 
       const token = localStorage.getItem('therxos_token');
       const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/intake/process`, {
@@ -134,6 +145,7 @@ export default function UploadPage() {
     onSuccess: (data) => {
       setIntakeStatus('success');
       setIntakeResults(data);
+      setEditedInsurance(data.insurance || { bin: '', pcn: '', group: '' });
       setIntakeMessage(`Found ${data.medications?.length || 0} medications and ${data.opportunities?.length || 0} potential opportunities`);
     },
     onError: (error: any) => {
@@ -276,6 +288,7 @@ export default function UploadPage() {
       setTimeout(() => {
         setIntakeStatus('success');
         setIntakeResults(DEMO_INTAKE_RESULTS);
+        setEditedInsurance(DEMO_INTAKE_RESULTS.insurance);
         setIntakeMessage('Demo mode: Found 3 medications and 2 potential opportunities');
       }, 3000);
       return;
@@ -301,7 +314,7 @@ export default function UploadPage() {
         body: JSON.stringify({
           pharmacyId: user?.pharmacyId,
           patient: intakeResults.patient,
-          insurance: intakeResults.insurance,
+          insurance: editedInsurance,
           opportunity
         }),
       });
@@ -332,9 +345,9 @@ export default function UploadPage() {
       ...intakeResults.opportunities.map(opp => [
         `${intakeResults.patient.firstName} ${intakeResults.patient.lastName}`,
         intakeResults.patient.dob,
-        intakeResults.insurance.bin,
-        intakeResults.insurance.pcn,
-        intakeResults.insurance.group,
+        editedInsurance.bin,
+        editedInsurance.pcn,
+        editedInsurance.group,
         opp.type,
         opp.current,
         opp.recommended,
@@ -357,6 +370,10 @@ export default function UploadPage() {
     setIntakeStatus('idle');
     setIntakeResults(null);
     setIntakeMessage('');
+    setManualBin('');
+    setManualPcn('');
+    setManualGroup('');
+    setEditedInsurance({ bin: '', pcn: '', group: '' });
   };
 
   const history = isDemo ? DEMO_HISTORY : (ingestionStatus?.recentUploads || []);
@@ -569,6 +586,51 @@ export default function UploadPage() {
                     </div>
                   )}
 
+                  {/* Insurance Info Fields */}
+                  <div className="p-4 rounded-lg text-left" style={{ background: 'var(--navy-700)' }}>
+                    <div className="flex items-center gap-2 mb-3">
+                      <CreditCard className="w-4 h-4 text-green-400" />
+                      <span className="text-sm font-medium">Insurance Info</span>
+                      <span className="text-xs" style={{ color: 'var(--slate-500)' }}>(optional — enter what you have)</span>
+                    </div>
+                    <div className="grid grid-cols-3 gap-3">
+                      <div>
+                        <label className="block text-xs mb-1" style={{ color: 'var(--slate-400)' }}>BIN</label>
+                        <input
+                          type="text"
+                          value={manualBin}
+                          onChange={e => setManualBin(e.target.value)}
+                          placeholder="e.g. 004336"
+                          maxLength={6}
+                          className="w-full px-3 py-1.5 rounded-lg text-sm border border-[var(--navy-600)] focus:border-[var(--blue-500)] outline-none transition-colors"
+                          style={{ background: 'var(--navy-800)', color: 'var(--slate-100)' }}
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs mb-1" style={{ color: 'var(--slate-400)' }}>PCN</label>
+                        <input
+                          type="text"
+                          value={manualPcn}
+                          onChange={e => setManualPcn(e.target.value)}
+                          placeholder="e.g. ADV"
+                          className="w-full px-3 py-1.5 rounded-lg text-sm border border-[var(--navy-600)] focus:border-[var(--blue-500)] outline-none transition-colors"
+                          style={{ background: 'var(--navy-800)', color: 'var(--slate-100)' }}
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs mb-1" style={{ color: 'var(--slate-400)' }}>GROUP</label>
+                        <input
+                          type="text"
+                          value={manualGroup}
+                          onChange={e => setManualGroup(e.target.value)}
+                          placeholder="e.g. RX1234"
+                          className="w-full px-3 py-1.5 rounded-lg text-sm border border-[var(--navy-600)] focus:border-[var(--blue-500)] outline-none transition-colors"
+                          style={{ background: 'var(--navy-800)', color: 'var(--slate-100)' }}
+                        />
+                      </div>
+                    </div>
+                  </div>
+
                   <button
                     onClick={handleIntakeProcess}
                     disabled={intakeStatus === 'processing'}
@@ -644,11 +706,43 @@ export default function UploadPage() {
                 <div className="flex items-center gap-2 mb-3">
                   <CreditCard className="w-4 h-4 text-green-400" />
                   <h3 className="font-medium">Insurance Information</h3>
+                  <span className="text-xs" style={{ color: 'var(--slate-500)' }}>(editable)</span>
                 </div>
-                <div className="space-y-1 text-sm">
-                  <p><span style={{ color: 'var(--slate-400)' }}>BIN:</span> {intakeResults.insurance.bin || 'Not found'}</p>
-                  <p><span style={{ color: 'var(--slate-400)' }}>PCN:</span> {intakeResults.insurance.pcn || 'Not found'}</p>
-                  <p><span style={{ color: 'var(--slate-400)' }}>Group:</span> {intakeResults.insurance.group || 'Not found'}</p>
+                <div className="space-y-2 text-sm">
+                  <div className="flex items-center gap-2">
+                    <span className="w-12" style={{ color: 'var(--slate-400)' }}>BIN:</span>
+                    <input
+                      type="text"
+                      value={editedInsurance.bin}
+                      onChange={e => setEditedInsurance(prev => ({ ...prev, bin: e.target.value }))}
+                      placeholder="Not found"
+                      maxLength={6}
+                      className="flex-1 px-2 py-1 rounded text-sm border border-transparent focus:border-[var(--blue-500)] outline-none transition-colors"
+                      style={{ background: 'var(--navy-800)', color: 'var(--slate-100)' }}
+                    />
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="w-12" style={{ color: 'var(--slate-400)' }}>PCN:</span>
+                    <input
+                      type="text"
+                      value={editedInsurance.pcn}
+                      onChange={e => setEditedInsurance(prev => ({ ...prev, pcn: e.target.value }))}
+                      placeholder="Not found"
+                      className="flex-1 px-2 py-1 rounded text-sm border border-transparent focus:border-[var(--blue-500)] outline-none transition-colors"
+                      style={{ background: 'var(--navy-800)', color: 'var(--slate-100)' }}
+                    />
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="w-12" style={{ color: 'var(--slate-400)' }}>Group:</span>
+                    <input
+                      type="text"
+                      value={editedInsurance.group}
+                      onChange={e => setEditedInsurance(prev => ({ ...prev, group: e.target.value }))}
+                      placeholder="Not found"
+                      className="flex-1 px-2 py-1 rounded text-sm border border-transparent focus:border-[var(--blue-500)] outline-none transition-colors"
+                      style={{ background: 'var(--navy-800)', color: 'var(--slate-100)' }}
+                    />
+                  </div>
                 </div>
               </div>
             </div>
