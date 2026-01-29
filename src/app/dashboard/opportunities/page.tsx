@@ -479,6 +479,19 @@ function SidePanel({
   const [generating, setGenerating] = useState(false);
   const [selectedForFax, setSelectedForFax] = useState<Set<string>>(new Set());
   const [viewMode, setViewMode] = useState<'single' | 'batch'>('single');
+  const [equivalency, setEquivalency] = useState<{ table: { className: string; columns: string[]; rows: { drug: string; values: string[] }[]; note: string } | null; matchedRow: number | null } | null>(null);
+  const [eqOpen, setEqOpen] = useState(true);
+
+  useEffect(() => {
+    if (!opportunity?.recommended_drug_name) { setEquivalency(null); return; }
+    const token = localStorage.getItem('therxos_token');
+    fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/opportunities/equivalency?drug=${encodeURIComponent(opportunity.recommended_drug_name)}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then(r => r.ok ? r.json() : null)
+      .then(data => setEquivalency(data?.table ? data : null))
+      .catch(() => setEquivalency(null));
+  }, [opportunity?.recommended_drug_name]);
 
   if (!opportunity || !groupItem) return null;
 
@@ -1167,7 +1180,57 @@ function SidePanel({
             </div>
           </div>
         )}
-        
+
+        {/* Dosing Equivalency Table */}
+        {equivalency?.table && (
+          <div>
+            <button
+              onClick={() => setEqOpen(!eqOpen)}
+              className="flex items-center gap-2 text-xs text-slate-500 uppercase tracking-wider mb-3 hover:text-slate-300 transition-colors w-full"
+            >
+              {eqOpen ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+              Dosing Equivalency — {equivalency.table.className}
+            </button>
+            {eqOpen && (
+              <div className="bg-[#1e3a5f] rounded-lg overflow-hidden">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="bg-[#2d4a6f]">
+                      {equivalency.table.columns.map((col, i) => (
+                        <th key={i} className={`px-2 py-2 font-semibold text-slate-300 ${i === 0 ? 'text-left' : 'text-center'}`}>
+                          {col}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {equivalency.table.rows.map((row, i) => (
+                      <tr
+                        key={i}
+                        className={`border-t border-[#2d4a6f] ${i === equivalency.matchedRow ? 'bg-[#14b8a6]/15' : ''}`}
+                      >
+                        <td className={`px-2 py-1.5 font-medium ${i === equivalency.matchedRow ? 'text-[#14b8a6]' : 'text-white'}`}>
+                          {row.drug}
+                        </td>
+                        {row.values.map((val, j) => (
+                          <td key={j} className="px-2 py-1.5 text-center text-slate-400">
+                            {val}
+                          </td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                {equivalency.table.note && (
+                  <div className="px-2 py-1.5 text-[10px] text-slate-500 border-t border-[#2d4a6f]">
+                    {equivalency.table.note}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Value */}
         {showAnyFinancials && (
           <div>
