@@ -187,6 +187,10 @@ export default function NegativeGPScanPage() {
   const [scanning, setScanning] = useState(false);
   const [scanResult, setScanResult] = useState<ScanResult | null>(null);
 
+  // Sort state for preview losers table
+  const [sortField, setSortField] = useState<keyof Loser | null>(null);
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
+
   // Threshold config
   const [showConfig, setShowConfig] = useState(false);
   const [minFills, setMinFills] = useState(3);
@@ -265,6 +269,42 @@ export default function NegativeGPScanPage() {
 
   const totalLoss = losers?.reduce((sum, l) => sum + l.total_loss, 0) || 0;
   const totalPatients = losers?.reduce((sum, l) => sum + l.patient_count, 0) || 0;
+
+  function toggleSort(field: keyof Loser) {
+    if (sortField === field) {
+      setSortDir(d => d === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortField(field);
+      setSortDir(field === 'drug_name' || field === 'insurance_bin' || field === 'insurance_group' ? 'asc' : 'desc');
+    }
+  }
+
+  const sortedLosers = losers ? [...losers].sort((a, b) => {
+    if (!sortField) return 0;
+    const av = a[sortField];
+    const bv = b[sortField];
+    if (av == null && bv == null) return 0;
+    if (av == null) return 1;
+    if (bv == null) return -1;
+    const cmp = typeof av === 'string' ? av.localeCompare(bv as string) : (av as number) - (bv as number);
+    return sortDir === 'asc' ? cmp : -cmp;
+  }) : null;
+
+  const SortHeader = ({ field, label, align = 'right' }: { field: keyof Loser; label: string; align?: string }) => (
+    <th
+      className={`${align === 'left' ? 'text-left' : 'text-right'} py-2 px-3 cursor-pointer hover:text-slate-200 select-none transition-colors`}
+      onClick={() => toggleSort(field)}
+    >
+      <span className="inline-flex items-center gap-1">
+        {label}
+        {sortField === field ? (
+          sortDir === 'asc' ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />
+        ) : (
+          <span className="w-3" />
+        )}
+      </span>
+    </th>
+  );
 
   return (
     <div>
@@ -557,18 +597,18 @@ export default function NegativeGPScanPage() {
               <table className="w-full text-xs">
                 <thead>
                   <tr className="text-slate-400 border-b border-[#1e3a5f]">
-                    <th className="text-left py-2 px-3">Drug Name</th>
-                    <th className="text-left py-2 px-3">BIN</th>
-                    <th className="text-left py-2 px-3">GROUP</th>
-                    <th className="text-right py-2 px-3">Fills</th>
-                    <th className="text-right py-2 px-3">Patients</th>
-                    <th className="text-right py-2 px-3">Avg GP</th>
-                    <th className="text-right py-2 px-3">Total Loss</th>
-                    <th className="text-right py-2 px-3">Worst GP</th>
+                    <SortHeader field="drug_name" label="Drug Name" align="left" />
+                    <SortHeader field="insurance_bin" label="BIN" align="left" />
+                    <SortHeader field="insurance_group" label="GROUP" align="left" />
+                    <SortHeader field="fill_count" label="Fills" />
+                    <SortHeader field="patient_count" label="Patients" />
+                    <SortHeader field="avg_gp" label="Avg GP" />
+                    <SortHeader field="total_loss" label="Total Loss" />
+                    <SortHeader field="worst_gp" label="Worst GP" />
                   </tr>
                 </thead>
                 <tbody>
-                  {losers.map((l, i) => (
+                  {(sortedLosers || []).map((l, i) => (
                     <tr key={i} className="border-b border-[#1e3a5f]/50 hover:bg-[#1e3a5f]/20">
                       <td className="py-2 px-3 text-white font-medium">{l.drug_name}</td>
                       <td className="py-2 px-3 text-slate-300">{l.insurance_bin}</td>

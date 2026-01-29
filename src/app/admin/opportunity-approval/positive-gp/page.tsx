@@ -43,6 +43,9 @@ export default function PositiveGPScanPage() {
   const [totalProfit, setTotalProfit] = useState(0);
   const [totalPatients, setTotalPatients] = useState(0);
 
+  const [sortField, setSortField] = useState<keyof Winner | null>(null);
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
+
   const [showConfig, setShowConfig] = useState(false);
   const [minFills, setMinFills] = useState(3);
   const [minAvgGP, setMinAvgGP] = useState(10);
@@ -78,6 +81,42 @@ export default function PositiveGPScanPage() {
       setLoading(false);
     }
   }
+
+  function toggleSort(field: keyof Winner) {
+    if (sortField === field) {
+      setSortDir(d => d === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortField(field);
+      setSortDir(field === 'drug_name' || field === 'insurance_bin' || field === 'insurance_group' ? 'asc' : 'desc');
+    }
+  }
+
+  const sortedWinners = winners ? [...winners].sort((a, b) => {
+    if (!sortField) return 0;
+    const av = a[sortField];
+    const bv = b[sortField];
+    if (av == null && bv == null) return 0;
+    if (av == null) return 1;
+    if (bv == null) return -1;
+    const cmp = typeof av === 'string' ? av.localeCompare(bv as string) : (av as number) - (bv as number);
+    return sortDir === 'asc' ? cmp : -cmp;
+  }) : null;
+
+  const SortHeader = ({ field, label, align = 'right' }: { field: keyof Winner; label: string; align?: string }) => (
+    <th
+      className={`${align === 'left' ? 'text-left' : 'text-right'} py-2 px-3 cursor-pointer hover:text-slate-200 select-none transition-colors`}
+      onClick={() => toggleSort(field)}
+    >
+      <span className="inline-flex items-center gap-1">
+        {label}
+        {sortField === field ? (
+          sortDir === 'asc' ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />
+        ) : (
+          <span className="w-3" />
+        )}
+      </span>
+    </th>
+  );
 
   return (
     <div>
@@ -194,20 +233,20 @@ export default function PositiveGPScanPage() {
               <table className="w-full text-xs">
                 <thead>
                   <tr className="text-slate-400 border-b border-[#1e3a5f]">
-                    <th className="text-left py-2 px-3">Drug Name</th>
-                    <th className="text-left py-2 px-3">BIN</th>
-                    <th className="text-left py-2 px-3">GROUP</th>
-                    <th className="text-right py-2 px-3">Fills</th>
-                    <th className="text-right py-2 px-3">Patients</th>
-                    <th className="text-right py-2 px-3">Avg GP</th>
-                    <th className="text-right py-2 px-3">Total Profit</th>
-                    <th className="text-right py-2 px-3">Avg Acq Cost</th>
-                    <th className="text-right py-2 px-3">Avg Reimb</th>
-                    <th className="text-right py-2 px-3">Best GP</th>
+                    <SortHeader field="drug_name" label="Drug Name" align="left" />
+                    <SortHeader field="insurance_bin" label="BIN" align="left" />
+                    <SortHeader field="insurance_group" label="GROUP" align="left" />
+                    <SortHeader field="fill_count" label="Fills" />
+                    <SortHeader field="patient_count" label="Patients" />
+                    <SortHeader field="avg_gp" label="Avg GP" />
+                    <SortHeader field="total_profit" label="Total Profit" />
+                    <SortHeader field="avg_acq_cost" label="Avg Acq Cost" />
+                    <SortHeader field="avg_reimbursement" label="Avg Reimb" />
+                    <SortHeader field="best_gp" label="Best GP" />
                   </tr>
                 </thead>
                 <tbody>
-                  {winners.map((w, i) => (
+                  {(sortedWinners || []).map((w, i) => (
                     <tr key={i} className="border-b border-[#1e3a5f]/50 hover:bg-[#1e3a5f]/20">
                       <td className="py-2 px-3 text-white font-medium">{w.drug_name}</td>
                       <td className="py-2 px-3 text-slate-300">{w.insurance_bin}</td>
