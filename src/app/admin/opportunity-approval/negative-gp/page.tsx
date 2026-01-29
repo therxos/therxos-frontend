@@ -70,6 +70,96 @@ function formatCurrencyExact(value: number): string {
   return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(value);
 }
 
+const COLUMN_LABELS: Record<string, string> = {
+  drug: 'Drug',
+  bin: 'BIN',
+  group: 'GROUP',
+  fills: 'Fills',
+  patients: 'Patients',
+  avgGP: 'Avg GP',
+  totalLoss: 'Total Loss',
+  therapeuticClass: 'Class',
+  recommendedDrug: 'Recommended',
+  altAvgGP: 'Alt Avg GP',
+  annualGainPerPatient: 'Annual Gain/Pt',
+};
+
+const RIGHT_ALIGN = new Set(['fills', 'patients', 'avgGP', 'totalLoss', 'altAvgGP', 'annualGainPerPatient']);
+const CURRENCY_COLS = new Set(['avgGP', 'totalLoss', 'altAvgGP', 'annualGainPerPatient']);
+
+function SkipSection({ title, description, color, items, columns }: {
+  title: string;
+  description: string;
+  color: string;
+  items: any[];
+  columns: string[];
+}) {
+  const [open, setOpen] = useState(false);
+  const colorMap: Record<string, string> = {
+    amber: 'border-amber-500/30 text-amber-400',
+    orange: 'border-orange-500/30 text-orange-400',
+    blue: 'border-blue-500/30 text-blue-400',
+    slate: 'border-slate-500/30 text-slate-400',
+  };
+  const borderColor = colorMap[color] || colorMap.slate;
+
+  return (
+    <div className={`mb-3 border ${borderColor.split(' ')[0]} rounded-lg overflow-hidden`}>
+      <button
+        onClick={() => setOpen(!open)}
+        className="w-full flex items-center justify-between p-3 text-xs font-medium hover:bg-[#0a1628] transition-colors"
+      >
+        <div className="flex items-center gap-2">
+          <span className={borderColor.split(' ')[1]}>{title}</span>
+          <span className="text-slate-500">{description}</span>
+        </div>
+        {open ? <ChevronUp className="w-3 h-3 text-slate-400" /> : <ChevronDown className="w-3 h-3 text-slate-400" />}
+      </button>
+      {open && (
+        <div className="overflow-x-auto">
+          <table className="w-full text-xs">
+            <thead>
+              <tr className="text-slate-400 border-t border-b border-[#1e3a5f]">
+                {columns.map(col => (
+                  <th key={col} className={`py-2 px-2 ${RIGHT_ALIGN.has(col) ? 'text-right' : 'text-left'}`}>
+                    {COLUMN_LABELS[col] || col}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {items.map((item, i) => (
+                <tr key={i} className="border-b border-[#1e3a5f]/30 hover:bg-[#1e3a5f]/20">
+                  {columns.map(col => {
+                    const val = item[col];
+                    const isRight = RIGHT_ALIGN.has(col);
+                    const isCurrency = CURRENCY_COLS.has(col);
+                    let display = val ?? '-';
+                    if (isCurrency && typeof val === 'number') display = formatCurrencyExact(val);
+                    else if (typeof val === 'number') display = val.toLocaleString();
+
+                    let textColor = 'text-slate-300';
+                    if (col === 'drug') textColor = 'text-white font-medium';
+                    if (col === 'recommendedDrug') textColor = 'text-emerald-400 font-medium';
+                    if ((col === 'avgGP' || col === 'totalLoss') && typeof val === 'number' && val < 0) textColor = 'text-red-400';
+                    if (col === 'altAvgGP' && typeof val === 'number' && val > 0) textColor = 'text-emerald-400';
+
+                    return (
+                      <td key={col} className={`py-1.5 px-2 ${isRight ? 'text-right' : 'text-left'} ${textColor}`}>
+                        {display}
+                      </td>
+                    );
+                  })}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function NegativeGPScanPage() {
   // Preview state
   const [previewLoading, setPreviewLoading] = useState(false);
@@ -322,14 +412,42 @@ export default function NegativeGPScanPage() {
             </div>
           </div>
 
-          {/* Breakdown of skips */}
-          {(scanResult.skippedExisting > 0 || scanResult.skippedNoClass > 0 || scanResult.skippedNoAlternative > 0 || scanResult.skippedLowGain > 0) && (
-            <div className="text-xs text-slate-400 mb-4 flex gap-4 flex-wrap">
-              {scanResult.skippedExisting > 0 && <span>Already has trigger: {scanResult.skippedExisting}</span>}
-              {scanResult.skippedNoClass > 0 && <span>Unclassified: {scanResult.skippedNoClass}</span>}
-              {scanResult.skippedNoAlternative > 0 && <span>No alternatives: {scanResult.skippedNoAlternative}</span>}
-              {scanResult.skippedLowGain > 0 && <span>Below margin threshold: {scanResult.skippedLowGain}</span>}
-            </div>
+          {/* Skip detail sections */}
+          {scanResult.unclassifiedDrugs?.length > 0 && (
+            <SkipSection
+              title={`Unclassified (${scanResult.unclassifiedDrugs.length})`}
+              description="Drug not in any known therapeutic class pattern"
+              color="amber"
+              items={scanResult.unclassifiedDrugs}
+              columns={['drug', 'bin', 'group', 'fills', 'patients', 'avgGP', 'totalLoss']}
+            />
+          )}
+          {scanResult.noAlternativeDrugs?.length > 0 && (
+            <SkipSection
+              title={`No Alternatives Found (${scanResult.noAlternativeDrugs.length})`}
+              description="Classified but no positive-GP alternative in same class + BIN/GROUP"
+              color="orange"
+              items={scanResult.noAlternativeDrugs}
+              columns={['drug', 'therapeuticClass', 'bin', 'group', 'fills', 'patients', 'avgGP', 'totalLoss']}
+            />
+          )}
+          {scanResult.existingTriggerDrugs?.length > 0 && (
+            <SkipSection
+              title={`Already Has Trigger (${scanResult.existingTriggerDrugs.length})`}
+              description="A trigger or pending queue item already covers this"
+              color="blue"
+              items={scanResult.existingTriggerDrugs}
+              columns={['drug', 'recommendedDrug', 'therapeuticClass', 'bin', 'group']}
+            />
+          )}
+          {scanResult.lowGainDrugs?.length > 0 && (
+            <SkipSection
+              title={`Below Margin Threshold (${scanResult.lowGainDrugs.length})`}
+              description="Alternative found but annual gain per patient too low"
+              color="slate"
+              items={scanResult.lowGainDrugs}
+              columns={['drug', 'recommendedDrug', 'therapeuticClass', 'bin', 'group', 'avgGP', 'altAvgGP', 'annualGainPerPatient']}
+            />
           )}
 
           {/* Discoveries table */}
