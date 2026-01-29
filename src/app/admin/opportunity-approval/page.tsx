@@ -1224,10 +1224,11 @@ export default function OpportunityApprovalPage() {
                           <tr className="border-b border-[#1e3a5f]">
                             <th className="text-left px-3 py-2 text-xs text-slate-400">Patient</th>
                             <th className="text-left px-3 py-2 text-xs text-slate-400">Current Drug</th>
-                            <th className="text-left px-3 py-2 text-xs text-slate-400">Prescriber</th>
+                            <th className="text-right px-3 py-2 text-xs text-slate-400">Current GP</th>
                             <th className="text-left px-3 py-2 text-xs text-slate-400">BIN</th>
+                            <th className="text-left px-3 py-2 text-xs text-slate-400">Confidence</th>
                             <th className="text-left px-3 py-2 text-xs text-slate-400">Status</th>
-                            <th className="text-right px-3 py-2 text-xs text-slate-400">Margin</th>
+                            <th className="text-right px-3 py-2 text-xs text-slate-400">Est. Margin</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -1250,9 +1251,24 @@ export default function OpportunityApprovalPage() {
                                     <span className="text-white">{opp.patient_name || 'Unknown'}</span>
                                   )}
                                 </td>
-                                <td className="px-3 py-2 text-slate-300 text-xs truncate max-w-[150px]">{opp.current_drug_name || '-'}</td>
-                                <td className="px-3 py-2 text-slate-400 text-xs truncate max-w-[100px]">{opp.prescriber_name || '-'}</td>
+                                <td className="px-3 py-2 text-slate-300 text-xs truncate max-w-[120px]">{opp.current_drug_name || '-'}</td>
+                                <td className="px-3 py-2 text-right text-xs">
+                                  {opp.current_margin || opp.rx_gross_profit
+                                    ? <span className={Number(opp.current_margin || opp.rx_gross_profit) < 0 ? 'text-red-400' : 'text-slate-300'}>{formatCurrency(Number(opp.current_margin || opp.rx_gross_profit || 0))}</span>
+                                    : <span className="text-slate-500">-</span>
+                                  }
+                                </td>
                                 <td className="px-3 py-2 text-slate-400 font-mono text-xs">{opp.insurance_bin || '-'}</td>
+                                <td className="px-3 py-2 text-xs">
+                                  {opp.coverage_confidence ? (
+                                    <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${
+                                      opp.coverage_confidence === 'verified' ? 'bg-emerald-500/20 text-emerald-400' :
+                                      opp.coverage_confidence === 'likely' ? 'bg-blue-500/20 text-blue-400' :
+                                      opp.coverage_confidence === 'excluded' ? 'bg-red-500/20 text-red-400' :
+                                      'bg-slate-500/20 text-slate-400'
+                                    }`}>{opp.coverage_confidence}</span>
+                                  ) : <span className="text-slate-500">-</span>}
+                                </td>
                                 <td className="px-3 py-2 text-xs">
                                   <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${
                                     opp.opp_status === 'Completed' ? 'bg-emerald-500/20 text-emerald-400' :
@@ -1267,7 +1283,7 @@ export default function OpportunityApprovalPage() {
                               {/* Expanded patient opportunities */}
                               {expandedPatient === opp.patient_id && (
                                 <tr key={`${i}-expanded`} className="bg-[#0a1628]/80">
-                                  <td colSpan={6} className="px-3 py-3">
+                                  <td colSpan={7} className="px-3 py-3">
                                     <div className="border border-teal-500/30 rounded-lg p-3 bg-[#0d2137]">
                                       <p className="text-xs font-semibold text-teal-400 mb-2">
                                         All Opportunities for {opp.patient_name}
