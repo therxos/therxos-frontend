@@ -29,6 +29,7 @@ import {
   TrendingDown,
   TrendingUp,
   Layers,
+  BookOpen,
 } from 'lucide-react';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL;
@@ -181,6 +182,7 @@ export default function AdminLayout({
         { name: 'Negative GP Scan', href: '/admin/opportunity-approval/negative-gp', icon: TrendingDown },
         { name: 'Positive GP Scan', href: '/admin/opportunity-approval/positive-gp', icon: TrendingUp },
         { name: 'NDC Optimization', href: '/admin/opportunity-approval/ndc-optimization', icon: Layers },
+        { name: 'Reference Data', href: '/admin/opportunity-approval/reference-data', icon: BookOpen },
       ],
     },
     { name: 'Coverage Scanner', href: '/admin/coverage', icon: Zap },
