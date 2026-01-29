@@ -34,7 +34,7 @@ interface PendingOpportunityType {
   source_details: Record<string, unknown>;
   affected_pharmacies: string[];
   affected_pharmacy_names?: string[]; // Resolved pharmacy names
-  existing_trigger?: { trigger_id: string; trigger_name: string; display_name: string } | null;
+  existing_trigger?: { trigger_id: string; trigger_name: string; display_name: string; clinical_rationale?: string } | null;
   total_patient_count: number;
   estimated_annual_margin: number;
   status: 'pending' | 'approved' | 'rejected';
