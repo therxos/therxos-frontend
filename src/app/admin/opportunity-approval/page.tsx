@@ -98,6 +98,11 @@ export default function OpportunityApprovalPage() {
   const [scanResult, setScanResult] = useState<any>(null);
   const [showScanResult, setShowScanResult] = useState(false);
 
+  // Patient opportunities drill-down
+  const [expandedPatient, setExpandedPatient] = useState<string | null>(null);
+  const [patientOpps, setPatientOpps] = useState<any[]>([]);
+  const [patientOppsLoading, setPatientOppsLoading] = useState(false);
+
   useEffect(() => {
     fetchData();
   }, [statusFilter]);
@@ -124,6 +129,30 @@ export default function OpportunityApprovalPage() {
       console.error('Failed to fetch approval queue:', err);
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function fetchPatientOpps(patientId: string) {
+    if (expandedPatient === patientId) {
+      setExpandedPatient(null);
+      setPatientOpps([]);
+      return;
+    }
+    setExpandedPatient(patientId);
+    setPatientOppsLoading(true);
+    try {
+      const token = localStorage.getItem('therxos_token');
+      const res = await fetch(`${API_URL}/api/opportunity-approval/patient/${patientId}/opportunities`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setPatientOpps(data.opportunities || []);
+      }
+    } catch (err) {
+      console.error('Failed to fetch patient opps:', err);
+    } finally {
+      setPatientOppsLoading(false);
     }
   }
 
@@ -1130,7 +1159,7 @@ export default function OpportunityApprovalPage() {
                 {itemDetails.sample_opportunities && itemDetails.sample_opportunities.length > 0 && (
                   <div>
                     <p className="text-xs text-slate-500 uppercase tracking-wider mb-2">Sample Opportunities ({itemDetails.sample_opportunities.length})</p>
-                    <div className="bg-[#0a1628] border border-[#1e3a5f] rounded-lg overflow-hidden max-h-[300px] overflow-y-auto">
+                    <div className="bg-[#0a1628] border border-[#1e3a5f] rounded-lg overflow-hidden max-h-[400px] overflow-y-auto">
                       <table className="w-full text-sm">
                         <thead className="sticky top-0 bg-[#0a1628]">
                           <tr className="border-b border-[#1e3a5f]">
@@ -1138,18 +1167,98 @@ export default function OpportunityApprovalPage() {
                             <th className="text-left px-3 py-2 text-xs text-slate-400">Current Drug</th>
                             <th className="text-left px-3 py-2 text-xs text-slate-400">Prescriber</th>
                             <th className="text-left px-3 py-2 text-xs text-slate-400">BIN</th>
+                            <th className="text-left px-3 py-2 text-xs text-slate-400">Status</th>
                             <th className="text-right px-3 py-2 text-xs text-slate-400">Margin</th>
                           </tr>
                         </thead>
                         <tbody>
                           {itemDetails.sample_opportunities.map((opp: any, i: number) => (
-                            <tr key={i} className="border-b border-[#1e3a5f]/50">
-                              <td className="px-3 py-2 text-white text-xs">{opp.patient_name || 'Unknown'}</td>
-                              <td className="px-3 py-2 text-slate-300 text-xs truncate max-w-[150px]">{opp.current_drug_name || '-'}</td>
-                              <td className="px-3 py-2 text-slate-400 text-xs truncate max-w-[100px]">{opp.prescriber_name || '-'}</td>
-                              <td className="px-3 py-2 text-slate-400 font-mono text-xs">{opp.insurance_bin || '-'}</td>
-                              <td className="px-3 py-2 text-right text-emerald-400">{formatCurrency(opp.annual_margin_gain || 0)}</td>
-                            </tr>
+                            <>
+                              <tr key={i} className="border-b border-[#1e3a5f]/50 hover:bg-[#1e3a5f]/20">
+                                <td className="px-3 py-2 text-xs">
+                                  {opp.patient_id ? (
+                                    <button
+                                      onClick={() => fetchPatientOpps(opp.patient_id)}
+                                      className="text-teal-400 hover:text-teal-300 underline decoration-dotted underline-offset-2 text-left"
+                                      title="Click to view this patient's existing opportunities"
+                                    >
+                                      {opp.patient_name || 'Unknown'}
+                                      {opp.patient_actioned_count > 0 && (
+                                        <span className="ml-1 text-[10px] text-amber-400 no-underline">({opp.patient_actioned_count} actioned)</span>
+                                      )}
+                                    </button>
+                                  ) : (
+                                    <span className="text-white">{opp.patient_name || 'Unknown'}</span>
+                                  )}
+                                </td>
+                                <td className="px-3 py-2 text-slate-300 text-xs truncate max-w-[150px]">{opp.current_drug_name || '-'}</td>
+                                <td className="px-3 py-2 text-slate-400 text-xs truncate max-w-[100px]">{opp.prescriber_name || '-'}</td>
+                                <td className="px-3 py-2 text-slate-400 font-mono text-xs">{opp.insurance_bin || '-'}</td>
+                                <td className="px-3 py-2 text-xs">
+                                  <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${
+                                    opp.opp_status === 'Completed' ? 'bg-emerald-500/20 text-emerald-400' :
+                                    opp.opp_status === 'Approved' ? 'bg-blue-500/20 text-blue-400' :
+                                    opp.opp_status === 'Submitted' ? 'bg-amber-500/20 text-amber-400' :
+                                    opp.opp_status === 'Denied' || opp.opp_status === 'Rejected' ? 'bg-red-500/20 text-red-400' :
+                                    'bg-slate-500/20 text-slate-400'
+                                  }`}>{opp.opp_status || 'Not Submitted'}</span>
+                                </td>
+                                <td className="px-3 py-2 text-right text-emerald-400">{formatCurrency(opp.annual_margin_gain || 0)}</td>
+                              </tr>
+                              {/* Expanded patient opportunities */}
+                              {expandedPatient === opp.patient_id && (
+                                <tr key={`${i}-expanded`} className="bg-[#0a1628]/80">
+                                  <td colSpan={6} className="px-3 py-3">
+                                    <div className="border border-teal-500/30 rounded-lg p-3 bg-[#0d2137]">
+                                      <p className="text-xs font-semibold text-teal-400 mb-2">
+                                        All Opportunities for {opp.patient_name}
+                                      </p>
+                                      {patientOppsLoading ? (
+                                        <div className="flex items-center gap-2 text-xs text-slate-400 py-2">
+                                          <div className="w-3 h-3 border border-teal-500/30 border-t-teal-500 rounded-full animate-spin" />
+                                          Loading...
+                                        </div>
+                                      ) : patientOpps.length === 0 ? (
+                                        <p className="text-xs text-slate-500">No other opportunities found for this patient.</p>
+                                      ) : (
+                                        <div className="max-h-[200px] overflow-y-auto">
+                                          <table className="w-full text-xs">
+                                            <thead>
+                                              <tr className="text-slate-500 border-b border-[#1e3a5f]">
+                                                <th className="text-left py-1 px-2">Type</th>
+                                                <th className="text-left py-1 px-2">Current</th>
+                                                <th className="text-left py-1 px-2">Recommended</th>
+                                                <th className="text-left py-1 px-2">Status</th>
+                                                <th className="text-right py-1 px-2">Margin</th>
+                                              </tr>
+                                            </thead>
+                                            <tbody>
+                                              {patientOpps.map((po: any, j: number) => (
+                                                <tr key={j} className="border-b border-[#1e3a5f]/30">
+                                                  <td className="py-1 px-2 text-slate-400">{po.trigger_type || po.opportunity_type || '-'}</td>
+                                                  <td className="py-1 px-2 text-slate-300">{po.current_drug_name || po.current_drug || '-'}</td>
+                                                  <td className="py-1 px-2 text-teal-400">{po.recommended_drug_name || po.recommended_drug || '-'}</td>
+                                                  <td className="py-1 px-2">
+                                                    <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${
+                                                      po.status === 'Completed' ? 'bg-emerald-500/20 text-emerald-400' :
+                                                      po.status === 'Approved' ? 'bg-blue-500/20 text-blue-400' :
+                                                      po.status === 'Submitted' ? 'bg-amber-500/20 text-amber-400' :
+                                                      po.status === 'Denied' || po.status === 'Rejected' ? 'bg-red-500/20 text-red-400' :
+                                                      'bg-slate-500/20 text-slate-400'
+                                                    }`}>{po.status || 'Not Submitted'}</span>
+                                                  </td>
+                                                  <td className="py-1 px-2 text-right text-emerald-400">{formatCurrency(po.annual_margin_gain || po.potential_margin_gain || 0)}</td>
+                                                </tr>
+                                              ))}
+                                            </tbody>
+                                          </table>
+                                        </div>
+                                      )}
+                                    </div>
+                                  </td>
+                                </tr>
+                              )}
+                            </>
                           ))}
                         </tbody>
                       </table>

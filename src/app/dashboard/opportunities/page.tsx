@@ -537,19 +537,21 @@ function SidePanel({
       const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
 
       const { width, height } = page.getSize();
-      const margin = 40;
+      const margin = 36;
       const contentWidth = width - (margin * 2);
       const navyBlue = rgb(30/255, 58/255, 95/255);
-      const fieldHeight = 18;
+      const sz = 8; // standard text size
+      const szBold = 8; // standard bold text size
+      const fieldHeight = 15;
 
-      let y = height - 40;
+      let y = height - 36;
       let fieldCounter = 0;
 
       // Helper to draw section header
       const drawHeader = (text: string) => {
-        page.drawRectangle({ x: margin, y: y - 16, width: contentWidth, height: 18, color: navyBlue });
-        page.drawText(text, { x: margin + 5, y: y - 12, size: 10, font: fontBold, color: rgb(1, 1, 1) });
-        y -= 20;
+        page.drawRectangle({ x: margin, y: y - 13, width: contentWidth, height: 15, color: navyBlue });
+        page.drawText(text, { x: margin + 4, y: y - 10, size: szBold, font: fontBold, color: rgb(1, 1, 1) });
+        y -= 17;
       };
 
       // Helper to add text field
@@ -565,58 +567,67 @@ function SidePanel({
       const addCheckbox = (name: string, x: number, yPos: number, checked: boolean = false) => {
         const fieldName = `${name}_${fieldCounter++}`;
         const checkbox = form.createCheckBox(fieldName);
-        checkbox.addToPage(page, { x, y: yPos - 10, width: 12, height: 12 });
+        checkbox.addToPage(page, { x, y: yPos - 10, width: 10, height: 10 });
         if (checked) checkbox.check();
         return checkbox;
       };
 
       // Title
-      page.drawText('Therapeutic Interchange Request Form', { x: width / 2 - 140, y: y, size: 16, font: fontBold });
-      y -= 25;
+      page.drawText('Prescription Request Form', { x: width / 2 - 80, y: y, size: 12, font: fontBold });
+      y -= 14;
+      page.drawText('Therapeutic Interchange / New Prescription Request', { x: width / 2 - 120, y: y, size: sz, font, color: rgb(0.4, 0.4, 0.4) });
+      y -= 16;
+
+      // Important notice box
+      page.drawRectangle({ x: margin, y: y - 28, width: contentWidth, height: 30, color: rgb(255/255, 248/255, 230/255), borderColor: rgb(200/255, 170/255, 80/255), borderWidth: 0.5 });
+      page.drawText('IMPORTANT: This is a REQUEST for a new prescription.', { x: margin + 5, y: y - 8, size: szBold, font: fontBold });
+      page.drawText('We are requesting your consideration to prescribe the recommended medication below based on the', { x: margin + 5, y: y - 18, size: 7, font });
+      page.drawText("patient's clinical needs and/or insurance formulary preferences. This is NOT a report of an existing prescription.", { x: margin + 5, y: y - 27, size: 7, font });
+      y -= 34;
 
       // Date received field
-      page.drawText('Date request received:', { x: width - margin - 180, y: y, size: 9, font });
-      addTextField('date_received', width - margin - 80, y + 4, 75, fieldHeight, '');
-      y -= 20;
+      page.drawText('Date request received:', { x: width - margin - 160, y: y, size: sz, font });
+      addTextField('date_received', width - margin - 65, y + 3, 65, fieldHeight, '');
+      y -= 18;
 
       // PHARMACY SECTION
       drawHeader('Requesting Pharmacy Information');
 
       // Row 1
-      page.drawText('Date Submitted:', { x: margin + 5, y: y - 12, size: 9, font: fontBold });
-      addTextField('date_submitted', margin + 85, y - 2, 100, fieldHeight, new Date().toLocaleDateString('en-US'));
-      page.drawText('Contact Person:', { x: margin + contentWidth/2 + 5, y: y - 12, size: 9, font: fontBold });
-      addTextField('pharmacy_contact', margin + contentWidth/2 + 85, y - 2, 150, fieldHeight, '');
-      y -= 22;
+      page.drawText('Date Submitted:', { x: margin + 4, y: y - 10, size: sz, font: fontBold });
+      addTextField('date_submitted', margin + 78, y - 2, 90, fieldHeight, new Date().toLocaleDateString('en-US'));
+      page.drawText('Contact Person:', { x: margin + contentWidth/2 + 4, y: y - 10, size: sz, font: fontBold });
+      addTextField('pharmacy_contact', margin + contentWidth/2 + 78, y - 2, 145, fieldHeight, '');
+      y -= 18;
 
       // Row 2
-      page.drawText('Pharmacy Name:', { x: margin + 5, y: y - 12, size: 9, font: fontBold });
-      addTextField('pharmacy_name', margin + 90, y - 2, 155, fieldHeight, pharmacy?.pharmacy_name || '');
-      page.drawText('Pharmacy NPI:', { x: margin + contentWidth/2 + 5, y: y - 12, size: 9, font: fontBold });
-      addTextField('pharmacy_npi', margin + contentWidth/2 + 80, y - 2, 100, fieldHeight, pharmacy?.npi || '');
-      y -= 22;
+      page.drawText('Pharmacy Name:', { x: margin + 4, y: y - 10, size: sz, font: fontBold });
+      addTextField('pharmacy_name', margin + 82, y - 2, 145, fieldHeight, pharmacy?.pharmacy_name || '');
+      page.drawText('NPI:', { x: margin + contentWidth/2 + 4, y: y - 10, size: sz, font: fontBold });
+      addTextField('pharmacy_npi', margin + contentWidth/2 + 28, y - 2, 100, fieldHeight, pharmacy?.npi || '');
+      y -= 18;
 
       // Row 3
-      page.drawText('Phone:', { x: margin + 5, y: y - 12, size: 9, font: fontBold });
-      addTextField('pharmacy_phone', margin + 45, y - 2, 100, fieldHeight, pharmacy?.phone || '');
-      page.drawText('Fax:', { x: margin + contentWidth/2 + 5, y: y - 12, size: 9, font: fontBold });
-      addTextField('pharmacy_fax', margin + contentWidth/2 + 30, y - 2, 100, fieldHeight, pharmacy?.fax || '');
-      y -= 28;
+      page.drawText('Phone:', { x: margin + 4, y: y - 10, size: sz, font: fontBold });
+      addTextField('pharmacy_phone', margin + 40, y - 2, 100, fieldHeight, pharmacy?.phone || '');
+      page.drawText('Fax:', { x: margin + contentWidth/2 + 4, y: y - 10, size: sz, font: fontBold });
+      addTextField('pharmacy_fax', margin + contentWidth/2 + 26, y - 2, 100, fieldHeight, pharmacy?.fax || '');
+      y -= 22;
 
       // PRESCRIBER SECTION
       drawHeader('Prescriber Information');
 
-      page.drawText('Prescriber Name:', { x: margin + 5, y: y - 12, size: 9, font: fontBold });
-      addTextField('prescriber_name', margin + 95, y - 2, 150, fieldHeight, opportunity.prescriber_name || '');
-      page.drawText('Prescriber NPI:', { x: margin + contentWidth/2 + 5, y: y - 12, size: 9, font: fontBold });
-      addTextField('prescriber_npi', margin + contentWidth/2 + 85, y - 2, 100, fieldHeight, '');
-      y -= 22;
+      page.drawText('Prescriber Name:', { x: margin + 4, y: y - 10, size: sz, font: fontBold });
+      addTextField('prescriber_name', margin + 88, y - 2, 148, fieldHeight, opportunity.prescriber_name || '');
+      page.drawText('NPI:', { x: margin + contentWidth/2 + 4, y: y - 10, size: sz, font: fontBold });
+      addTextField('prescriber_npi', margin + contentWidth/2 + 28, y - 2, 100, fieldHeight, '');
+      y -= 18;
 
-      page.drawText('Practice Name:', { x: margin + 5, y: y - 12, size: 9, font: fontBold });
-      addTextField('practice_name', margin + 85, y - 2, 160, fieldHeight, '');
-      page.drawText('Fax:', { x: margin + contentWidth/2 + 5, y: y - 12, size: 9, font: fontBold });
-      addTextField('prescriber_fax', margin + contentWidth/2 + 30, y - 2, 100, fieldHeight, '');
-      y -= 28;
+      page.drawText('Practice Name:', { x: margin + 4, y: y - 10, size: sz, font: fontBold });
+      addTextField('practice_name', margin + 76, y - 2, 160, fieldHeight, '');
+      page.drawText('Fax:', { x: margin + contentWidth/2 + 4, y: y - 10, size: sz, font: fontBold });
+      addTextField('prescriber_fax', margin + contentWidth/2 + 26, y - 2, 100, fieldHeight, '');
+      y -= 22;
 
       // PATIENT SECTION
       drawHeader('Patient Information');
@@ -628,94 +639,97 @@ function SidePanel({
         ? (parseLocalDate(groupItem.date_of_birth)?.toLocaleDateString('en-US') || '')
         : '';
 
-      page.drawText('Patient Name:', { x: margin + 5, y: y - 12, size: 9, font: fontBold });
-      addTextField('patient_name', margin + 80, y - 2, 165, fieldHeight, patientName);
-      page.drawText('Date of Birth:', { x: margin + contentWidth/2 + 5, y: y - 12, size: 9, font: fontBold });
-      addTextField('patient_dob', margin + contentWidth/2 + 75, y - 2, 90, fieldHeight, dob);
-      y -= 22;
+      page.drawText('Patient Name:', { x: margin + 4, y: y - 10, size: sz, font: fontBold });
+      addTextField('patient_name', margin + 72, y - 2, 165, fieldHeight, patientName);
+      page.drawText('Date of Birth:', { x: margin + contentWidth/2 + 4, y: y - 10, size: sz, font: fontBold });
+      addTextField('patient_dob', margin + contentWidth/2 + 68, y - 2, 90, fieldHeight, dob);
+      y -= 18;
 
-      page.drawText('Member/Rx ID:', { x: margin + 5, y: y - 12, size: 9, font: fontBold });
-      addTextField('member_id', margin + 80, y - 2, 100, fieldHeight, '');
-      page.drawText('Insurance:', { x: margin + contentWidth/2 + 5, y: y - 12, size: 9, font: fontBold });
-      addTextField('insurance', margin + contentWidth/2 + 60, y - 2, 120, fieldHeight, opportunity.plan_name || '');
-      y -= 28;
+      page.drawText('Member/Rx ID:', { x: margin + 4, y: y - 10, size: sz, font: fontBold });
+      addTextField('member_id', margin + 74, y - 2, 100, fieldHeight, '');
+      page.drawText('Insurance:', { x: margin + contentWidth/2 + 4, y: y - 10, size: sz, font: fontBold });
+      addTextField('insurance', margin + contentWidth/2 + 52, y - 2, 120, fieldHeight, opportunity.plan_name || '');
+      y -= 22;
 
       // CURRENT MEDICATION
-      drawHeader('Current Medication');
+      drawHeader("Patient's Current Medication");
 
-      page.drawText('Drug Name/Strength:', { x: margin + 5, y: y - 12, size: 9, font: fontBold });
-      addTextField('current_drug', margin + 110, y - 2, 200, fieldHeight, opportunity.current_drug_name || '');
+      page.drawText('Drug Name/Strength:', { x: margin + 4, y: y - 10, size: sz, font: fontBold });
+      addTextField('current_drug', margin + 100, y - 2, 200, fieldHeight, opportunity.current_drug_name || '');
+      y -= 18;
+      page.drawText('NDC:', { x: margin + 4, y: y - 10, size: sz, font: fontBold });
+      addTextField('current_ndc', margin + 30, y - 2, 120, fieldHeight, opportunity.current_ndc || '');
+      page.drawText('Days Supply:', { x: margin + 190, y: y - 10, size: sz, font: fontBold });
+      addTextField('current_days', margin + 250, y - 2, 50, fieldHeight, '');
+      page.drawText('Refills:', { x: margin + 320, y: y - 10, size: sz, font: fontBold });
+      addTextField('current_refills', margin + 356, y - 2, 50, fieldHeight, '');
       y -= 22;
-      page.drawText('NDC:', { x: margin + 5, y: y - 12, size: 9, font: fontBold });
-      addTextField('current_ndc', margin + 35, y - 2, 120, fieldHeight, opportunity.current_ndc || '');
-      page.drawText('Days Supply:', { x: margin + 200, y: y - 12, size: 9, font: fontBold });
-      addTextField('current_days', margin + 270, y - 2, 50, fieldHeight, '');
-      page.drawText('Refills:', { x: margin + 340, y: y - 12, size: 9, font: fontBold });
-      addTextField('current_refills', margin + 380, y - 2, 50, fieldHeight, '');
-      y -= 28;
 
-      // REQUESTED ALTERNATIVE
-      drawHeader('Requested Therapeutic Alternative');
+      // REQUESTED NEW PRESCRIPTION
+      drawHeader('Requested New Prescription (Therapeutic Alternative)');
 
-      page.drawText('Drug Name/Strength:', { x: margin + 5, y: y - 12, size: 9, font: fontBold });
-      addTextField('rec_drug', margin + 110, y - 2, 200, fieldHeight, opportunity.recommended_drug_name || '');
+      page.drawText('Drug Name/Strength:', { x: margin + 4, y: y - 10, size: sz, font: fontBold });
+      addTextField('rec_drug', margin + 100, y - 2, 200, fieldHeight, opportunity.recommended_drug_name || '');
+      y -= 18;
+      page.drawText('NDC:', { x: margin + 4, y: y - 10, size: sz, font: fontBold });
+      addTextField('rec_ndc', margin + 30, y - 2, 120, fieldHeight, '');
+      page.drawText('Days Supply:', { x: margin + 190, y: y - 10, size: sz, font: fontBold });
+      addTextField('rec_days', margin + 250, y - 2, 50, fieldHeight, '');
+      page.drawText('Refills:', { x: margin + 320, y: y - 10, size: sz, font: fontBold });
+      addTextField('rec_refills', margin + 356, y - 2, 50, fieldHeight, '');
       y -= 22;
-      page.drawText('NDC:', { x: margin + 5, y: y - 12, size: 9, font: fontBold });
-      addTextField('rec_ndc', margin + 35, y - 2, 120, fieldHeight, '');
-      page.drawText('Days Supply:', { x: margin + 200, y: y - 12, size: 9, font: fontBold });
-      addTextField('rec_days', margin + 270, y - 2, 50, fieldHeight, '');
-      page.drawText('Refills:', { x: margin + 340, y: y - 12, size: 9, font: fontBold });
-      addTextField('rec_refills', margin + 380, y - 2, 50, fieldHeight, '');
-      y -= 28;
 
       // INTERCHANGE TYPE
-      drawHeader('Interchange Type');
+      drawHeader('Request Type');
 
       const oppType = (opportunity.opportunity_type || '').toLowerCase();
-      addCheckbox('type_generic', margin + 10, y, oppType.includes('generic'));
-      page.drawText('Generic Substitution', { x: margin + 28, y: y - 10, size: 9, font });
-      addCheckbox('type_therapeutic', margin + 160, y, oppType.includes('therapeutic') || oppType.includes('interchange'));
-      page.drawText('Therapeutic Alternative', { x: margin + 178, y: y - 10, size: 9, font });
-      addCheckbox('type_formulary', margin + 340, y, oppType.includes('formulary'));
-      page.drawText('Formulary Preferred', { x: margin + 358, y: y - 10, size: 9, font });
-      y -= 28;
+      addCheckbox('type_generic', margin + 8, y, oppType.includes('generic'));
+      page.drawText('Generic Substitution', { x: margin + 22, y: y - 9, size: sz, font });
+      addCheckbox('type_therapeutic', margin + 150, y, oppType.includes('therapeutic') || oppType.includes('interchange'));
+      page.drawText('Therapeutic Alternative', { x: margin + 164, y: y - 9, size: sz, font });
+      addCheckbox('type_formulary', margin + 310, y, oppType.includes('formulary'));
+      page.drawText('Formulary Preferred', { x: margin + 324, y: y - 9, size: sz, font });
+      y -= 22;
 
       // CLINICAL RATIONALE
-      drawHeader('Clinical Rationale');
+      drawHeader('Clinical Rationale / Reason for Request');
 
       const rationaleText = rationale || opportunity.clinical_rationale || '';
-      const rationaleField = addTextField('rationale', margin + 5, y - 2, contentWidth - 10, 50, rationaleText);
+      const rationaleField = addTextField('rationale', margin + 4, y - 2, contentWidth - 8, 45, rationaleText);
       rationaleField.enableMultiline();
-      y -= 60;
+      y -= 52;
 
       // PRESCRIBER RESPONSE
       drawHeader('Prescriber Response');
 
-      addCheckbox('resp_approved', margin + 10, y, false);
-      page.drawText('APPROVED - Change prescription as requested', { x: margin + 28, y: y - 10, size: 9, font });
-      addCheckbox('resp_denied', margin + contentWidth/2 + 10, y, false);
-      page.drawText('DENIED - Continue current medication', { x: margin + contentWidth/2 + 28, y: y - 10, size: 9, font });
-      y -= 22;
+      page.drawText('Please indicate your decision regarding this prescription request:', { x: margin + 4, y: y - 10, size: 7, font, color: rgb(0.4, 0.4, 0.4) });
+      y -= 14;
+      addCheckbox('resp_approved', margin + 8, y, false);
+      page.drawText('APPROVED - Please write a new prescription as requested above', { x: margin + 22, y: y - 9, size: sz, font });
+      y -= 14;
+      addCheckbox('resp_denied', margin + 8, y, false);
+      page.drawText('DENIED - Continue current medication, do not write new prescription', { x: margin + 22, y: y - 9, size: sz, font });
+      y -= 18;
 
-      page.drawText('If denied, reason:', { x: margin + 5, y: y - 12, size: 9, font: fontBold });
-      addTextField('denied_reason', margin + 100, y - 2, contentWidth - 110, fieldHeight, '');
-      y -= 28;
+      page.drawText('If denied, reason:', { x: margin + 4, y: y - 10, size: sz, font: fontBold });
+      addTextField('denied_reason', margin + 90, y - 2, contentWidth - 95, fieldHeight, '');
+      y -= 22;
 
       // AUTHORIZATION
       drawHeader('Prescriber Authorization');
 
-      page.drawText('Prescriber Signature:', { x: margin + 5, y: y - 14, size: 9, font: fontBold });
-      page.drawLine({ start: { x: margin + 110, y: y - 14 }, end: { x: margin + 350, y: y - 14 }, thickness: 1 });
-      page.drawText('Date:', { x: margin + 370, y: y - 14, size: 9, font: fontBold });
-      addTextField('sig_date', margin + 400, y - 4, 80, fieldHeight, '');
-      y -= 28;
+      page.drawText('Prescriber Signature:', { x: margin + 4, y: y - 12, size: sz, font: fontBold });
+      page.drawLine({ start: { x: margin + 100, y: y - 12 }, end: { x: margin + 340, y: y - 12 }, thickness: 1 });
+      page.drawText('Date:', { x: margin + 360, y: y - 12, size: sz, font: fontBold });
+      addTextField('sig_date', margin + 385, y - 4, 80, fieldHeight, '');
+      y -= 22;
 
       // INSTRUCTIONS
       drawHeader('Response Instructions');
       const instructionText = pharmacy?.fax
-        ? `Please complete this form and fax back to ${pharmacy.fax}. Thank you for your partnership.`
-        : 'Please complete this form and fax back to the pharmacy. Thank you for your partnership.';
-      page.drawText(instructionText, { x: margin + 5, y: y - 14, size: 9, font });
+        ? `Please sign and fax this completed form back to ${pharmacy.fax}. Thank you for your partnership in optimizing patient care.`
+        : 'Please sign and fax this completed form back to the pharmacy. Thank you for your partnership in optimizing patient care.';
+      page.drawText(instructionText, { x: margin + 4, y: y - 12, size: sz, font });
 
       // Save PDF
       const pdfBytes = await pdfDoc.save();
@@ -774,20 +788,22 @@ function SidePanel({
       const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
 
       const { width, height } = page.getSize();
-      const margin = 40;
+      const margin = 36;
       const contentWidth = width - (margin * 2);
       const navyBlue = rgb(30/255, 58/255, 95/255);
       const lightGray = rgb(245/255, 245/255, 245/255);
-      const fieldHeight = 18;
+      const sz = 8;
+      const szBold = 8;
+      const fieldHeight = 15;
 
-      let y = height - 40;
+      let y = height - 36;
       let fieldCounter = 0;
 
       // Helper to draw section header
       const drawHeader = (text: string) => {
-        page.drawRectangle({ x: margin, y: y - 16, width: contentWidth, height: 18, color: navyBlue });
-        page.drawText(text, { x: margin + 5, y: y - 12, size: 10, font: fontBold, color: rgb(1, 1, 1) });
-        y -= 20;
+        page.drawRectangle({ x: margin, y: y - 13, width: contentWidth, height: 15, color: navyBlue });
+        page.drawText(text, { x: margin + 4, y: y - 10, size: szBold, font: fontBold, color: rgb(1, 1, 1) });
+        y -= 17;
       };
 
       // Helper to add text field
@@ -803,48 +819,55 @@ function SidePanel({
       const addCheckbox = (name: string, x: number, yPos: number, checked: boolean = false) => {
         const fieldName = `${name}_${fieldCounter++}`;
         const checkbox = form.createCheckBox(fieldName);
-        checkbox.addToPage(page, { x, y: yPos - 10, width: 12, height: 12 });
+        checkbox.addToPage(page, { x, y: yPos - 10, width: 10, height: 10 });
         if (checked) checkbox.check();
         return checkbox;
       };
 
       // Title
-      page.drawText('Therapeutic Interchange Request Form', { x: width / 2 - 140, y: y, size: 16, font: fontBold });
-      y -= 18;
-      page.drawText(`(${selectedOpps.length} ${selectedOpps.length === 1 ? 'Request' : 'Requests'})`, { x: width / 2 - 40, y: y, size: 10, font, color: rgb(0.4, 0.4, 0.4) });
-      y -= 20;
+      page.drawText('Prescription Request Form', { x: width / 2 - 80, y: y, size: 12, font: fontBold });
+      y -= 14;
+      page.drawText(`${selectedOpps.length} Therapeutic Interchange ${selectedOpps.length === 1 ? 'Request' : 'Requests'}`, { x: width / 2 - 85, y: y, size: sz, font, color: rgb(0.4, 0.4, 0.4) });
+      y -= 16;
+
+      // Important notice box
+      page.drawRectangle({ x: margin, y: y - 28, width: contentWidth, height: 30, color: rgb(255/255, 248/255, 230/255), borderColor: rgb(200/255, 170/255, 80/255), borderWidth: 0.5 });
+      page.drawText('IMPORTANT: This is a REQUEST for new prescription(s).', { x: margin + 5, y: y - 8, size: szBold, font: fontBold });
+      page.drawText('We are requesting your consideration to prescribe the recommended medication(s) below based on the', { x: margin + 5, y: y - 18, size: 7, font });
+      page.drawText("patient's clinical needs and/or insurance formulary preferences. This is NOT a report of existing prescriptions.", { x: margin + 5, y: y - 27, size: 7, font });
+      y -= 34;
 
       // Date received field
-      page.drawText('Date request received:', { x: width - margin - 180, y: y, size: 9, font });
-      addTextField('date_received', width - margin - 80, y + 4, 75, fieldHeight, '');
-      y -= 18;
+      page.drawText('Date request received:', { x: width - margin - 160, y: y, size: sz, font });
+      addTextField('date_received', width - margin - 65, y + 3, 65, fieldHeight, '');
+      y -= 16;
 
       // PHARMACY SECTION
       drawHeader('Requesting Pharmacy Information');
 
       // Row 1
-      page.drawText('Date Submitted:', { x: margin + 5, y: y - 12, size: 9, font: fontBold });
-      addTextField('date_submitted', margin + 85, y - 2, 100, fieldHeight, new Date().toLocaleDateString('en-US'));
-      page.drawText('Pharmacy NPI:', { x: margin + contentWidth/2 + 5, y: y - 12, size: 9, font: fontBold });
-      addTextField('pharmacy_npi', margin + contentWidth/2 + 80, y - 2, 100, fieldHeight, pharmacy?.npi || '');
-      y -= 22;
+      page.drawText('Date Submitted:', { x: margin + 4, y: y - 10, size: sz, font: fontBold });
+      addTextField('date_submitted', margin + 78, y - 2, 90, fieldHeight, new Date().toLocaleDateString('en-US'));
+      page.drawText('NPI:', { x: margin + contentWidth/2 + 4, y: y - 10, size: sz, font: fontBold });
+      addTextField('pharmacy_npi', margin + contentWidth/2 + 28, y - 2, 100, fieldHeight, pharmacy?.npi || '');
+      y -= 18;
 
       // Row 2
-      page.drawText('Pharmacy Name:', { x: margin + 5, y: y - 12, size: 9, font: fontBold });
-      addTextField('pharmacy_name', margin + 90, y - 2, 155, fieldHeight, pharmacy?.pharmacy_name || '');
-      page.drawText('Fax:', { x: margin + contentWidth/2 + 5, y: y - 12, size: 9, font: fontBold });
-      addTextField('pharmacy_fax', margin + contentWidth/2 + 30, y - 2, 100, fieldHeight, pharmacy?.fax || '');
-      y -= 26;
+      page.drawText('Pharmacy Name:', { x: margin + 4, y: y - 10, size: sz, font: fontBold });
+      addTextField('pharmacy_name', margin + 82, y - 2, 145, fieldHeight, pharmacy?.pharmacy_name || '');
+      page.drawText('Fax:', { x: margin + contentWidth/2 + 4, y: y - 10, size: sz, font: fontBold });
+      addTextField('pharmacy_fax', margin + contentWidth/2 + 26, y - 2, 100, fieldHeight, pharmacy?.fax || '');
+      y -= 20;
 
       // PRESCRIBER SECTION
       const prescriberName = selectedOpps[0]?.prescriber_name || 'Unknown Prescriber';
       drawHeader('Prescriber Information');
 
-      page.drawText('Prescriber Name:', { x: margin + 5, y: y - 12, size: 9, font: fontBold });
-      addTextField('prescriber_name', margin + 95, y - 2, 200, fieldHeight, prescriberName);
-      page.drawText('Prescriber Fax:', { x: margin + contentWidth/2 + 5, y: y - 12, size: 9, font: fontBold });
-      addTextField('prescriber_fax', margin + contentWidth/2 + 85, y - 2, 100, fieldHeight, '');
-      y -= 26;
+      page.drawText('Prescriber Name:', { x: margin + 4, y: y - 10, size: sz, font: fontBold });
+      addTextField('prescriber_name', margin + 88, y - 2, 195, fieldHeight, prescriberName);
+      page.drawText('Fax:', { x: margin + contentWidth/2 + 4, y: y - 10, size: sz, font: fontBold });
+      addTextField('prescriber_fax', margin + contentWidth/2 + 26, y - 2, 100, fieldHeight, '');
+      y -= 20;
 
       // PATIENT SECTION
       drawHeader('Patient Information');
@@ -856,46 +879,46 @@ function SidePanel({
         ? (parseLocalDate(groupItem.date_of_birth)?.toLocaleDateString('en-US') || '')
         : '';
 
-      page.drawText('Patient Name:', { x: margin + 5, y: y - 12, size: 9, font: fontBold });
-      addTextField('patient_name', margin + 80, y - 2, 165, fieldHeight, patientName);
-      page.drawText('Date of Birth:', { x: margin + contentWidth/2 + 5, y: y - 12, size: 9, font: fontBold });
-      addTextField('patient_dob', margin + contentWidth/2 + 75, y - 2, 90, fieldHeight, dob);
-      y -= 22;
+      page.drawText('Patient Name:', { x: margin + 4, y: y - 10, size: sz, font: fontBold });
+      addTextField('patient_name', margin + 72, y - 2, 165, fieldHeight, patientName);
+      page.drawText('Date of Birth:', { x: margin + contentWidth/2 + 4, y: y - 10, size: sz, font: fontBold });
+      addTextField('patient_dob', margin + contentWidth/2 + 68, y - 2, 90, fieldHeight, dob);
+      y -= 18;
 
       const binPcn = [selectedOpps[0]?.insurance_bin, selectedOpps[0]?.insurance_pcn].filter(Boolean).join('/');
-      page.drawText('Insurance:', { x: margin + 5, y: y - 12, size: 9, font: fontBold });
-      addTextField('insurance', margin + 60, y - 2, 185, fieldHeight, selectedOpps[0]?.plan_name || '');
-      page.drawText('BIN/PCN:', { x: margin + contentWidth/2 + 5, y: y - 12, size: 9, font: fontBold });
-      addTextField('bin_pcn', margin + contentWidth/2 + 55, y - 2, 100, fieldHeight, binPcn);
-      y -= 26;
+      page.drawText('Insurance:', { x: margin + 4, y: y - 10, size: sz, font: fontBold });
+      addTextField('insurance', margin + 52, y - 2, 185, fieldHeight, selectedOpps[0]?.plan_name || '');
+      page.drawText('BIN/PCN:', { x: margin + contentWidth/2 + 4, y: y - 10, size: sz, font: fontBold });
+      addTextField('bin_pcn', margin + contentWidth/2 + 48, y - 2, 100, fieldHeight, binPcn);
+      y -= 20;
 
       // MEDICATIONS TABLE
-      drawHeader('Requested Therapeutic Interchanges');
+      drawHeader('Requested New Prescriptions (Therapeutic Interchanges)');
 
       // Table header
       const col1Width = contentWidth * 0.50;
       const col2Width = contentWidth * 0.50;
-      page.drawRectangle({ x: margin, y: y - 18, width: contentWidth, height: 18, color: lightGray });
-      page.drawText('Current Medication', { x: margin + 5, y: y - 12, size: 9, font: fontBold });
-      page.drawText('Recommended Alternative', { x: margin + col1Width + 5, y: y - 12, size: 9, font: fontBold });
-      y -= 20;
+      page.drawRectangle({ x: margin, y: y - 15, width: contentWidth, height: 15, color: lightGray });
+      page.drawText("Patient's Current Medication", { x: margin + 4, y: y - 10, size: 7, font: fontBold });
+      page.drawText('Requested New Prescription', { x: margin + col1Width + 4, y: y - 10, size: 7, font: fontBold });
+      y -= 17;
 
       // Table rows with fillable fields for each medication
       for (let i = 0; i < selectedOpps.length; i++) {
         const opp = selectedOpps[i];
         // Draw row borders
-        page.drawRectangle({ x: margin, y: y - 20, width: col1Width, height: 20, borderWidth: 0.5, borderColor: rgb(0.8, 0.8, 0.8) });
-        page.drawRectangle({ x: margin + col1Width, y: y - 20, width: col2Width, height: 20, borderWidth: 0.5, borderColor: rgb(0.8, 0.8, 0.8) });
+        page.drawRectangle({ x: margin, y: y - 17, width: col1Width, height: 17, borderWidth: 0.5, borderColor: rgb(0.8, 0.8, 0.8) });
+        page.drawRectangle({ x: margin + col1Width, y: y - 17, width: col2Width, height: 17, borderWidth: 0.5, borderColor: rgb(0.8, 0.8, 0.8) });
 
         // Add fillable text fields
-        addTextField(`current_${i}`, margin + 3, y - 2, col1Width - 6, 16, opp.current_drug_name || '');
-        addTextField(`recommended_${i}`, margin + col1Width + 3, y - 2, col2Width - 6, 16, opp.recommended_drug_name || '');
-        y -= 20;
+        addTextField(`current_${i}`, margin + 2, y - 1, col1Width - 4, 14, opp.current_drug_name || '');
+        addTextField(`recommended_${i}`, margin + col1Width + 2, y - 1, col2Width - 4, 14, opp.recommended_drug_name || '');
+        y -= 17;
       }
-      y -= 8;
+      y -= 6;
 
       // CLINICAL RATIONALE
-      drawHeader('Clinical Rationale');
+      drawHeader('Clinical Rationale / Reason for Request');
 
       // Build combined rationale text
       const rationaleLines: string[] = [];
@@ -908,38 +931,41 @@ function SidePanel({
       }
       const rationaleText = rationaleLines.join('\n');
 
-      const rationaleField = addTextField('rationale', margin + 5, y - 2, contentWidth - 10, 60, rationaleText);
+      const rationaleField = addTextField('rationale', margin + 4, y - 2, contentWidth - 8, 50, rationaleText);
       rationaleField.enableMultiline();
-      y -= 68;
+      y -= 56;
 
       // PRESCRIBER RESPONSE
       drawHeader('Prescriber Response');
 
-      addCheckbox('resp_approved', margin + 10, y, false);
-      page.drawText('APPROVED - Change prescriptions as requested', { x: margin + 28, y: y - 10, size: 9, font });
-      addCheckbox('resp_denied', margin + contentWidth/2 + 10, y, false);
-      page.drawText('DENIED - Continue current medications', { x: margin + contentWidth/2 + 28, y: y - 10, size: 9, font });
-      y -= 22;
+      page.drawText('Please indicate your decision regarding these prescription requests:', { x: margin + 4, y: y - 10, size: 7, font, color: rgb(0.4, 0.4, 0.4) });
+      y -= 14;
+      addCheckbox('resp_approved', margin + 8, y, false);
+      page.drawText('APPROVED - Please write new prescription(s) as requested above', { x: margin + 22, y: y - 9, size: sz, font });
+      y -= 14;
+      addCheckbox('resp_denied', margin + 8, y, false);
+      page.drawText('DENIED - Continue current medication(s), do not write new prescription(s)', { x: margin + 22, y: y - 9, size: sz, font });
+      y -= 18;
 
-      page.drawText('If denied, reason:', { x: margin + 5, y: y - 12, size: 9, font: fontBold });
-      addTextField('denied_reason', margin + 100, y - 2, contentWidth - 110, fieldHeight, '');
-      y -= 26;
+      page.drawText('If denied, reason:', { x: margin + 4, y: y - 10, size: sz, font: fontBold });
+      addTextField('denied_reason', margin + 90, y - 2, contentWidth - 95, fieldHeight, '');
+      y -= 22;
 
       // AUTHORIZATION
       drawHeader('Prescriber Authorization');
 
-      page.drawText('Prescriber Signature:', { x: margin + 5, y: y - 14, size: 9, font: fontBold });
-      page.drawLine({ start: { x: margin + 110, y: y - 14 }, end: { x: margin + 350, y: y - 14 }, thickness: 1 });
-      page.drawText('Date:', { x: margin + 370, y: y - 14, size: 9, font: fontBold });
-      addTextField('sig_date', margin + 400, y - 4, 80, fieldHeight, '');
-      y -= 26;
+      page.drawText('Prescriber Signature:', { x: margin + 4, y: y - 12, size: sz, font: fontBold });
+      page.drawLine({ start: { x: margin + 100, y: y - 12 }, end: { x: margin + 340, y: y - 12 }, thickness: 1 });
+      page.drawText('Date:', { x: margin + 360, y: y - 12, size: sz, font: fontBold });
+      addTextField('sig_date', margin + 385, y - 4, 80, fieldHeight, '');
+      y -= 22;
 
       // INSTRUCTIONS
       drawHeader('Response Instructions');
       const instructionText = pharmacy?.fax
-        ? `Please complete this form and fax back to ${pharmacy.fax}. Thank you for your partnership.`
-        : 'Please complete this form and fax back to the pharmacy. Thank you for your partnership.';
-      page.drawText(instructionText, { x: margin + 5, y: y - 14, size: 9, font });
+        ? `Please sign and fax this completed form back to ${pharmacy.fax}. Thank you for your partnership in optimizing patient care.`
+        : 'Please sign and fax this completed form back to the pharmacy. Thank you for your partnership in optimizing patient care.';
+      page.drawText(instructionText, { x: margin + 4, y: y - 12, size: sz, font });
 
       // Save PDF
       const pdfBytes = await pdfDoc.save();
