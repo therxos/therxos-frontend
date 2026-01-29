@@ -1081,6 +1081,18 @@ export default function OpportunityApprovalPage() {
                   </div>
                 </div>
 
+                {/* Clinical Rationale */}
+                {(itemDetails.trigger_clinical_rationale || selectedItem?.existing_trigger?.clinical_rationale) && (
+                  <div>
+                    <p className="text-xs text-slate-500 uppercase tracking-wider mb-2">Clinical Rationale</p>
+                    <div className="bg-[#0a1628] border border-[#1e3a5f] rounded-lg p-3">
+                      <p className="text-sm text-slate-300 leading-relaxed">
+                        {itemDetails.trigger_clinical_rationale || selectedItem?.existing_trigger?.clinical_rationale}
+                      </p>
+                    </div>
+                  </div>
+                )}
+
                 {/* Affected Pharmacies */}
                 {itemDetails.affected_pharmacies_resolved && itemDetails.affected_pharmacies_resolved.length > 0 ? (
                   <div>
