@@ -27,6 +27,8 @@ import {
   Database,
   Copy,
   TrendingDown,
+  TrendingUp,
+  Layers,
 } from 'lucide-react';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL;
@@ -177,6 +179,8 @@ export default function AdminLayout({
       icon: ShieldCheck,
       children: [
         { name: 'Negative GP Scan', href: '/admin/opportunity-approval/negative-gp', icon: TrendingDown },
+        { name: 'Positive GP Scan', href: '/admin/opportunity-approval/positive-gp', icon: TrendingUp },
+        { name: 'NDC Optimization', href: '/admin/opportunity-approval/ndc-optimization', icon: Layers },
       ],
     },
     { name: 'Coverage Scanner', href: '/admin/coverage', icon: Zap },
