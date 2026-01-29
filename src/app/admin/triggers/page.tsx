@@ -69,6 +69,8 @@ interface Trigger {
     verifiedClaimCount?: number;
     avgReimbursement?: number | null;
     avgQty?: number | null;
+    bestDrugName?: string | null;
+    bestNdc?: string | null;
   }[];
   pharmacy_stats?: PharmacyStat[];
   total_opportunities?: number;
@@ -97,6 +99,7 @@ export default function TriggersPage() {
   const [scanningAll, setScanningAll] = useState(false);
   const [editingTrigger, setEditingTrigger] = useState<Trigger | null>(null);
   const [saving, setSaving] = useState(false);
+  const [rawKeywords, setRawKeywords] = useState<Record<string, string>>({});
   const [scanningTrigger, setScanningTrigger] = useState<string | null>(null);
   const [scanningPharmacy, setScanningPharmacy] = useState<string | null>(null);
   const [pharmacies, setPharmacies] = useState<{ pharmacy_id: string; pharmacy_name: string }[]>([]);
@@ -105,6 +108,22 @@ export default function TriggersPage() {
     fetchTriggers();
     fetchPharmacies();
   }, []);
+
+  // Initialize raw text for comma-separated fields when editing a trigger
+  useEffect(() => {
+    if (editingTrigger) {
+      setRawKeywords({
+        detection_keywords: editingTrigger.detection_keywords?.join(', ') || '',
+        exclude_keywords: editingTrigger.exclude_keywords?.join(', ') || '',
+        if_has_keywords: editingTrigger.if_has_keywords?.join(', ') || '',
+        if_not_has_keywords: editingTrigger.if_not_has_keywords?.join(', ') || '',
+        bin_restrictions: editingTrigger.bin_restrictions?.join(', ') || '',
+        group_exclusions: editingTrigger.group_exclusions?.join(', ') || '',
+        contract_prefix_exclusions: editingTrigger.contract_prefix_exclusions?.join(', ') || '',
+      });
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editingTrigger?.trigger_id]);
 
   async function fetchPharmacies() {
     try {
@@ -178,6 +197,8 @@ export default function TriggersPage() {
   async function saveTrigger() {
     if (!editingTrigger) return;
     setSaving(true);
+    // Parse comma-separated raw text into arrays
+    const parseCSV = (key: string) => (rawKeywords[key] || '').split(',').map(k => k.trim()).filter(Boolean);
     try {
       const token = localStorage.getItem('therxos_token');
       const res = await fetch(`${API_URL}/api/admin/triggers/${editingTrigger.trigger_id}`, {
@@ -191,10 +212,10 @@ export default function TriggersPage() {
           triggerCode: editingTrigger.trigger_code,
           triggerType: editingTrigger.trigger_type,
           category: editingTrigger.category,
-          detectionKeywords: editingTrigger.detection_keywords,
-          excludeKeywords: editingTrigger.exclude_keywords,
-          ifHasKeywords: editingTrigger.if_has_keywords,
-          ifNotHasKeywords: editingTrigger.if_not_has_keywords,
+          detectionKeywords: parseCSV('detection_keywords'),
+          excludeKeywords: parseCSV('exclude_keywords'),
+          ifHasKeywords: parseCSV('if_has_keywords'),
+          ifNotHasKeywords: parseCSV('if_not_has_keywords'),
           recommendedDrug: editingTrigger.recommended_drug,
           recommendedNdc: editingTrigger.recommended_ndc,
           clinicalRationale: editingTrigger.clinical_rationale,
@@ -203,9 +224,9 @@ export default function TriggersPage() {
           annualFills: editingTrigger.annual_fills,
           defaultGpValue: editingTrigger.default_gp_value,
           isEnabled: editingTrigger.is_enabled,
-          binRestrictions: editingTrigger.bin_restrictions,
-          groupExclusions: editingTrigger.group_exclusions,
-          contractPrefixExclusions: editingTrigger.contract_prefix_exclusions,
+          binRestrictions: parseCSV('bin_restrictions'),
+          groupExclusions: parseCSV('group_exclusions'),
+          contractPrefixExclusions: parseCSV('contract_prefix_exclusions'),
         }),
       });
 
@@ -642,34 +663,45 @@ export default function TriggersPage() {
 
                         {/* Right Column - BIN Values */}
                         <div>
+                          {(() => {
+                            const filtered = (trigger.bin_values || [])
+                              .filter(bv => !bv.isExcluded && (bv.gpValue || 0) >= 15)
+                              .sort((a, b) => (b.gpValue || 0) - (a.gpValue || 0));
+                            return (
+                              <>
                           <h4 className="text-xs font-semibold text-slate-400 uppercase mb-2">
-                            BIN/Group Coverage ({trigger.bin_values?.length || 0} entries)
+                            BIN/Group Coverage ({filtered.length} entries{filtered.length !== (trigger.bin_values?.length || 0) ? ` of ${trigger.bin_values?.length || 0}` : ''})
                           </h4>
-                          <div className="max-h-48 overflow-y-auto space-y-1">
-                            {trigger.bin_values?.slice(0, 10).map((bv, idx) => (
-                              <div key={idx} className="flex items-center justify-between text-xs bg-[#0d2137] rounded px-3 py-2">
-                                <span className="font-mono text-white">
-                                  {bv.bin}{bv.group ? `/${bv.group}` : ''}
-                                </span>
-                                <div className="flex items-center gap-4">
-                                  {bv.avgQty && (
-                                    <span className="text-slate-400">Qty: {bv.avgQty}</span>
-                                  )}
-                                  <span className={`${bv.isExcluded ? 'text-red-400' : 'text-emerald-400'}`}>
-                                    {bv.isExcluded ? 'Excluded' : bv.gpValue ? `$${bv.gpValue}` : 'Works'}
+                          <div className="max-h-96 overflow-y-auto space-y-1">
+                            {filtered.map((bv, idx) => (
+                              <div key={idx} className="flex flex-col text-xs bg-[#0d2137] rounded px-3 py-2 gap-0.5">
+                                <div className="flex items-center justify-between">
+                                  <span className="font-mono text-white">
+                                    {bv.bin}{bv.group ? `/${bv.group}` : ''}
                                   </span>
-                                  {bv.coverageStatus === 'verified' && (
-                                    <Check className="w-3 h-3 text-emerald-400" />
-                                  )}
+                                  <div className="flex items-center gap-4">
+                                    {bv.avgQty && (
+                                      <span className="text-slate-400">Qty: {Math.round(bv.avgQty)}</span>
+                                    )}
+                                    <span className={`${bv.isExcluded ? 'text-red-400' : 'text-emerald-400'}`}>
+                                      {bv.isExcluded ? 'Excluded' : bv.gpValue ? `$${Number(bv.gpValue).toFixed(2)}` : 'Works'}
+                                    </span>
+                                    {bv.coverageStatus === 'verified' && (
+                                      <Check className="w-3 h-3 text-emerald-400" />
+                                    )}
+                                  </div>
                                 </div>
+                                {bv.bestDrugName && (
+                                  <span className="text-[10px] text-blue-400 truncate" title={bv.bestDrugName}>
+                                    {bv.bestDrugName}
+                                  </span>
+                                )}
                               </div>
                             ))}
-                            {(trigger.bin_values?.length || 0) > 10 && (
-                              <p className="text-xs text-slate-500 text-center py-2">
-                                + {trigger.bin_values.length - 10} more
-                              </p>
-                            )}
                           </div>
+                              </>
+                            );
+                          })()}
                         </div>
                       </div>
 
@@ -862,8 +894,8 @@ export default function TriggersPage() {
                   <label className="block text-xs font-medium text-slate-400 mb-1">Detection Keywords (comma-separated)</label>
                   <input
                     type="text"
-                    value={editingTrigger.detection_keywords?.join(', ') || ''}
-                    onChange={(e) => setEditingTrigger({ ...editingTrigger, detection_keywords: e.target.value.split(',').map(k => k.trim()).filter(Boolean) })}
+                    value={rawKeywords.detection_keywords || ''}
+                    onChange={(e) => setRawKeywords({ ...rawKeywords, detection_keywords: e.target.value })}
                     className="w-full px-3 py-2 bg-[#0a1628] border border-[#1e3a5f] rounded-lg text-sm text-white focus:outline-none focus:border-blue-500"
                   />
                 </div>
@@ -872,10 +904,33 @@ export default function TriggersPage() {
                   <label className="block text-xs font-medium text-slate-400 mb-1">Exclude Keywords (comma-separated)</label>
                   <input
                     type="text"
-                    value={editingTrigger.exclude_keywords?.join(', ') || ''}
-                    onChange={(e) => setEditingTrigger({ ...editingTrigger, exclude_keywords: e.target.value.split(',').map(k => k.trim()).filter(Boolean) })}
+                    value={rawKeywords.exclude_keywords || ''}
+                    onChange={(e) => setRawKeywords({ ...rawKeywords, exclude_keywords: e.target.value })}
                     className="w-full px-3 py-2 bg-[#0a1628] border border-[#1e3a5f] rounded-lg text-sm text-white focus:outline-none focus:border-blue-500"
                   />
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-medium text-slate-400 mb-1">Required Keywords (comma-separated)</label>
+                    <input
+                      type="text"
+                      value={rawKeywords.if_has_keywords || ''}
+                      onChange={(e) => setRawKeywords({ ...rawKeywords, if_has_keywords: e.target.value })}
+                      className="w-full px-3 py-2 bg-[#0a1628] border border-[#1e3a5f] rounded-lg text-sm text-white focus:outline-none focus:border-blue-500"
+                      placeholder="Patient must also have these drugs"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-slate-400 mb-1">Exclude If Has (comma-separated)</label>
+                    <input
+                      type="text"
+                      value={rawKeywords.if_not_has_keywords || ''}
+                      onChange={(e) => setRawKeywords({ ...rawKeywords, if_not_has_keywords: e.target.value })}
+                      className="w-full px-3 py-2 bg-[#0a1628] border border-[#1e3a5f] rounded-lg text-sm text-white focus:outline-none focus:border-blue-500"
+                      placeholder="Skip if patient has these drugs"
+                    />
+                  </div>
                 </div>
 
                 <div>
@@ -903,8 +958,8 @@ export default function TriggersPage() {
                     <label className="block text-xs font-medium text-slate-400 mb-1">BIN Restrictions (comma-separated)</label>
                     <input
                       type="text"
-                      value={editingTrigger.bin_restrictions?.join(', ') || ''}
-                      onChange={(e) => setEditingTrigger({ ...editingTrigger, bin_restrictions: e.target.value.split(',').map(k => k.trim()).filter(Boolean) })}
+                      value={rawKeywords.bin_restrictions || ''}
+                      onChange={(e) => setRawKeywords({ ...rawKeywords, bin_restrictions: e.target.value })}
                       className="w-full px-3 py-2 bg-[#0a1628] border border-[#1e3a5f] rounded-lg text-sm text-white focus:outline-none focus:border-blue-500"
                       placeholder="e.g., 004336, 610014"
                     />
@@ -913,8 +968,8 @@ export default function TriggersPage() {
                     <label className="block text-xs font-medium text-slate-400 mb-1">Group Exclusions (comma-separated)</label>
                     <input
                       type="text"
-                      value={editingTrigger.group_exclusions?.join(', ') || ''}
-                      onChange={(e) => setEditingTrigger({ ...editingTrigger, group_exclusions: e.target.value.split(',').map(k => k.trim()).filter(Boolean) })}
+                      value={rawKeywords.group_exclusions || ''}
+                      onChange={(e) => setRawKeywords({ ...rawKeywords, group_exclusions: e.target.value })}
                       className="w-full px-3 py-2 bg-[#0a1628] border border-[#1e3a5f] rounded-lg text-sm text-white focus:outline-none focus:border-blue-500"
                       placeholder="e.g., RX1234, RX5678"
                     />
@@ -925,8 +980,8 @@ export default function TriggersPage() {
                   <label className="block text-xs font-medium text-slate-400 mb-1">Contract Prefix Exclusions (comma-separated)</label>
                   <input
                     type="text"
-                    value={editingTrigger.contract_prefix_exclusions?.join(', ') || ''}
-                    onChange={(e) => setEditingTrigger({ ...editingTrigger, contract_prefix_exclusions: e.target.value.split(',').map(k => k.trim()).filter(Boolean) })}
+                    value={rawKeywords.contract_prefix_exclusions || ''}
+                    onChange={(e) => setRawKeywords({ ...rawKeywords, contract_prefix_exclusions: e.target.value })}
                     className="w-full px-3 py-2 bg-[#0a1628] border border-[#1e3a5f] rounded-lg text-sm text-white focus:outline-none focus:border-blue-500"
                     placeholder="e.g., S, H, R"
                   />
