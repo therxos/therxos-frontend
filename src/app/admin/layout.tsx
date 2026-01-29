@@ -26,6 +26,7 @@ import {
   Zap,
   Database,
   Copy,
+  TrendingDown,
 } from 'lucide-react';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL;
@@ -162,7 +163,7 @@ export default function AdminLayout({
   }
 
   // Navigation items for admin panel
-  const navigation = [
+  const navigation: { name: string; href: string; icon: any; children?: { name: string; href: string; icon: any }[] }[] = [
     { name: 'Overview', href: '/admin', icon: BarChart3 },
     { name: 'Pharmacies', href: '/admin/pharmacies', icon: Building2 },
     { name: 'Triggers', href: '/admin/triggers', icon: Crosshair },
@@ -170,7 +171,14 @@ export default function AdminLayout({
     { name: "Didn't Work Queue", href: '/admin/didnt-work', icon: AlertCircle },
     { name: 'Data Quality', href: '/admin/data-quality', icon: Database },
     { name: 'Deduplication', href: '/admin/deduplication', icon: Copy },
-    { name: 'Opportunity Approval', href: '/admin/opportunity-approval', icon: ShieldCheck },
+    {
+      name: 'Opportunity Approval',
+      href: '/admin/opportunity-approval',
+      icon: ShieldCheck,
+      children: [
+        { name: 'Negative GP Scan', href: '/admin/opportunity-approval/negative-gp', icon: TrendingDown },
+      ],
+    },
     { name: 'Coverage Scanner', href: '/admin/coverage', icon: Zap },
   ];
 
@@ -236,20 +244,45 @@ export default function AdminLayout({
             <nav className="space-y-1">
               {navigation.map((item) => {
                 const isActive = pathname === item.href;
+                const isChildActive = item.children?.some(child => pathname === child.href);
+                const isExpanded = isActive || isChildActive;
                 return (
-                  <Link
-                    key={item.name}
-                    href={item.href}
-                    className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
-                      isActive
-                        ? 'bg-red-500/20 text-red-400'
-                        : 'text-slate-300 hover:bg-[#1e3a5f] hover:text-white'
-                    } ${sidebarCollapsed ? 'justify-center px-2' : ''}`}
-                    title={sidebarCollapsed ? item.name : undefined}
-                  >
-                    <item.icon className="w-5 h-5 flex-shrink-0" />
-                    {!sidebarCollapsed && <span className="flex-1">{item.name}</span>}
-                  </Link>
+                  <div key={item.name}>
+                    <Link
+                      href={item.href}
+                      className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+                        isActive || isChildActive
+                          ? 'bg-red-500/20 text-red-400'
+                          : 'text-slate-300 hover:bg-[#1e3a5f] hover:text-white'
+                      } ${sidebarCollapsed ? 'justify-center px-2' : ''}`}
+                      title={sidebarCollapsed ? item.name : undefined}
+                    >
+                      <item.icon className="w-5 h-5 flex-shrink-0" />
+                      {!sidebarCollapsed && <span className="flex-1">{item.name}</span>}
+                    </Link>
+                    {/* Sub-menu items */}
+                    {item.children && !sidebarCollapsed && isExpanded && (
+                      <div className="ml-4 mt-1 space-y-1 border-l border-[#1e3a5f] pl-3">
+                        {item.children.map((child) => {
+                          const isSubActive = pathname === child.href;
+                          return (
+                            <Link
+                              key={child.name}
+                              href={child.href}
+                              className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium transition-colors ${
+                                isSubActive
+                                  ? 'bg-red-500/20 text-red-400'
+                                  : 'text-slate-400 hover:bg-[#1e3a5f] hover:text-white'
+                              }`}
+                            >
+                              <child.icon className="w-4 h-4 flex-shrink-0" />
+                              <span>{child.name}</span>
+                            </Link>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
                 );
               })}
             </nav>

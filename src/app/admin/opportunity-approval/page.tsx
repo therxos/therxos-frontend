@@ -20,6 +20,8 @@ import {
   CheckSquare,
   Square,
   MinusSquare,
+  Loader2,
+  TrendingDown,
 } from 'lucide-react';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL;
@@ -91,6 +93,11 @@ export default function OpportunityApprovalPage() {
   const [bulkProcessing, setBulkProcessing] = useState(false);
   const [bulkNotes, setBulkNotes] = useState('');
 
+  // Negative GP scan state
+  const [scanning, setScanning] = useState(false);
+  const [scanResult, setScanResult] = useState<any>(null);
+  const [showScanResult, setShowScanResult] = useState(false);
+
   useEffect(() => {
     fetchData();
   }, [statusFilter]);
@@ -117,6 +124,39 @@ export default function OpportunityApprovalPage() {
       console.error('Failed to fetch approval queue:', err);
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function runNegativeGPScan() {
+    setScanning(true);
+    setScanResult(null);
+    try {
+      const token = localStorage.getItem('therxos_token');
+      const res = await fetch(`${API_URL}/api/admin/scan-negative-gp`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({}),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setScanResult(data);
+        setShowScanResult(true);
+        // Refresh the list to show new items
+        if (data.submittedToQueue > 0) {
+          fetchData();
+        }
+      } else {
+        const error = await res.json();
+        alert('Scan failed: ' + (error.error || 'Unknown error'));
+      }
+    } catch (err) {
+      console.error('Failed to run negative GP scan:', err);
+      alert('Failed to run negative GP scan');
+    } finally {
+      setScanning(false);
     }
   }
 
@@ -396,13 +436,32 @@ export default function OpportunityApprovalPage() {
             </p>
           </div>
         </div>
-        <button
-          onClick={fetchData}
-          className="flex items-center gap-2 px-4 py-2 bg-[#1e3a5f] hover:bg-[#2a4a6f] text-white rounded-lg text-sm font-medium transition-colors"
-        >
-          <RefreshCw className="w-4 h-4" />
-          Refresh
-        </button>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={runNegativeGPScan}
+            disabled={scanning}
+            className="flex items-center gap-2 px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
+          >
+            {scanning ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Scanning...
+              </>
+            ) : (
+              <>
+                <TrendingDown className="w-4 h-4" />
+                Run Negative GP Scan
+              </>
+            )}
+          </button>
+          <button
+            onClick={fetchData}
+            className="flex items-center gap-2 px-4 py-2 bg-[#1e3a5f] hover:bg-[#2a4a6f] text-white rounded-lg text-sm font-medium transition-colors"
+          >
+            <RefreshCw className="w-4 h-4" />
+            Refresh
+          </button>
+        </div>
       </div>
 
       {/* Stats Cards */}
@@ -436,6 +495,66 @@ export default function OpportunityApprovalPage() {
           <p className="text-2xl font-bold text-purple-400">{formatCurrency(totalPendingMargin)}</p>
         </div>
       </div>
+
+      {/* Scan Results Banner */}
+      {showScanResult && scanResult && (
+        <div className="mb-6 bg-[#0d2137] border border-amber-500/30 rounded-xl p-4">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <TrendingDown className="w-5 h-5 text-amber-400" />
+              <h3 className="text-sm font-semibold text-white">Negative GP Scan Results</h3>
+            </div>
+            <button onClick={() => setShowScanResult(false)} className="text-slate-400 hover:text-white">
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
+            <div>
+              <p className="text-slate-400">Losers Found</p>
+              <p className="text-lg font-bold text-white">{scanResult.losersFound}</p>
+            </div>
+            <div>
+              <p className="text-slate-400">Candidates</p>
+              <p className="text-lg font-bold text-white">{scanResult.candidatesGenerated}</p>
+            </div>
+            <div>
+              <p className="text-slate-400">Queued for Review</p>
+              <p className="text-lg font-bold text-emerald-400">{scanResult.submittedToQueue}</p>
+            </div>
+            <div>
+              <p className="text-slate-400">Skipped (Existing)</p>
+              <p className="text-lg font-bold text-slate-400">{scanResult.skippedExisting}</p>
+            </div>
+          </div>
+          {scanResult.details && scanResult.details.length > 0 && (
+            <div className="mt-3 pt-3 border-t border-[#1e3a5f]">
+              <p className="text-xs font-semibold text-slate-400 mb-2">New Discoveries:</p>
+              <div className="space-y-1 max-h-40 overflow-y-auto">
+                {scanResult.details.map((d: any, i: number) => (
+                  <div key={i} className="flex items-center justify-between text-xs bg-[#0a1628] rounded px-3 py-2">
+                    <div>
+                      <span className="text-red-400">{d.currentDrug}</span>
+                      <span className="text-slate-500 mx-2">&#8594;</span>
+                      <span className="text-emerald-400">{d.recommendedDrug}</span>
+                      <span className="text-slate-500 ml-2">({d.therapeuticClass})</span>
+                    </div>
+                    <div className="flex items-center gap-4">
+                      <span className="text-slate-400">BIN: {d.bin}</span>
+                      <span className="text-amber-400">{d.patients} pts</span>
+                      <span className="text-emerald-400">+{formatCurrency(d.estimatedTotalAnnualGain)}/yr</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+          {scanResult.submittedToQueue === 0 && scanResult.losersFound > 0 && (
+            <p className="mt-2 text-xs text-slate-400">
+              No new opportunities found. {scanResult.skippedExisting > 0 ? `${scanResult.skippedExisting} already have triggers.` : ''} {scanResult.skippedNoClass > 0 ? `${scanResult.skippedNoClass} couldn't be classified.` : ''} {scanResult.skippedNoAlternative > 0 ? `${scanResult.skippedNoAlternative} had no positive alternatives.` : ''}
+            </p>
+          )}
+        </div>
+      )}
 
       {/* Filters */}
       <div className="flex items-center gap-4 mb-6">
