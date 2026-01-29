@@ -697,6 +697,7 @@ function SidePanel({
       const rationaleText = rationale || opportunity.clinical_rationale || '';
       const rationaleField = addTextField('rationale', margin + 4, y - 2, contentWidth - 8, 45, rationaleText);
       rationaleField.enableMultiline();
+      rationaleField.setFontSize(sz);
       y -= 52;
 
       // PRESCRIBER RESPONSE
@@ -933,6 +934,7 @@ function SidePanel({
 
       const rationaleField = addTextField('rationale', margin + 4, y - 2, contentWidth - 8, 50, rationaleText);
       rationaleField.enableMultiline();
+      rationaleField.setFontSize(sz);
       y -= 56;
 
       // PRESCRIBER RESPONSE
