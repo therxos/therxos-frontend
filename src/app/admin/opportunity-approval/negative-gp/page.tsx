@@ -48,6 +48,20 @@ interface ScanDetail {
   estimatedTotalAnnualGain: number;
 }
 
+interface SkipItem {
+  drug: string;
+  bin?: string;
+  group?: string | null;
+  avgGP?: number;
+  fills?: number;
+  patients?: number;
+  totalLoss?: number;
+  therapeuticClass?: string;
+  recommendedDrug?: string;
+  altAvgGP?: number;
+  annualGainPerPatient?: number;
+}
+
 interface ScanResult {
   success: boolean;
   losersFound: number;
@@ -60,6 +74,10 @@ interface ScanResult {
   processingTimeMs: number;
   errors: { drug: string; error: string }[];
   details: ScanDetail[];
+  unclassifiedDrugs: SkipItem[];
+  noAlternativeDrugs: SkipItem[];
+  existingTriggerDrugs: SkipItem[];
+  lowGainDrugs: SkipItem[];
 }
 
 function formatCurrency(value: number): string {
