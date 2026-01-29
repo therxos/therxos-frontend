@@ -220,11 +220,12 @@ export default function TriggersPage() {
       annual_fills: 12,
       default_gp_value: null,
       is_enabled: true,
+      created_at: new Date().toISOString(),
       bin_restrictions: [],
       group_exclusions: [],
       contract_prefix_exclusions: [],
       bin_values: [],
-    } as Trigger);
+    });
   }
 
   async function saveTrigger() {
