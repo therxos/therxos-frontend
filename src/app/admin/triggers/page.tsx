@@ -738,18 +738,9 @@ export default function TriggersPage() {
                                   </div>
                                 </div>
                                 {(bv.bestDrugName || bv.bestNdc) && (
-                                  <div className="flex items-center justify-between gap-2">
-                                    {bv.bestDrugName && (
-                                      <span className="text-[10px] text-blue-400 truncate min-w-0 flex-1" title={bv.bestDrugName}>
-                                        {bv.bestDrugName}
-                                      </span>
-                                    )}
-                                    {bv.bestNdc && (
-                                      <span className="text-[10px] text-slate-500 font-mono flex-shrink-0">
-                                        NDC: {bv.bestNdc}
-                                      </span>
-                                    )}
-                                  </div>
+                                  <p className="text-[10px] text-blue-400" title={bv.bestDrugName || ''}>
+                                    {bv.bestDrugName}{bv.bestDrugName && bv.bestNdc ? ' ' : ''}{bv.bestNdc && <span className="text-slate-500 font-mono">NDC: {bv.bestNdc}</span>}
+                                  </p>
                                 )}
                               </div>
                             ))}
