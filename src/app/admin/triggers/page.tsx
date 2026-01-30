@@ -707,9 +707,12 @@ export default function TriggersPage() {
                         {/* Right Column - BIN Values */}
                         <div>
                           {(() => {
-                            const filtered = (trigger.bin_values || [])
-                              .filter(bv => !bv.isExcluded && (bv.gpValue || 0) > 0 && !bv.bin?.startsWith('MEDICARE:'))
+                            const allValid = (trigger.bin_values || [])
+                              .filter(bv => !bv.isExcluded && (bv.gpValue || 0) > 0 && !bv.bin?.startsWith('MEDICARE:'));
+                            const filtered = allValid
+                              .filter(bv => (bv.gpValue || 0) >= 15)
                               .sort((a, b) => (b.gpValue || 0) - (a.gpValue || 0));
+                            const hiddenCount = allValid.length - filtered.length;
                             return (
                               <>
                           <h4 className="text-xs font-semibold text-slate-400 uppercase mb-2">
@@ -750,6 +753,11 @@ export default function TriggersPage() {
                                 )}
                               </div>
                             ))}
+                            {hiddenCount > 0 && (
+                              <p className="text-[10px] text-slate-500 mt-2 px-1">
+                                {hiddenCount} entries hidden (GP below $15.00)
+                              </p>
+                            )}
                           </div>
                               </>
                             );
