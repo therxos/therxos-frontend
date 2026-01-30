@@ -81,6 +81,7 @@ export default function OpportunityApprovalPage() {
   const [deleteOpportunities, setDeleteOpportunities] = useState(true);
   const [detailsLoading, setDetailsLoading] = useState(false);
   const [itemDetails, setItemDetails] = useState<any>(null);
+  const [detailsError, setDetailsError] = useState<string | null>(null);
 
   // Sorting state
   const [sortColumn, setSortColumn] = useState<string>('created_at');
@@ -193,6 +194,7 @@ export default function OpportunityApprovalPage() {
 
   async function fetchItemDetails(id: string) {
     setDetailsLoading(true);
+    setDetailsError(null);
     try {
       const token = localStorage.getItem('therxos_token');
       const res = await fetch(`${API_URL}/api/opportunity-approval/${id}`, {
@@ -201,9 +203,13 @@ export default function OpportunityApprovalPage() {
       if (res.ok) {
         const data = await res.json();
         setItemDetails(data);
+      } else {
+        const errData = await res.json().catch(() => ({}));
+        setDetailsError(errData.error || `Server returned ${res.status}`);
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error('Failed to fetch details:', err);
+      setDetailsError(err.message || 'Network error');
     } finally {
       setDetailsLoading(false);
     }
@@ -1017,6 +1023,7 @@ export default function OpportunityApprovalPage() {
                   setShowDetailsModal(false);
                   setSelectedItem(null);
                   setItemDetails(null);
+                  setDetailsError(null);
                 }}
                 className="p-2 hover:bg-[#1e3a5f] rounded-lg text-slate-400 hover:text-white transition-colors"
               >
@@ -1446,7 +1453,8 @@ export default function OpportunityApprovalPage() {
               </div>
             ) : (
               <div className="text-center py-12 text-slate-400">
-                Failed to load details
+                <p>Failed to load details</p>
+                {detailsError && <p className="text-xs text-red-400 mt-2">{detailsError}</p>}
               </div>
             )}
 
