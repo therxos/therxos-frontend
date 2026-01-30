@@ -708,7 +708,7 @@ export default function TriggersPage() {
                         <div>
                           {(() => {
                             const filtered = (trigger.bin_values || [])
-                              .filter(bv => !bv.isExcluded && (bv.gpValue || 0) >= 15 && !bv.bin?.startsWith('MEDICARE:'))
+                              .filter(bv => !bv.isExcluded && (bv.gpValue || 0) > 0 && !bv.bin?.startsWith('MEDICARE:'))
                               .sort((a, b) => (b.gpValue || 0) - (a.gpValue || 0));
                             return (
                               <>
@@ -734,10 +734,19 @@ export default function TriggersPage() {
                                     )}
                                   </div>
                                 </div>
-                                {bv.bestDrugName && (
-                                  <span className="text-[10px] text-blue-400 truncate" title={bv.bestDrugName}>
-                                    {bv.bestDrugName}
-                                  </span>
+                                {(bv.bestDrugName || bv.bestNdc) && (
+                                  <div className="flex items-center gap-2">
+                                    {bv.bestDrugName && (
+                                      <span className="text-[10px] text-blue-400 truncate" title={bv.bestDrugName}>
+                                        {bv.bestDrugName}
+                                      </span>
+                                    )}
+                                    {bv.bestNdc && (
+                                      <span className="text-[10px] text-slate-500 font-mono" title="NDC">
+                                        NDC: {bv.bestNdc}
+                                      </span>
+                                    )}
+                                  </div>
                                 )}
                               </div>
                             ))}
