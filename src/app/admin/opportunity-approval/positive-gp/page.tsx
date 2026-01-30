@@ -28,6 +28,8 @@ interface Winner {
   best_gp: number;
   avg_acq_cost: number;
   avg_reimbursement: number;
+  best_ndc: string | null;
+  ndc_doesnt_matter: boolean;
 }
 
 interface DrugGroup {
@@ -397,10 +399,15 @@ function GroupRows({ group: g, isExpanded, hasMultiple, onToggle }: {
               : <ChevronRight className="w-3.5 h-3.5 text-slate-400 inline" />
           )}
         </td>
-        <td className="py-2 px-3 text-white font-medium">
-          {g.drug_name}
+        <td className="py-2 px-3">
+          <span className="text-white font-medium">{g.drug_name}</span>
           {!hasMultiple && g.entries[0] && (
             <span className="ml-2 text-slate-500 font-normal">{g.entries[0].insurance_bin}/{g.entries[0].insurance_group || '-'}</span>
+          )}
+          {g.entries[0] && (
+            <span className="block text-[10px] text-slate-500 font-mono">
+              {g.entries[0].ndc_doesnt_matter ? 'NDC doesn\'t matter' : g.entries[0].best_ndc ? `NDC: ${g.entries[0].best_ndc}` : ''}
+            </span>
           )}
         </td>
         <td className="py-2 px-3 text-right">
@@ -428,6 +435,9 @@ function GroupRows({ group: g, isExpanded, hasMultiple, onToggle }: {
             <span className="text-slate-500 font-mono">{w.insurance_bin}</span>
             <span className="text-slate-600 mx-1">/</span>
             <span className="text-slate-500 font-mono">{w.insurance_group || '-'}</span>
+            <span className="block text-[10px] text-slate-600 font-mono">
+              {w.ndc_doesnt_matter ? 'NDC doesn\'t matter' : w.best_ndc ? `NDC: ${w.best_ndc}` : ''}
+            </span>
           </td>
           <td className="py-1.5 px-3"></td>
           <td className="py-1.5 px-3 text-right text-slate-400">{w.fill_count}</td>
