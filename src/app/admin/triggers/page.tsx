@@ -670,6 +670,9 @@ export default function TriggersPage() {
                           <div>
                             <h4 className="text-xs font-semibold text-slate-400 uppercase mb-2">Recommended Drug</h4>
                             <p className="text-sm text-white">{trigger.recommended_drug || 'Not specified'}</p>
+                            {trigger.recommended_ndc && (
+                              <p className="text-xs text-slate-500 font-mono mt-1">NDC: {trigger.recommended_ndc}</p>
+                            )}
                           </div>
                           {trigger.clinical_rationale && (
                             <div>
@@ -984,14 +987,26 @@ export default function TriggersPage() {
                   </div>
                 </div>
 
-                <div>
-                  <label className="block text-xs font-medium text-slate-400 mb-1">Recommended Drug</label>
-                  <input
-                    type="text"
-                    value={editingTrigger.recommended_drug || ''}
-                    onChange={(e) => setEditingTrigger({ ...editingTrigger, recommended_drug: e.target.value })}
-                    className="w-full px-3 py-2 bg-[#0a1628] border border-[#1e3a5f] rounded-lg text-sm text-white focus:outline-none focus:border-blue-500"
-                  />
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-medium text-slate-400 mb-1">Recommended Drug</label>
+                    <input
+                      type="text"
+                      value={editingTrigger.recommended_drug || ''}
+                      onChange={(e) => setEditingTrigger({ ...editingTrigger, recommended_drug: e.target.value })}
+                      className="w-full px-3 py-2 bg-[#0a1628] border border-[#1e3a5f] rounded-lg text-sm text-white focus:outline-none focus:border-blue-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-slate-400 mb-1">Recommended NDC</label>
+                    <input
+                      type="text"
+                      value={editingTrigger.recommended_ndc || ''}
+                      onChange={(e) => setEditingTrigger({ ...editingTrigger, recommended_ndc: e.target.value })}
+                      placeholder="Auto-set by best coverage scan"
+                      className="w-full px-3 py-2 bg-[#0a1628] border border-[#1e3a5f] rounded-lg text-sm text-white placeholder-slate-600 focus:outline-none focus:border-blue-500"
+                    />
+                  </div>
                 </div>
 
                 <div>
