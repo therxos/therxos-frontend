@@ -351,8 +351,9 @@ export default function ReferenceDataPage() {
                             <tbody>
                               {allBinValues.map((bv, idx) => (
                                 <tr key={`${bv.bin}-${bv.group}-${idx}`} className="border-b border-[#1e3a5f]/30 hover:bg-[#1e3a5f]/20">
-                                  <td className="px-4 py-2 text-sm text-blue-400 max-w-64 truncate" title={bv.drugName}>
-                                    {bv.drugName}
+                                  <td className="px-4 py-2 text-sm text-blue-400 max-w-80" title={bv.drugName}>
+                                    <span className="truncate block">{bv.drugName}</span>
+                                    {bv.bestNdc && <span className="text-[10px] text-slate-500 font-mono">NDC: {bv.bestNdc}</span>}
                                   </td>
                                   <td className="px-4 py-2 text-xs text-slate-300 font-mono">
                                     {bv.bin}{bv.group ? `/${bv.group}` : ''}
