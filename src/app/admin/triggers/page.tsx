@@ -47,9 +47,12 @@ interface Trigger {
   priority: 'low' | 'medium' | 'high' | 'critical';
   annual_fills: number;
   default_gp_value: number | null;
+  keyword_match_mode: 'any' | 'all';
   is_enabled: boolean;
   created_at: string;
-  bin_restrictions: string[] | null;
+  bin_inclusions: string[] | null;
+  bin_exclusions: string[] | null;
+  group_inclusions: string[] | null;
   group_exclusions: string[] | null;
   contract_prefix_exclusions: string[] | null;
   synced_at?: string | null;
@@ -119,7 +122,9 @@ export default function TriggersPage() {
         exclude_keywords: editingTrigger.exclude_keywords?.join(', ') || '',
         if_has_keywords: editingTrigger.if_has_keywords?.join(', ') || '',
         if_not_has_keywords: editingTrigger.if_not_has_keywords?.join(', ') || '',
-        bin_restrictions: editingTrigger.bin_restrictions?.join(', ') || '',
+        bin_inclusions: editingTrigger.bin_inclusions?.join(', ') || '',
+        bin_exclusions: editingTrigger.bin_exclusions?.join(', ') || '',
+        group_inclusions: editingTrigger.group_inclusions?.join(', ') || '',
         group_exclusions: editingTrigger.group_exclusions?.join(', ') || '',
         contract_prefix_exclusions: editingTrigger.contract_prefix_exclusions?.join(', ') || '',
       });
@@ -219,9 +224,12 @@ export default function TriggersPage() {
       priority: 'medium',
       annual_fills: 12,
       default_gp_value: null,
+      keyword_match_mode: 'any',
       is_enabled: true,
       created_at: new Date().toISOString(),
-      bin_restrictions: [],
+      bin_inclusions: [],
+      bin_exclusions: [],
+      group_inclusions: [],
       group_exclusions: [],
       contract_prefix_exclusions: [],
       bin_values: [],
@@ -249,8 +257,11 @@ export default function TriggersPage() {
       priority: editingTrigger.priority,
       annualFills: editingTrigger.annual_fills,
       defaultGpValue: editingTrigger.default_gp_value,
+      keywordMatchMode: editingTrigger.keyword_match_mode || 'any',
       isEnabled: editingTrigger.is_enabled,
-      binRestrictions: parseCSV('bin_restrictions'),
+      binInclusions: parseCSV('bin_inclusions'),
+      binExclusions: parseCSV('bin_exclusions'),
+      groupInclusions: parseCSV('group_inclusions'),
       groupExclusions: parseCSV('group_exclusions'),
       contractPrefixExclusions: parseCSV('contract_prefix_exclusions'),
     };
@@ -903,7 +914,7 @@ export default function TriggersPage() {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-3 gap-4">
+                <div className="grid grid-cols-4 gap-4">
                   <div>
                     <label className="block text-xs font-medium text-slate-400 mb-1">Type</label>
                     <select
@@ -933,7 +944,7 @@ export default function TriggersPage() {
                     </select>
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-slate-400 mb-1">Default GP Value ($)</label>
+                    <label className="block text-xs font-medium text-slate-400 mb-1">Default GP / Fill ($)</label>
                     <input
                       type="number"
                       step="0.01"
@@ -942,15 +953,54 @@ export default function TriggersPage() {
                       className="w-full px-3 py-2 bg-[#0a1628] border border-[#1e3a5f] rounded-lg text-sm text-white focus:outline-none focus:border-blue-500"
                     />
                   </div>
+                  <div>
+                    <label className="block text-xs font-medium text-slate-400 mb-1">Annual Fills</label>
+                    <input
+                      type="number"
+                      step="1"
+                      min="1"
+                      value={editingTrigger.annual_fills}
+                      onChange={(e) => setEditingTrigger({ ...editingTrigger, annual_fills: parseInt(e.target.value) || 1 })}
+                      className="w-full px-3 py-2 bg-[#0a1628] border border-[#1e3a5f] rounded-lg text-sm text-white focus:outline-none focus:border-blue-500"
+                      placeholder="12"
+                    />
+                  </div>
                 </div>
 
                 <div>
-                  <label className="block text-xs font-medium text-slate-400 mb-1">Detection Keywords (comma-separated)</label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-xs font-medium text-slate-400">Detection Keywords (comma-separated)</label>
+                    <div className="flex items-center gap-1 bg-[#0a1628] border border-[#1e3a5f] rounded-lg overflow-hidden">
+                      <button
+                        type="button"
+                        onClick={() => setEditingTrigger({ ...editingTrigger, keyword_match_mode: 'any' })}
+                        className={`px-2 py-0.5 text-[10px] font-medium transition-colors ${
+                          (editingTrigger.keyword_match_mode || 'any') === 'any'
+                            ? 'bg-blue-600 text-white'
+                            : 'text-slate-400 hover:text-white'
+                        }`}
+                      >
+                        ANY
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setEditingTrigger({ ...editingTrigger, keyword_match_mode: 'all' })}
+                        className={`px-2 py-0.5 text-[10px] font-medium transition-colors ${
+                          editingTrigger.keyword_match_mode === 'all'
+                            ? 'bg-blue-600 text-white'
+                            : 'text-slate-400 hover:text-white'
+                        }`}
+                      >
+                        ALL
+                      </button>
+                    </div>
+                  </div>
                   <input
                     type="text"
                     value={rawKeywords.detection_keywords || ''}
                     onChange={(e) => setRawKeywords({ ...rawKeywords, detection_keywords: e.target.value })}
                     className="w-full px-3 py-2 bg-[#0a1628] border border-[#1e3a5f] rounded-lg text-sm text-white focus:outline-none focus:border-blue-500"
+                    placeholder={editingTrigger.keyword_match_mode === 'all' ? 'Drug must contain ALL keywords' : 'Drug must contain ANY keyword'}
                   />
                 </div>
 
@@ -1021,13 +1071,36 @@ export default function TriggersPage() {
 
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-xs font-medium text-slate-400 mb-1">BIN Restrictions (comma-separated)</label>
+                    <label className="block text-xs font-medium text-slate-400 mb-1">BIN Inclusions (comma-separated)</label>
                     <input
                       type="text"
-                      value={rawKeywords.bin_restrictions || ''}
-                      onChange={(e) => setRawKeywords({ ...rawKeywords, bin_restrictions: e.target.value })}
+                      value={rawKeywords.bin_inclusions || ''}
+                      onChange={(e) => setRawKeywords({ ...rawKeywords, bin_inclusions: e.target.value })}
                       className="w-full px-3 py-2 bg-[#0a1628] border border-[#1e3a5f] rounded-lg text-sm text-white focus:outline-none focus:border-blue-500"
-                      placeholder="e.g., 004336, 610014"
+                      placeholder="Only these BINs (e.g., 610502)"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-slate-400 mb-1">BIN Exclusions (comma-separated)</label>
+                    <input
+                      type="text"
+                      value={rawKeywords.bin_exclusions || ''}
+                      onChange={(e) => setRawKeywords({ ...rawKeywords, bin_exclusions: e.target.value })}
+                      className="w-full px-3 py-2 bg-[#0a1628] border border-[#1e3a5f] rounded-lg text-sm text-white focus:outline-none focus:border-blue-500"
+                      placeholder="Exclude these BINs"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-medium text-slate-400 mb-1">Group Inclusions (comma-separated)</label>
+                    <input
+                      type="text"
+                      value={rawKeywords.group_inclusions || ''}
+                      onChange={(e) => setRawKeywords({ ...rawKeywords, group_inclusions: e.target.value })}
+                      className="w-full px-3 py-2 bg-[#0a1628] border border-[#1e3a5f] rounded-lg text-sm text-white focus:outline-none focus:border-blue-500"
+                      placeholder="Only these groups"
                     />
                   </div>
                   <div>
@@ -1037,7 +1110,7 @@ export default function TriggersPage() {
                       value={rawKeywords.group_exclusions || ''}
                       onChange={(e) => setRawKeywords({ ...rawKeywords, group_exclusions: e.target.value })}
                       className="w-full px-3 py-2 bg-[#0a1628] border border-[#1e3a5f] rounded-lg text-sm text-white focus:outline-none focus:border-blue-500"
-                      placeholder="e.g., RX1234, RX5678"
+                      placeholder="Exclude these groups"
                     />
                   </div>
                 </div>
