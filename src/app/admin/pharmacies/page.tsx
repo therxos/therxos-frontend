@@ -22,6 +22,7 @@ import {
   Download,
   ChevronDown,
   ChevronUp,
+  Phone,
 } from 'lucide-react';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL;
@@ -49,6 +50,12 @@ interface Pharmacy {
   captured_value?: number;
   user_count?: number;
   last_activity?: string;
+  // Settings
+  settings?: {
+    faxEnabled?: boolean;
+    autoFaxEnabled?: boolean;
+    [key: string]: any;
+  } | null;
   // Document tracking
   baa_signed_at?: string;
   service_agreement_signed_at?: string;
@@ -404,6 +411,33 @@ export default function PharmaciesPage() {
     }
   }
 
+  async function toggleFaxEnabled(pharmacyId: string, currentlyEnabled: boolean) {
+    setActionLoading(`fax-${pharmacyId}`);
+    try {
+      const token = localStorage.getItem('therxos_token');
+      const res = await fetch(`${API_URL}/api/admin/pharmacies/${pharmacyId}/fax-settings`, {
+        method: 'PATCH',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ faxEnabled: !currentlyEnabled }),
+      });
+
+      if (res.ok) {
+        fetchPharmacies();
+      } else {
+        const data = await res.json();
+        alert('Failed to update fax settings: ' + (data.error || 'Unknown error'));
+      }
+    } catch (err) {
+      console.error('Fax toggle error:', err);
+      alert('Failed to update fax settings');
+    } finally {
+      setActionLoading(null);
+    }
+  }
+
   const filteredPharmacies = (pharmacies || []).filter(p => {
     if (!p) return false;
     const matchesSearch =
@@ -687,6 +721,32 @@ export default function PharmaciesPage() {
                     <RefreshCw className={`w-3.5 h-3.5 ${pollingPharmacy === pharmacy.pharmacy_id ? 'animate-spin' : ''}`} />
                     {pollingPharmacy === pharmacy.pharmacy_id ? 'Polling...' : 'Poll Now'}
                   </button>
+                </div>
+
+                {/* Fax Settings */}
+                <div className="bg-[#0a1628] rounded-lg p-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Phone className="w-4 h-4 text-slate-400" />
+                      <span className="text-xs font-medium text-slate-300">Fax API</span>
+                    </div>
+                    <button
+                      onClick={() => toggleFaxEnabled(pharmacy.pharmacy_id, !!pharmacy.settings?.faxEnabled)}
+                      disabled={actionLoading === `fax-${pharmacy.pharmacy_id}`}
+                      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                        pharmacy.settings?.faxEnabled ? 'bg-teal-500' : 'bg-slate-600'
+                      } ${actionLoading === `fax-${pharmacy.pharmacy_id}` ? 'opacity-50' : ''}`}
+                    >
+                      <span
+                        className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                          pharmacy.settings?.faxEnabled ? 'translate-x-6' : 'translate-x-1'
+                        }`}
+                      />
+                    </button>
+                  </div>
+                  <p className="text-xs text-slate-500 mt-1">
+                    {pharmacy.settings?.faxEnabled ? 'Pharmacy can send faxes via API' : 'Fax sending disabled'}
+                  </p>
                 </div>
 
                 {/* Action Buttons */}

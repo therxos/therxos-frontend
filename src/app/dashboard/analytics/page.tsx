@@ -19,6 +19,9 @@ import {
   CheckCircle,
   AlertTriangle,
   Calendar,
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown,
 } from 'lucide-react';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://therxos-backend-production.up.railway.app';
@@ -130,6 +133,27 @@ function formatNumber(value: number): string {
   return new Intl.NumberFormat('en-US').format(value);
 }
 
+function SortIcon({ sortKey, currentKey, direction }: { sortKey: string; currentKey: string | null; direction: 'asc' | 'desc' }) {
+  if (currentKey !== sortKey) return <ArrowUpDown className="w-3 h-3 text-slate-600 ml-1 inline" />;
+  return direction === 'asc'
+    ? <ArrowUp className="w-3 h-3 text-[#14b8a6] ml-1 inline" />
+    : <ArrowDown className="w-3 h-3 text-[#14b8a6] ml-1 inline" />;
+}
+
+function sortData<T extends Record<string, unknown>>(data: T[], key: string | null, direction: 'asc' | 'desc'): T[] {
+  if (!key) return data;
+  return [...data].sort((a, b) => {
+    const aVal = a[key];
+    const bVal = b[key];
+    if (typeof aVal === 'number' && typeof bVal === 'number') {
+      return direction === 'asc' ? aVal - bVal : bVal - aVal;
+    }
+    const aStr = String(aVal || '').toLowerCase();
+    const bStr = String(bVal || '').toLowerCase();
+    return direction === 'asc' ? aStr.localeCompare(bStr) : bStr.localeCompare(aStr);
+  });
+}
+
 // Expandable section for BIN/Group/Prescriber breakdowns
 function BreakdownSection({
   title,
@@ -148,8 +172,20 @@ function BreakdownSection({
   onToggle: () => void;
   color: string;
 }) {
-  const sortedData = [...data].sort((a, b) => (b.gp_per_rx as number) - (a.gp_per_rx as number));
+  const [sortKey, setSortKey] = useState<string>('gp_per_rx');
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
+
+  const sortedData = sortData(data, sortKey, sortDir);
   const avgGpRx = data.length > 0 ? data.reduce((s, d) => s + (d.gp_per_rx as number), 0) / data.length : 0;
+
+  function handleSort(key: string) {
+    if (sortKey === key) {
+      setSortDir(sortDir === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortKey(key);
+      setSortDir('desc');
+    }
+  }
 
   const colorClasses: Record<string, { bg: string; text: string }> = {
     teal: { bg: 'bg-[#14b8a6]/20', text: 'text-[#14b8a6]' },
@@ -190,11 +226,13 @@ function BreakdownSection({
                 {columns.map((col) => (
                   <th
                     key={col.key}
-                    className={`text-xs font-semibold text-slate-400 uppercase tracking-wider px-4 py-3 ${
+                    onClick={() => handleSort(col.key)}
+                    className={`text-xs font-semibold text-slate-400 uppercase tracking-wider px-4 py-3 cursor-pointer hover:text-white select-none transition-colors ${
                       col.align === 'right' ? 'text-right' : 'text-left'
                     }`}
                   >
                     {col.label}
+                    <SortIcon sortKey={col.key} currentKey={sortKey} direction={sortDir} />
                   </th>
                 ))}
               </tr>
@@ -233,6 +271,8 @@ export default function AnalyticsPage() {
   const [drugStats, setDrugStats] = useState<RecommendedDrugStatsData | null>(null);
   const [loading, setLoading] = useState(true);
   const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set(['bin', 'prescriberOpps']));
+  const [prescriberSort, setPrescriberSort] = useState<{ key: string; dir: 'asc' | 'desc' }>({ key: 'annual_potential', dir: 'desc' });
+  const [drugSort, setDrugSort] = useState<{ key: string; dir: 'asc' | 'desc' }>({ key: 'annual_potential', dir: 'desc' });
 
   async function fetchAnalytics() {
     setLoading(true);
@@ -511,18 +551,33 @@ export default function AnalyticsPage() {
                     <table className="w-full">
                       <thead className="bg-[#1e3a5f]/50">
                         <tr>
-                          <th className="text-xs font-semibold text-slate-400 uppercase tracking-wider px-4 py-3 text-left">Prescriber</th>
-                          <th className="text-xs font-semibold text-slate-400 uppercase tracking-wider px-4 py-3 text-right">Patients</th>
-                          <th className="text-xs font-semibold text-slate-400 uppercase tracking-wider px-4 py-3 text-right">Opps</th>
-                          <th className="text-xs font-semibold text-slate-400 uppercase tracking-wider px-4 py-3 text-right">Monthly</th>
-                          <th className="text-xs font-semibold text-slate-400 uppercase tracking-wider px-4 py-3 text-right">Annual</th>
-                          <th className="text-xs font-semibold text-slate-400 uppercase tracking-wider px-4 py-3 text-right">Avg/Opp</th>
-                          <th className="text-xs font-semibold text-slate-400 uppercase tracking-wider px-4 py-3 text-right" title="Opportunities actioned for this prescriber in the last 7 days">Last 7 Days</th>
-                          <th className="text-xs font-semibold text-slate-400 uppercase tracking-wider px-4 py-3 text-right">Action Rate</th>
+                          {[
+                            { key: 'prescriber_name', label: 'Prescriber', align: 'left' },
+                            { key: 'patient_count', label: 'Patients', align: 'right' },
+                            { key: 'opportunity_count', label: 'Opps', align: 'right' },
+                            { key: 'monthly_potential', label: 'Monthly', align: 'right' },
+                            { key: 'annual_potential', label: 'Annual', align: 'right' },
+                            { key: 'avg_opportunity_value', label: 'Avg/Opp', align: 'right' },
+                            { key: 'actioned_last_7_days', label: 'Last 7 Days', align: 'right' },
+                            { key: 'action_rate', label: 'Action Rate', align: 'right' },
+                          ].map((col) => (
+                            <th
+                              key={col.key}
+                              onClick={() => setPrescriberSort(prev => ({
+                                key: col.key,
+                                dir: prev.key === col.key ? (prev.dir === 'asc' ? 'desc' : 'asc') : 'desc'
+                              }))}
+                              className={`text-xs font-semibold text-slate-400 uppercase tracking-wider px-4 py-3 cursor-pointer hover:text-white select-none transition-colors text-${col.align}`}
+                              title={col.key === 'actioned_last_7_days' ? 'Opportunities actioned for this prescriber in the last 7 days' : undefined}
+                            >
+                              {col.label}
+                              <SortIcon sortKey={col.key} currentKey={prescriberSort.key} direction={prescriberSort.dir} />
+                            </th>
+                          ))}
                         </tr>
                       </thead>
                       <tbody>
-                        {prescriberStats.top_by_value.map((row, idx) => (
+                        {sortData(prescriberStats.top_by_value, prescriberSort.key, prescriberSort.dir).map((row, idx) => (
                           <tr key={idx} className="border-t border-[#1e3a5f] hover:bg-[#1e3a5f]/20">
                             <td className="px-4 py-3 text-sm text-slate-300">{row.prescriber_name}</td>
                             <td className="px-4 py-3 text-sm text-slate-300 text-right">{formatNumber(row.patient_count)}</td>
@@ -583,18 +638,32 @@ export default function AnalyticsPage() {
                     <table className="w-full">
                       <thead className="bg-[#1e3a5f]/50">
                         <tr>
-                          <th className="text-xs font-semibold text-slate-400 uppercase tracking-wider px-4 py-3 text-left">Recommended Drug</th>
-                          <th className="text-xs font-semibold text-slate-400 uppercase tracking-wider px-4 py-3 text-right">Patients</th>
-                          <th className="text-xs font-semibold text-slate-400 uppercase tracking-wider px-4 py-3 text-right">Opps</th>
-                          <th className="text-xs font-semibold text-slate-400 uppercase tracking-wider px-4 py-3 text-right">Avg GP/Fill</th>
-                          <th className="text-xs font-semibold text-slate-400 uppercase tracking-wider px-4 py-3 text-right">Annual</th>
-                          <th className="text-xs font-semibold text-slate-400 uppercase tracking-wider px-4 py-3 text-right">Pending</th>
-                          <th className="text-xs font-semibold text-slate-400 uppercase tracking-wider px-4 py-3 text-right">In Progress</th>
-                          <th className="text-xs font-semibold text-slate-400 uppercase tracking-wider px-4 py-3 text-right">Captured</th>
+                          {[
+                            { key: 'recommended_drug', label: 'Recommended Drug', align: 'left' },
+                            { key: 'patient_count', label: 'Patients', align: 'right' },
+                            { key: 'opportunity_count', label: 'Opps', align: 'right' },
+                            { key: 'avg_gp_per_fill', label: 'Avg GP/Fill', align: 'right' },
+                            { key: 'annual_potential', label: 'Annual', align: 'right' },
+                            { key: 'pending', label: 'Pending', align: 'right' },
+                            { key: 'in_progress', label: 'In Progress', align: 'right' },
+                            { key: 'captured', label: 'Captured', align: 'right' },
+                          ].map((col) => (
+                            <th
+                              key={col.key}
+                              onClick={() => setDrugSort(prev => ({
+                                key: col.key,
+                                dir: prev.key === col.key ? (prev.dir === 'asc' ? 'desc' : 'asc') : 'desc'
+                              }))}
+                              className={`text-xs font-semibold text-slate-400 uppercase tracking-wider px-4 py-3 cursor-pointer hover:text-white select-none transition-colors text-${col.align}`}
+                            >
+                              {col.label}
+                              <SortIcon sortKey={col.key} currentKey={drugSort.key} direction={drugSort.dir} />
+                            </th>
+                          ))}
                         </tr>
                       </thead>
                       <tbody>
-                        {drugStats.top_recommended_drugs.map((row, idx) => (
+                        {sortData(drugStats.top_recommended_drugs, drugSort.key, drugSort.dir).map((row, idx) => (
                           <tr key={idx} className="border-t border-[#1e3a5f] hover:bg-[#1e3a5f]/20">
                             <td className="px-4 py-3 text-sm text-slate-300">{row.recommended_drug}</td>
                             <td className="px-4 py-3 text-sm text-slate-300 text-right">{formatNumber(row.patient_count)}</td>
