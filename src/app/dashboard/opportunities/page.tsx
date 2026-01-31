@@ -2148,8 +2148,10 @@ export default function OpportunitiesPage() {
                       <tbody>
                         {group.opportunities.map(opp => {
                           const [rationale, action] = (opp.clinical_rationale || '').split('\n\nAction: ');
+                          const altCount = opp.alternatives?.length || 0;
                           return (
-                            <tr key={opp.opportunity_id} className="border-t border-[#1e3a5f] hover:bg-[#1e3a5f]/30">
+                            <React.Fragment key={opp.opportunity_id}>
+                            <tr className="border-t border-[#1e3a5f] hover:bg-[#1e3a5f]/30">
                               {groupBy !== 'patient' && (
                                 <td className="px-5 py-3">
                                   <div className="font-medium text-white">
@@ -2164,6 +2166,24 @@ export default function OpportunitiesPage() {
                                     {opp.current_drug_name || 'N/A'} → <span className="text-[#14b8a6]">{opp.recommended_drug_name}</span>
                                   </span>
                                   <CoverageConfidenceBadge confidence={opp.coverage_confidence} size="xs" />
+                                  {altCount > 0 && (
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setExpanded(prev => {
+                                          const next = new Set(prev);
+                                          const altKey = `alt-${opp.opportunity_id}`;
+                                          if (next.has(altKey)) next.delete(altKey);
+                                          else next.add(altKey);
+                                          return next;
+                                        });
+                                      }}
+                                      className="px-1.5 py-0.5 text-[10px] font-medium bg-[#1e3a5f] hover:bg-[#2d4a6f] text-blue-300 rounded transition-colors"
+                                      title={`${altCount} alternative${altCount > 1 ? 's' : ''} available`}
+                                    >
+                                      +{altCount} alt{altCount > 1 ? 's' : ''}
+                                    </button>
+                                  )}
                                 </div>
                               </td>
                               <td className="px-5 py-3">
@@ -2215,6 +2235,37 @@ export default function OpportunitiesPage() {
                                 </button>
                               </td>
                             </tr>
+                            {altCount > 0 && expanded.has(`alt-${opp.opportunity_id}`) && (
+                              opp.alternatives.map((alt: any, i: number) => (
+                                <tr key={`alt-${alt.opportunity_id}`} className="border-t border-[#1e3a5f]/50 bg-[#0a1628]">
+                                  {groupBy !== 'patient' && <td className="px-5 py-2"></td>}
+                                  <td className="px-5 py-2 pl-10">
+                                    <div className="flex items-center gap-2">
+                                      <span className="text-xs text-slate-500">↳</span>
+                                      <span className="text-sm text-slate-300">
+                                        Alt {i + 1}: <span className="text-[#14b8a6]/70">{alt.recommended_drug_name}</span>
+                                      </span>
+                                      <CoverageConfidenceBadge confidence={alt.coverage_confidence} size="xs" />
+                                    </div>
+                                  </td>
+                                  <td className="px-5 py-2"></td>
+                                  {showAnyFinancials && (
+                                    <>
+                                      <td className="px-5 py-2">
+                                        <div className="text-sm text-emerald-400/70">{formatCurrency(Number(alt.potential_margin_gain) || 0)}</div>
+                                      </td>
+                                      <td className="px-5 py-2">
+                                        <div className="text-xs text-slate-500">
+                                          {alt.avg_dispensed_qty ? Number(alt.avg_dispensed_qty).toFixed(1) : '-'}
+                                        </div>
+                                      </td>
+                                    </>
+                                  )}
+                                  <td colSpan={4} className="px-5 py-2"></td>
+                                </tr>
+                              ))
+                            )}
+                            </React.Fragment>
                           );
                         })}
                       </tbody>
