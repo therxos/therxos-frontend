@@ -967,73 +967,96 @@ export default function TriggersPage() {
                   </div>
                 </div>
 
-                <div>
-                  <div className="flex items-center justify-between mb-1">
-                    <label className="block text-xs font-medium text-slate-400">Detection Keywords (comma-separated)</label>
-                    <div className="flex items-center gap-1 bg-[#0a1628] border border-[#1e3a5f] rounded-lg overflow-hidden">
-                      <button
-                        type="button"
-                        onClick={() => setEditingTrigger({ ...editingTrigger, keyword_match_mode: 'any' })}
-                        className={`px-2 py-0.5 text-[10px] font-medium transition-colors ${
-                          (editingTrigger.keyword_match_mode || 'any') === 'any'
-                            ? 'bg-blue-600 text-white'
-                            : 'text-slate-400 hover:text-white'
-                        }`}
-                      >
-                        ANY
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setEditingTrigger({ ...editingTrigger, keyword_match_mode: 'all' })}
-                        className={`px-2 py-0.5 text-[10px] font-medium transition-colors ${
-                          editingTrigger.keyword_match_mode === 'all'
-                            ? 'bg-blue-600 text-white'
-                            : 'text-slate-400 hover:text-white'
-                        }`}
-                      >
-                        ALL
-                      </button>
+                {/* === DRUG NAME MATCHING === */}
+                <div className="border border-[#1e3a5f]/50 rounded-lg p-3 space-y-3">
+                  <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Drug Name Matching</p>
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="block text-xs font-medium text-slate-400" title="Keywords matched against the drug name on the prescription. Use ANY to match if the drug contains at least one keyword, or ALL to require every keyword is present.">
+                        Detection Keywords
+                        <span className="ml-1 text-[10px] text-slate-600">(matched against drug name on Rx)</span>
+                      </label>
+                      <div className="flex items-center gap-1 bg-[#0a1628] border border-[#1e3a5f] rounded-lg overflow-hidden">
+                        <button
+                          type="button"
+                          onClick={() => setEditingTrigger({ ...editingTrigger, keyword_match_mode: 'any' })}
+                          className={`px-2 py-0.5 text-[10px] font-medium transition-colors ${
+                            (editingTrigger.keyword_match_mode || 'any') === 'any'
+                              ? 'bg-blue-600 text-white'
+                              : 'text-slate-400 hover:text-white'
+                          }`}
+                          title="Drug matches if it contains ANY one of these keywords"
+                        >
+                          ANY
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setEditingTrigger({ ...editingTrigger, keyword_match_mode: 'all' })}
+                          className={`px-2 py-0.5 text-[10px] font-medium transition-colors ${
+                            editingTrigger.keyword_match_mode === 'all'
+                              ? 'bg-blue-600 text-white'
+                              : 'text-slate-400 hover:text-white'
+                          }`}
+                          title="Drug matches only if it contains ALL of these keywords"
+                        >
+                          ALL
+                        </button>
+                      </div>
                     </div>
-                  </div>
-                  <input
-                    type="text"
-                    value={rawKeywords.detection_keywords || ''}
-                    onChange={(e) => setRawKeywords({ ...rawKeywords, detection_keywords: e.target.value })}
-                    className="w-full px-3 py-2 bg-[#0a1628] border border-[#1e3a5f] rounded-lg text-sm text-white focus:outline-none focus:border-blue-500"
-                    placeholder={editingTrigger.keyword_match_mode === 'all' ? 'Drug must contain ALL keywords' : 'Drug must contain ANY keyword'}
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-medium text-slate-400 mb-1">Exclude Keywords (comma-separated)</label>
-                  <input
-                    type="text"
-                    value={rawKeywords.exclude_keywords || ''}
-                    onChange={(e) => setRawKeywords({ ...rawKeywords, exclude_keywords: e.target.value })}
-                    className="w-full px-3 py-2 bg-[#0a1628] border border-[#1e3a5f] rounded-lg text-sm text-white focus:outline-none focus:border-blue-500"
-                  />
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-xs font-medium text-slate-400 mb-1">Required Keywords (comma-separated)</label>
                     <input
                       type="text"
-                      value={rawKeywords.if_has_keywords || ''}
-                      onChange={(e) => setRawKeywords({ ...rawKeywords, if_has_keywords: e.target.value })}
+                      value={rawKeywords.detection_keywords || ''}
+                      onChange={(e) => setRawKeywords({ ...rawKeywords, detection_keywords: e.target.value })}
                       className="w-full px-3 py-2 bg-[#0a1628] border border-[#1e3a5f] rounded-lg text-sm text-white focus:outline-none focus:border-blue-500"
-                      placeholder="Patient must also have these drugs"
+                      placeholder={editingTrigger.keyword_match_mode === 'all' ? 'e.g. losartan, hctz - drug must contain BOTH' : 'e.g. abilify, aripiprazole - drug can match EITHER'}
                     />
                   </div>
+
                   <div>
-                    <label className="block text-xs font-medium text-slate-400 mb-1">Exclude If Has (comma-separated)</label>
+                    <label className="block text-xs font-medium text-slate-400 mb-1" title="If the drug name contains any of these keywords, skip it even if detection keywords matched.">
+                      Exclude Keywords
+                      <span className="ml-1 text-[10px] text-slate-600">(skip drug if name contains these)</span>
+                    </label>
                     <input
                       type="text"
-                      value={rawKeywords.if_not_has_keywords || ''}
-                      onChange={(e) => setRawKeywords({ ...rawKeywords, if_not_has_keywords: e.target.value })}
+                      value={rawKeywords.exclude_keywords || ''}
+                      onChange={(e) => setRawKeywords({ ...rawKeywords, exclude_keywords: e.target.value })}
                       className="w-full px-3 py-2 bg-[#0a1628] border border-[#1e3a5f] rounded-lg text-sm text-white focus:outline-none focus:border-blue-500"
-                      placeholder="Skip if patient has these drugs"
+                      placeholder="e.g. ODT, cream - ignore these formulations"
                     />
+                  </div>
+                </div>
+
+                {/* === PATIENT PROFILE CONDITIONS === */}
+                <div className="border border-[#1e3a5f]/50 rounded-lg p-3 space-y-3">
+                  <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Patient Profile Conditions</p>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs font-medium text-slate-400 mb-1" title="Check the patient's OTHER medications. Only create opportunity if the patient is also taking one of these drugs.">
+                        Patient Must Also Take
+                        <span className="ml-1 text-[10px] text-slate-600">(checks other Rx)</span>
+                      </label>
+                      <input
+                        type="text"
+                        value={rawKeywords.if_has_keywords || ''}
+                        onChange={(e) => setRawKeywords({ ...rawKeywords, if_has_keywords: e.target.value })}
+                        className="w-full px-3 py-2 bg-[#0a1628] border border-[#1e3a5f] rounded-lg text-sm text-white focus:outline-none focus:border-blue-500"
+                        placeholder="e.g. metformin, insulin"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-slate-400 mb-1" title="Check the patient's OTHER medications. Skip this patient if they are already taking one of these drugs.">
+                        Skip If Patient Takes
+                        <span className="ml-1 text-[10px] text-slate-600">(checks other Rx)</span>
+                      </label>
+                      <input
+                        type="text"
+                        value={rawKeywords.if_not_has_keywords || ''}
+                        onChange={(e) => setRawKeywords({ ...rawKeywords, if_not_has_keywords: e.target.value })}
+                        className="w-full px-3 py-2 bg-[#0a1628] border border-[#1e3a5f] rounded-lg text-sm text-white focus:outline-none focus:border-blue-500"
+                        placeholder="e.g. rosuvastatin - already on therapy"
+                      />
+                    </div>
                   </div>
                 </div>
 
@@ -1069,49 +1092,65 @@ export default function TriggersPage() {
                   />
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-xs font-medium text-slate-400 mb-1">BIN Inclusions (comma-separated)</label>
-                    <input
-                      type="text"
-                      value={rawKeywords.bin_inclusions || ''}
-                      onChange={(e) => setRawKeywords({ ...rawKeywords, bin_inclusions: e.target.value })}
-                      className="w-full px-3 py-2 bg-[#0a1628] border border-[#1e3a5f] rounded-lg text-sm text-white focus:outline-none focus:border-blue-500"
-                      placeholder="Only these BINs (e.g., 610502)"
-                    />
+                {/* === INSURANCE FILTERS === */}
+                <div className="border border-[#1e3a5f]/50 rounded-lg p-3 space-y-3">
+                  <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Insurance Filters</p>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs font-medium text-slate-400 mb-1" title="Only create opportunities for patients on these BINs. Leave empty to include all BINs.">
+                        BIN Inclusions
+                        <span className="ml-1 text-[10px] text-slate-600">(only these)</span>
+                      </label>
+                      <input
+                        type="text"
+                        value={rawKeywords.bin_inclusions || ''}
+                        onChange={(e) => setRawKeywords({ ...rawKeywords, bin_inclusions: e.target.value })}
+                        className="w-full px-3 py-2 bg-[#0a1628] border border-[#1e3a5f] rounded-lg text-sm text-white focus:outline-none focus:border-blue-500"
+                        placeholder="e.g. 610502 - only this BIN"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-slate-400 mb-1" title="Never create opportunities for patients on these BINs.">
+                        BIN Exclusions
+                        <span className="ml-1 text-[10px] text-slate-600">(never these)</span>
+                      </label>
+                      <input
+                        type="text"
+                        value={rawKeywords.bin_exclusions || ''}
+                        onChange={(e) => setRawKeywords({ ...rawKeywords, bin_exclusions: e.target.value })}
+                        className="w-full px-3 py-2 bg-[#0a1628] border border-[#1e3a5f] rounded-lg text-sm text-white focus:outline-none focus:border-blue-500"
+                        placeholder="e.g. 014798 - skip this BIN"
+                      />
+                    </div>
                   </div>
-                  <div>
-                    <label className="block text-xs font-medium text-slate-400 mb-1">BIN Exclusions (comma-separated)</label>
-                    <input
-                      type="text"
-                      value={rawKeywords.bin_exclusions || ''}
-                      onChange={(e) => setRawKeywords({ ...rawKeywords, bin_exclusions: e.target.value })}
-                      className="w-full px-3 py-2 bg-[#0a1628] border border-[#1e3a5f] rounded-lg text-sm text-white focus:outline-none focus:border-blue-500"
-                      placeholder="Exclude these BINs"
-                    />
-                  </div>
-                </div>
 
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-xs font-medium text-slate-400 mb-1">Group Inclusions (comma-separated)</label>
-                    <input
-                      type="text"
-                      value={rawKeywords.group_inclusions || ''}
-                      onChange={(e) => setRawKeywords({ ...rawKeywords, group_inclusions: e.target.value })}
-                      className="w-full px-3 py-2 bg-[#0a1628] border border-[#1e3a5f] rounded-lg text-sm text-white focus:outline-none focus:border-blue-500"
-                      placeholder="Only these groups"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-slate-400 mb-1">Group Exclusions (comma-separated)</label>
-                    <input
-                      type="text"
-                      value={rawKeywords.group_exclusions || ''}
-                      onChange={(e) => setRawKeywords({ ...rawKeywords, group_exclusions: e.target.value })}
-                      className="w-full px-3 py-2 bg-[#0a1628] border border-[#1e3a5f] rounded-lg text-sm text-white focus:outline-none focus:border-blue-500"
-                      placeholder="Exclude these groups"
-                    />
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs font-medium text-slate-400 mb-1" title="Only create opportunities for patients in these insurance groups. Leave empty to include all groups.">
+                        Group Inclusions
+                        <span className="ml-1 text-[10px] text-slate-600">(only these)</span>
+                      </label>
+                      <input
+                        type="text"
+                        value={rawKeywords.group_inclusions || ''}
+                        onChange={(e) => setRawKeywords({ ...rawKeywords, group_inclusions: e.target.value })}
+                        className="w-full px-3 py-2 bg-[#0a1628] border border-[#1e3a5f] rounded-lg text-sm text-white focus:outline-none focus:border-blue-500"
+                        placeholder="e.g. MPDCSP - only this group"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-slate-400 mb-1" title="Never create opportunities for patients in these insurance groups.">
+                        Group Exclusions
+                        <span className="ml-1 text-[10px] text-slate-600">(never these)</span>
+                      </label>
+                      <input
+                        type="text"
+                        value={rawKeywords.group_exclusions || ''}
+                        onChange={(e) => setRawKeywords({ ...rawKeywords, group_exclusions: e.target.value })}
+                        className="w-full px-3 py-2 bg-[#0a1628] border border-[#1e3a5f] rounded-lg text-sm text-white focus:outline-none focus:border-blue-500"
+                        placeholder="e.g. RX1234 - skip this group"
+                      />
+                    </div>
                   </div>
                 </div>
 
