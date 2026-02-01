@@ -23,6 +23,14 @@ import {
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL;
 
+function formatNdc(ndc: string | null | undefined): string {
+  if (!ndc) return '';
+  const clean = ndc.replace(/\D/g, '');
+  if (clean.length === 11) return `${clean.slice(0, 5)}-${clean.slice(5, 9)}-${clean.slice(9)}`;
+  if (clean.length === 10) return `0${clean.slice(0, 4)}-${clean.slice(4, 8)}-${clean.slice(8)}`;
+  return ndc;
+}
+
 interface Pharmacy {
   pharmacy_name: string;
   phone?: string;
@@ -1179,7 +1187,7 @@ function SidePanel({
                   <div className="text-slate-500 text-xs">Recommended</div>
                   <div className="text-[#14b8a6]">{opportunity.recommended_drug_name}</div>
                   {opportunity.recommended_ndc && (
-                    <div className="text-xs text-slate-400 mt-0.5">NDC: {opportunity.recommended_ndc}</div>
+                    <div className="text-xs text-slate-400 mt-0.5">NDC: {formatNdc(opportunity.recommended_ndc)}</div>
                   )}
                 </div>
               </div>
@@ -2176,7 +2184,7 @@ export default function OpportunitiesPage() {
                                 <div className="flex items-center gap-2">
                                   <span className="text-white font-medium">
                                     {opp.current_drug_name || 'N/A'} → <span className="text-[#14b8a6]">{opp.recommended_drug_name}</span>
-                                    {opp.recommended_ndc && <span className="text-xs text-slate-400 ml-1">({opp.recommended_ndc})</span>}
+                                    {opp.recommended_ndc && <span className="text-xs text-slate-400 ml-1">(NDC: {formatNdc(opp.recommended_ndc)})</span>}
                                   </span>
                                   <CoverageConfidenceBadge confidence={opp.coverage_confidence} size="xs" />
                                   {altCount > 0 && (
