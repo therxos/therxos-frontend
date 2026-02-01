@@ -66,6 +66,14 @@ interface Opportunity {
   coverage_confidence?: 'verified' | 'likely' | 'unknown' | 'excluded';
   verified_claim_count?: number;
   avg_reimbursement?: number;
+  alternatives?: Array<{
+    opportunity_id: string;
+    recommended_drug_name: string;
+    potential_margin_gain: number;
+    annual_margin_gain: number;
+    coverage_confidence?: string;
+    avg_dispensed_qty?: number | null;
+  }>;
 }
 
 interface GroupedItem {
