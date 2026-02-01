@@ -25,7 +25,6 @@ import {
   Flag,
   Zap,
   Database,
-  Copy,
   TrendingDown,
   TrendingUp,
   Layers,
@@ -173,7 +172,6 @@ export default function AdminLayout({
     { name: 'Audit Rules', href: '/admin/audit-rules', icon: ShieldAlert },
     { name: "Didn't Work Queue", href: '/admin/didnt-work', icon: AlertCircle },
     { name: 'Data Quality', href: '/admin/data-quality', icon: Database },
-    { name: 'Deduplication', href: '/admin/deduplication', icon: Copy },
     {
       name: 'Opportunity Approval',
       href: '/admin/opportunity-approval',
