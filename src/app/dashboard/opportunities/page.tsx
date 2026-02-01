@@ -2242,7 +2242,6 @@ export default function OpportunitiesPage() {
                                 <button
                                   onClick={(e) => { e.stopPropagation(); setNotesModal(opp); }}
                                   className={`p-1.5 rounded hover:bg-[#2d4a6f] ${opp.staff_notes ? 'text-[#14b8a6]' : 'text-slate-500'}`}
-                                  title={opp.staff_notes || 'Add notes'}
                                 >
                                   <StickyNote className="w-4 h-4" />
                                 </button>
