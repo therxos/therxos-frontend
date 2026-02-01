@@ -2249,7 +2249,7 @@ export default function OpportunitiesPage() {
                               </td>
                             </tr>
                             {altCount > 0 && expanded.has(`alt-${opp.opportunity_id}`) && (
-                              opp.alternatives.map((alt: any, i: number) => (
+                              opp.alternatives?.map((alt: any, i: number) => (
                                 <tr key={`alt-${alt.opportunity_id}`} className="border-t border-[#1e3a5f]/50 bg-[#0a1628]">
                                   {groupBy !== 'patient' && <td className="px-5 py-2"></td>}
                                   <td className="px-5 py-2 pl-10">
