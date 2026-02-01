@@ -55,6 +55,7 @@ interface Trigger {
   group_inclusions: string[] | null;
   group_exclusions: string[] | null;
   contract_prefix_exclusions: string[] | null;
+  pharmacy_inclusions: string[] | null;
   synced_at?: string | null;
   cms_coverage?: {
     average_tier: number | null;
@@ -237,6 +238,7 @@ export default function TriggersPage() {
       group_inclusions: [],
       group_exclusions: [],
       contract_prefix_exclusions: [],
+      pharmacy_inclusions: [],
       bin_values: [],
     });
   }
@@ -269,6 +271,7 @@ export default function TriggersPage() {
       groupInclusions: parseCSV('group_inclusions'),
       groupExclusions: parseCSV('group_exclusions'),
       contractPrefixExclusions: parseCSV('contract_prefix_exclusions'),
+      pharmacyInclusions: editingTrigger.pharmacy_inclusions || [],
     };
     try {
       const token = localStorage.getItem('therxos_token');
@@ -606,6 +609,13 @@ export default function TriggersPage() {
                     }`}>
                       {trigger.trigger_type.replace(/_/g, ' ')}
                     </span>
+                    {trigger.pharmacy_inclusions && trigger.pharmacy_inclusions.length > 0 && (
+                      <span className="ml-1 px-1.5 py-0.5 bg-amber-500/20 text-amber-400 text-[10px] rounded">
+                        {trigger.pharmacy_inclusions.length === 1
+                          ? pharmacies.find(p => p.pharmacy_id === trigger.pharmacy_inclusions![0])?.pharmacy_name || '1 pharmacy'
+                          : `${trigger.pharmacy_inclusions.length} pharmacies`}
+                      </span>
+                    )}
                   </td>
                   <td className="px-4 py-3">
                     <div className="max-w-48 truncate text-xs text-slate-300">
@@ -1168,6 +1178,40 @@ export default function TriggersPage() {
                     className="w-full px-3 py-2 bg-[#0a1628] border border-[#1e3a5f] rounded-lg text-sm text-white focus:outline-none focus:border-blue-500"
                     placeholder="e.g., S, H, R"
                   />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-medium text-slate-400 mb-1">
+                    Pharmacy Scope {(!editingTrigger.pharmacy_inclusions || editingTrigger.pharmacy_inclusions.length === 0) ? '(All pharmacies)' : `(${editingTrigger.pharmacy_inclusions.length} selected)`}
+                  </label>
+                  <div className="bg-[#0a1628] border border-[#1e3a5f] rounded-lg p-2 max-h-32 overflow-y-auto">
+                    <label className="flex items-center gap-2 px-2 py-1 hover:bg-[#1e3a5f]/50 rounded cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={!editingTrigger.pharmacy_inclusions || editingTrigger.pharmacy_inclusions.length === 0}
+                        onChange={() => setEditingTrigger({ ...editingTrigger, pharmacy_inclusions: [] })}
+                        className="accent-blue-500"
+                      />
+                      <span className="text-sm text-slate-300">All pharmacies</span>
+                    </label>
+                    {pharmacies.map(p => (
+                      <label key={p.pharmacy_id} className="flex items-center gap-2 px-2 py-1 hover:bg-[#1e3a5f]/50 rounded cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={(editingTrigger.pharmacy_inclusions || []).includes(p.pharmacy_id)}
+                          onChange={(e) => {
+                            const current = editingTrigger.pharmacy_inclusions || [];
+                            const updated = e.target.checked
+                              ? [...current, p.pharmacy_id]
+                              : current.filter(id => id !== p.pharmacy_id);
+                            setEditingTrigger({ ...editingTrigger, pharmacy_inclusions: updated });
+                          }}
+                          className="accent-blue-500"
+                        />
+                        <span className="text-sm text-white">{p.pharmacy_name}</span>
+                      </label>
+                    ))}
+                  </div>
                 </div>
 
                 <div className="flex items-center gap-3">
