@@ -112,6 +112,8 @@ interface Stats {
   submitted_annual: number;
   approved_annual: number;
   completed_annual: number;
+  unknown_coverage_count: number;
+  unknown_coverage_annual: number;
 }
 
 // Helpers
@@ -1391,12 +1393,14 @@ export default function OpportunitiesPage() {
   const [stats, setStats] = useState<Stats>({
     total: 0, not_submitted: 0, submitted: 0, approved: 0, completed: 0, didnt_work: 0, flagged: 0, denied: 0,
     total_annual: 0, not_submitted_annual: 0, submitted_annual: 0, approved_annual: 0, completed_annual: 0,
+    unknown_coverage_count: 0, unknown_coverage_annual: 0,
   });
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState<string | null>(null);
   const [showDenied, setShowDenied] = useState(false);
   const [showCompleted, setShowCompleted] = useState(false);
+  const [hideUnknownCoverage, setHideUnknownCoverage] = useState(true);
   const [typeFilter, setTypeFilter] = useState<string | null>(null);
   const [groupBy, setGroupBy] = useState('patient');
   const [search, setSearch] = useState('');
@@ -1468,10 +1472,15 @@ export default function OpportunitiesPage() {
       const apiCounts = data.counts || {};
       const getCount = (status: string) => apiCounts[status]?.count || 0;
       const getMargin = (status: string) => apiCounts[status]?.totalMargin || 0;
+      // Use verified margin (excludes unknown coverage) for Not Submitted
+      const getVerifiedMargin = (status: string) => apiCounts[status]?.verifiedMargin ?? apiCounts[status]?.totalMargin ?? 0;
+      const unknownCount = apiCounts['Not Submitted']?.unknownCount || 0;
+      const unknownMargin = getMargin('Not Submitted') - getVerifiedMargin('Not Submitted');
 
       // Calculate active total (exclude Denied, Flagged, Completed, Didn't Work)
+      // Use verified margin for Not Submitted (excludes unknown coverage)
       const activeTotal = getCount('Not Submitted') + getCount('Submitted') + getCount('Approved');
-      const activeMargin = getMargin('Not Submitted') + getMargin('Submitted') + getMargin('Approved');
+      const activeMargin = getVerifiedMargin('Not Submitted') + getMargin('Submitted') + getMargin('Approved');
 
       const calcStats: Stats = {
         total: activeTotal,
@@ -1483,10 +1492,12 @@ export default function OpportunitiesPage() {
         flagged: getCount('Flagged'),
         denied: getCount('Denied'),
         total_annual: activeMargin * 12,
-        not_submitted_annual: getMargin('Not Submitted') * 12,
+        not_submitted_annual: getVerifiedMargin('Not Submitted') * 12,
         submitted_annual: getMargin('Submitted') * 12,
         approved_annual: getMargin('Approved') * 12,
         completed_annual: getMargin('Completed') * 12,
+        unknown_coverage_count: unknownCount,
+        unknown_coverage_annual: unknownMargin * 12,
       };
       setStats(calcStats);
       setLastSync(new Date());
@@ -1625,23 +1636,31 @@ export default function OpportunitiesPage() {
       }
 
       setOpportunities(prev => prev.map(o => o.opportunity_id === id ? { ...o, status } : o));
-      // Recalculate stats
+      // Recalculate stats (exclude unknown coverage from Not Submitted margins)
       const opps = opportunities.map(o => o.opportunity_id === id ? { ...o, status } : o);
+      const notSubmitted = opps.filter(o => o.status === 'Not Submitted');
+      const verifiedNotSubmitted = notSubmitted.filter(o => o.coverage_confidence !== 'unknown');
+      const unknownNotSubmitted = notSubmitted.filter(o => o.coverage_confidence === 'unknown');
       const activeOpps = opps.filter(o => o.status !== 'Denied' && o.status !== 'Flagged' && o.status !== "Didn't Work" && o.status !== 'Completed');
+      const activeVerifiedMargin = verifiedNotSubmitted.reduce((s, o) => s + getAnnualValue(o), 0)
+        + opps.filter(o => o.status === 'Submitted').reduce((s, o) => s + getAnnualValue(o), 0)
+        + opps.filter(o => o.status === 'Approved').reduce((s, o) => s + getAnnualValue(o), 0);
       setStats({
         total: activeOpps.length,
-        not_submitted: opps.filter(o => o.status === 'Not Submitted').length,
+        not_submitted: notSubmitted.length,
         submitted: opps.filter(o => o.status === 'Submitted').length,
         approved: opps.filter(o => o.status === 'Approved').length,
         completed: opps.filter(o => o.status === 'Completed').length,
         didnt_work: opps.filter(o => o.status === "Didn't Work").length,
         flagged: opps.filter(o => o.status === 'Flagged').length,
         denied: opps.filter(o => o.status === 'Denied').length,
-        total_annual: activeOpps.reduce((s, o) => s + getAnnualValue(o), 0),
-        not_submitted_annual: opps.filter(o => o.status === 'Not Submitted').reduce((s, o) => s + getAnnualValue(o), 0),
+        total_annual: activeVerifiedMargin,
+        not_submitted_annual: verifiedNotSubmitted.reduce((s, o) => s + getAnnualValue(o), 0),
         submitted_annual: opps.filter(o => o.status === 'Submitted').reduce((s, o) => s + getAnnualValue(o), 0),
         approved_annual: opps.filter(o => o.status === 'Approved').reduce((s, o) => s + getAnnualValue(o), 0),
         completed_annual: opps.filter(o => o.status === 'Completed').reduce((s, o) => s + getAnnualValue(o), 0),
+        unknown_coverage_count: unknownNotSubmitted.length,
+        unknown_coverage_annual: unknownNotSubmitted.reduce((s, o) => s + getAnnualValue(o), 0),
       });
     } catch (e) {
       console.error(e);
@@ -1782,6 +1801,8 @@ export default function OpportunitiesPage() {
   const filtered = groupedItems.map(g => ({
     ...g,
     opportunities: g.opportunities.filter(o => {
+      // Hide unknown coverage for Not Submitted when toggle is on
+      if (hideUnknownCoverage && o.status === 'Not Submitted' && o.coverage_confidence === 'unknown') return false;
       // Hide Denied by default unless showDenied is true or specifically filtering for them
       if (o.status === 'Denied' && !showDenied && statusFilter !== 'Denied') return false;
       // Hide Completed by default unless showCompleted is true or specifically filtering for them
@@ -1936,6 +1957,11 @@ export default function OpportunitiesPage() {
                   </span>
                 </div>
               )}
+              {card.key === 'not_submitted' && stats.unknown_coverage_count > 0 && (
+                <div className="mt-2 text-[10px] text-slate-500" title="Unknown coverage opportunities excluded from margin totals">
+                  +{stats.unknown_coverage_count} unknown coverage ({showFullFinancials ? formatShortCurrency(stats.unknown_coverage_annual) + '/yr' : ''})
+                </div>
+              )}
             </div>
           ))}
           </div>
@@ -2019,6 +2045,21 @@ export default function OpportunitiesPage() {
               className="w-4 h-4 rounded accent-[#14b8a6]"
             />
             Show Denied
+          </label>
+          {/* Hide Unknown Coverage toggle */}
+          <label className="flex items-center gap-2 text-sm text-slate-400 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={hideUnknownCoverage}
+              onChange={(e) => setHideUnknownCoverage(e.target.checked)}
+              className="w-4 h-4 rounded accent-[#14b8a6]"
+            />
+            Hide Unknown Coverage
+            {stats.unknown_coverage_count > 0 && (
+              <span className="text-xs px-1.5 py-0.5 bg-slate-500/20 text-slate-400 rounded">
+                {stats.unknown_coverage_count}
+              </span>
+            )}
           </label>
           {typeFilter && (
             <div className="flex items-center gap-2 ml-2">
