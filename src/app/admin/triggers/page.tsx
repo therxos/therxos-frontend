@@ -190,18 +190,23 @@ export default function TriggersPage() {
   }
 
   async function deleteTrigger(triggerId: string) {
-    if (!confirm('Are you sure you want to delete this trigger?')) return;
+    if (!confirm('Are you sure you want to delete this trigger? This will also delete all unactioned opportunities for this trigger.')) return;
     try {
       const token = localStorage.getItem('therxos_token');
       const res = await fetch(`${API_URL}/api/admin/triggers/${triggerId}`, {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${token}` },
       });
+      const data = await res.json();
       if (res.ok) {
         setTriggers(prev => prev.filter(t => t.trigger_id !== triggerId));
+        alert(`Deleted "${data.triggerName}" and ${data.opportunitiesRemoved || 0} unactioned opportunities.`);
+      } else {
+        alert(data.error || 'Failed to delete trigger');
       }
     } catch (err) {
       console.error('Failed to delete trigger:', err);
+      alert('Failed to delete trigger - network error');
     }
   }
 
