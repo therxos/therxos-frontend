@@ -1400,7 +1400,7 @@ export default function OpportunitiesPage() {
   const [statusFilter, setStatusFilter] = useState<string | null>(null);
   const [showDenied, setShowDenied] = useState(false);
   const [showCompleted, setShowCompleted] = useState(false);
-  const [hideUnknownCoverage, setHideUnknownCoverage] = useState(true);
+  const [hideUnknownCoverage, setHideUnknownCoverage] = useState(false);
   const [typeFilter, setTypeFilter] = useState<string | null>(null);
   const [groupBy, setGroupBy] = useState('patient');
   const [search, setSearch] = useState('');
