@@ -56,6 +56,8 @@ interface Trigger {
   group_exclusions: string[] | null;
   contract_prefix_exclusions: string[] | null;
   pharmacy_inclusions: string[] | null;
+  expected_qty: number | null;
+  expected_days_supply: number | null;
   synced_at?: string | null;
   cms_coverage?: {
     average_tier: number | null;
@@ -239,6 +241,8 @@ export default function TriggersPage() {
       group_exclusions: [],
       contract_prefix_exclusions: [],
       pharmacy_inclusions: [],
+      expected_qty: null,
+      expected_days_supply: null,
       bin_values: [],
     });
   }
@@ -272,6 +276,8 @@ export default function TriggersPage() {
       groupExclusions: parseCSV('group_exclusions'),
       contractPrefixExclusions: parseCSV('contract_prefix_exclusions'),
       pharmacyInclusions: editingTrigger.pharmacy_inclusions || [],
+      expectedQty: editingTrigger.expected_qty,
+      expectedDaysSupply: editingTrigger.expected_days_supply,
     };
     try {
       const token = localStorage.getItem('therxos_token');
@@ -979,6 +985,41 @@ export default function TriggersPage() {
                       className="w-full px-3 py-2 bg-[#0a1628] border border-[#1e3a5f] rounded-lg text-sm text-white focus:outline-none focus:border-blue-500"
                       placeholder="12"
                     />
+                  </div>
+                </div>
+
+                {/* === FILL NORMALIZATION === */}
+                <div className="border border-[#1e3a5f]/50 rounded-lg p-3 space-y-3">
+                  <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Fill Normalization</p>
+                  <p className="text-[10px] text-slate-600">Set these when the standard 30-day normalization is inaccurate (e.g. test strips, cream tubes, pen needles). The scanner uses these to calculate a more accurate GP per 30 days.</p>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs font-medium text-slate-400 mb-1" title="Expected quantity per fill (e.g. 100 for test strips, 112 for diclofenac cream tube)">
+                        Expected Qty / Fill
+                      </label>
+                      <input
+                        type="number"
+                        step="1"
+                        value={editingTrigger.expected_qty ?? ''}
+                        onChange={(e) => setEditingTrigger({ ...editingTrigger, expected_qty: e.target.value ? parseFloat(e.target.value) : null })}
+                        className="w-full px-3 py-2 bg-[#0a1628] border border-[#1e3a5f] rounded-lg text-sm text-white placeholder-slate-600 focus:outline-none focus:border-blue-500"
+                        placeholder="e.g. 100"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-slate-400 mb-1" title="Expected days supply per fill (e.g. 25 for test strips, 30 for cream tubes)">
+                        Expected Days Supply
+                      </label>
+                      <input
+                        type="number"
+                        step="1"
+                        min="1"
+                        value={editingTrigger.expected_days_supply ?? ''}
+                        onChange={(e) => setEditingTrigger({ ...editingTrigger, expected_days_supply: e.target.value ? parseInt(e.target.value) : null })}
+                        className="w-full px-3 py-2 bg-[#0a1628] border border-[#1e3a5f] rounded-lg text-sm text-white placeholder-slate-600 focus:outline-none focus:border-blue-500"
+                        placeholder="e.g. 30"
+                      />
+                    </div>
                   </div>
                 </div>
 
