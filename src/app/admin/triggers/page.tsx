@@ -194,7 +194,10 @@ export default function TriggersPage() {
   }
 
   async function deleteTrigger(triggerId: string) {
-    if (!confirm('Are you sure you want to delete this trigger? This will also delete all unactioned opportunities for this trigger.')) return;
+    const trigger = triggers.find(t => t.trigger_id === triggerId);
+    const triggerName = trigger?.display_name || 'this trigger';
+    const typed = prompt(`Are you sure you want to delete "${triggerName}"?\n\nThis will also delete all unactioned opportunities for this trigger.\n\nType DELETE to confirm:`);
+    if (typed !== 'DELETE') return;
     try {
       const token = localStorage.getItem('therxos_token');
       const res = await fetch(`${API_URL}/api/admin/triggers/${triggerId}`, {
