@@ -349,7 +349,7 @@ export default function DashboardLayout({
     { name: 'Flagged', href: '/dashboard/flagged', icon: Flag, badge: flaggedCount, badgeColor: 'purple', show: true },
     { name: 'Fax Queue', href: '/dashboard/fax-queue', icon: Send, show: true },
     { name: 'Approval Queue', href: '/dashboard/approvals', icon: CheckSquare, show: canManageSettings },
-    { name: 'Audit Risks', href: '/dashboard/audit', icon: ShieldAlert, badge: 0, show: canViewAuditRisks },
+    // { name: 'Audit Risks', href: '/dashboard/audit', icon: ShieldAlert, badge: 0, show: canViewAuditRisks },
     { name: 'Patients', href: '/dashboard/patients', icon: Users, show: canViewPatientDetails },
     { name: 'Analytics', href: '/dashboard/analytics', icon: BarChart3, show: canViewAnalytics && canViewFinancialData },
     { name: 'Reports', href: '/dashboard/reports', icon: FileText, show: canViewAnalytics && canViewFinancialData },
