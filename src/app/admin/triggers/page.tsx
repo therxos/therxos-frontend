@@ -355,6 +355,27 @@ export default function TriggersPage() {
     }
   }
 
+  async function enableAllTriggers() {
+    try {
+      const token = localStorage.getItem('therxos_token');
+      const res = await fetch(`${API_URL}/api/admin/triggers/enable-all`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.enabled > 0) {
+          alert(`Re-enabled ${data.enabled} triggers:\n${data.triggers.join('\n')}`);
+        } else {
+          alert('All triggers are already enabled.');
+        }
+        fetchTriggers();
+      }
+    } catch (err) {
+      console.error('Failed to enable all triggers:', err);
+    }
+  }
+
   async function scanTriggerCoverage(triggerId: string) {
     setScanningTrigger(triggerId);
     try {
@@ -501,8 +522,16 @@ export default function TriggersPage() {
           </div>
           <div>
             <h1 className="text-2xl font-bold text-white">Triggers</h1>
-            <p className="text-sm text-slate-400">
+            <p className="text-sm text-slate-400 flex items-center gap-2">
               {triggers.length} triggers ({triggers.filter(t => t.is_enabled).length} enabled)
+              {triggers.filter(t => !t.is_enabled).length > 0 && (
+                <button
+                  onClick={enableAllTriggers}
+                  className="text-xs text-amber-400 hover:text-amber-300 underline"
+                >
+                  Enable all {triggers.filter(t => !t.is_enabled).length} disabled
+                </button>
+              )}
             </p>
           </div>
         </div>
