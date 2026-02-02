@@ -172,20 +172,17 @@ export default function TriggersPage() {
     }
   }
 
-  async function toggleTrigger(triggerId: string, enabled: boolean) {
+  async function toggleTrigger(triggerId: string) {
     try {
       const token = localStorage.getItem('therxos_token');
-      const res = await fetch(`${API_URL}/api/admin/triggers/${triggerId}`, {
-        method: 'PATCH',
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ is_enabled: enabled }),
+      const res = await fetch(`${API_URL}/api/admin/triggers/${triggerId}/toggle`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
       });
       if (res.ok) {
+        const data = await res.json();
         setTriggers(prev => prev.map(t =>
-          t.trigger_id === triggerId ? { ...t, is_enabled: enabled } : t
+          t.trigger_id === triggerId ? { ...t, is_enabled: data.isEnabled } : t
         ));
       }
     } catch (err) {
@@ -686,7 +683,7 @@ export default function TriggersPage() {
                   </td>
                   <td className="px-4 py-3 text-center">
                     <button
-                      onClick={() => toggleTrigger(trigger.trigger_id, !trigger.is_enabled)}
+                      onClick={() => toggleTrigger(trigger.trigger_id)}
                       className={`p-1 rounded transition-colors ${
                         trigger.is_enabled
                           ? 'text-emerald-400 hover:bg-emerald-500/20'
