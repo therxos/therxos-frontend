@@ -2193,10 +2193,10 @@ export default function OpportunitiesPage() {
                           <th className="text-left text-xs font-semibold text-slate-400 uppercase tracking-wider px-5 py-3">Action</th>
                           {showAnyFinancials && (
                             <>
+                              <th className="text-left text-xs font-semibold text-slate-400 uppercase tracking-wider px-5 py-3">Qty/Fill</th>
                               <th className="text-left text-xs font-semibold text-slate-400 uppercase tracking-wider px-5 py-3">
-                                {showFullFinancials ? 'Per Fill / Annual' : 'Per Fill'}
+                                {showFullFinancials ? 'GP/Fill / Annual' : 'GP/Fill'}
                               </th>
-                              <th className="text-left text-xs font-semibold text-slate-400 uppercase tracking-wider px-5 py-3">Avg Qty</th>
                             </>
                           )}
                           <th className="text-left text-xs font-semibold text-slate-400 uppercase tracking-wider px-5 py-3">Prescriber</th>
@@ -2254,16 +2254,16 @@ export default function OpportunitiesPage() {
                               {showAnyFinancials && (
                                 <>
                                   <td className="px-5 py-3">
+                                    <div className="text-sm text-slate-400">
+                                      {opp.avg_dispensed_qty ? Math.round(Number(opp.avg_dispensed_qty)) : '-'}
+                                    </div>
+                                  </td>
+                                  <td className="px-5 py-3">
                                     <div>
                                       <div className="text-emerald-400 font-semibold">{formatCurrency(Number(opp.potential_margin_gain) || 0)}</div>
                                       {showFullFinancials && (
                                         <div className="text-xs text-slate-500">{formatCurrency(getAnnualValue(opp))}/yr</div>
                                       )}
-                                    </div>
-                                  </td>
-                                  <td className="px-5 py-3">
-                                    <div className="text-sm text-slate-400">
-                                      {opp.avg_dispensed_qty ? Number(opp.avg_dispensed_qty).toFixed(1) : '-'}
                                     </div>
                                   </td>
                                 </>
@@ -2313,12 +2313,12 @@ export default function OpportunitiesPage() {
                                   {showAnyFinancials && (
                                     <>
                                       <td className="px-5 py-2">
-                                        <div className="text-sm text-emerald-400/70">{formatCurrency(Number(alt.potential_margin_gain) || 0)}</div>
+                                        <div className="text-xs text-slate-500">
+                                          {alt.avg_dispensed_qty ? Math.round(Number(alt.avg_dispensed_qty)) : '-'}
+                                        </div>
                                       </td>
                                       <td className="px-5 py-2">
-                                        <div className="text-xs text-slate-500">
-                                          {alt.avg_dispensed_qty ? Number(alt.avg_dispensed_qty).toFixed(1) : '-'}
-                                        </div>
+                                        <div className="text-sm text-emerald-400/70">{formatCurrency(Number(alt.potential_margin_gain) || 0)}</div>
                                       </td>
                                     </>
                                   )}
