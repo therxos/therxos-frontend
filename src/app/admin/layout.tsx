@@ -169,7 +169,7 @@ export default function AdminLayout({
     { name: 'Overview', href: '/admin', icon: BarChart3 },
     { name: 'Pharmacies', href: '/admin/pharmacies', icon: Building2 },
     { name: 'Triggers', href: '/admin/triggers', icon: Crosshair },
-    { name: 'Audit Rules', href: '/admin/audit-rules', icon: ShieldAlert },
+    // { name: 'Audit Rules', href: '/admin/audit-rules', icon: ShieldAlert },
     { name: "Didn't Work Queue", href: '/admin/didnt-work', icon: AlertCircle },
     { name: 'Data Quality', href: '/admin/data-quality', icon: Database },
     {

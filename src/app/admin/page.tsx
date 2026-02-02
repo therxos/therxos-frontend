@@ -82,14 +82,7 @@ export default function AdminOverviewPage() {
         setQuickStats(prev => ({ ...prev, triggerCount: data.triggers?.length || 0 }));
       }
 
-      // Fetch audit rules count
-      const auditRes = await fetch(`${API_URL}/api/admin/audit-rules`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (auditRes.ok) {
-        const data = await auditRes.json();
-        setQuickStats(prev => ({ ...prev, auditRuleCount: data.rules?.length || 0 }));
-      }
+      // Audit rules fetch removed (feature disabled)
 
       // Fetch didn't work count
       const didntWorkRes = await fetch(`${API_URL}/api/admin/didnt-work-queue`, {
@@ -260,20 +253,7 @@ export default function AdminOverviewPage() {
           </div>
         </Link>
 
-        {/* Audit Rules */}
-        <Link href="/admin/audit-rules" className="group">
-          <div className="bg-[#0d2137] border border-[#1e3a5f] rounded-xl p-6 hover:border-purple-500/50 transition-colors">
-            <div className="flex items-center justify-between mb-4">
-              <div className="w-12 h-12 rounded-xl bg-purple-500/20 flex items-center justify-center">
-                <ShieldAlert className="w-6 h-6 text-purple-400" />
-              </div>
-              <ArrowRight className="w-5 h-5 text-slate-500 group-hover:text-purple-400 transition-colors" />
-            </div>
-            <h3 className="text-lg font-semibold text-white mb-1">Audit Rules</h3>
-            <p className="text-sm text-slate-400">Manage audit risk detection rules</p>
-            <p className="text-2xl font-bold text-purple-400 mt-4">{quickStats.auditRuleCount}</p>
-          </div>
-        </Link>
+        {/* Audit Rules - disabled */}
 
         {/* Didn't Work Queue */}
         <Link href="/admin/didnt-work" className="group">
