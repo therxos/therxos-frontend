@@ -103,6 +103,7 @@ export default function TriggersPage() {
   });
   const [expandedTrigger, setExpandedTrigger] = useState<string | null>(null);
   const [scanningAll, setScanningAll] = useState(false);
+  const [scanningOpps, setScanningOpps] = useState(false);
   const [editingTrigger, setEditingTrigger] = useState<Trigger | null>(null);
   const [saving, setSaving] = useState(false);
   const [rawKeywords, setRawKeywords] = useState<Record<string, string>>({});
@@ -330,6 +331,30 @@ export default function TriggersPage() {
     }
   }
 
+  async function scanAllOpportunities() {
+    setScanningOpps(true);
+    try {
+      const token = localStorage.getItem('therxos_token');
+      const res = await fetch(`${API_URL}/api/admin/triggers/scan-all-opportunities`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        alert(`Opportunity scan complete!\n\nTriggers scanned: ${data.triggersScanned || 0}\nPharmacies scanned: ${data.pharmaciesScanned || 0}\nOpportunities created: ${data.totalCreated || 0}\nDuplicates skipped: ${data.totalSkipped || 0}\nPatients matched: ${data.totalPatientsMatched || 0}`);
+        fetchTriggers();
+      } else {
+        const error = await res.json();
+        alert('Scan failed: ' + (error.error || 'Unknown error'));
+      }
+    } catch (err) {
+      console.error('Failed to scan all opportunities:', err);
+      alert('Failed to scan all opportunities');
+    } finally {
+      setScanningOpps(false);
+    }
+  }
+
   async function scanTriggerCoverage(triggerId: string) {
     setScanningTrigger(triggerId);
     try {
@@ -496,6 +521,23 @@ export default function TriggersPage() {
               <>
                 <ScanLine className="w-4 h-4" />
                 Scan All Coverage
+              </>
+            )}
+          </button>
+          <button
+            onClick={scanAllOpportunities}
+            disabled={scanningOpps}
+            className="flex items-center gap-2 px-4 py-2 bg-amber-500/20 hover:bg-amber-500/30 text-amber-400 rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
+          >
+            {scanningOpps ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Scanning...
+              </>
+            ) : (
+              <>
+                <Zap className="w-4 h-4" />
+                Scan All Opps
               </>
             )}
           </button>
