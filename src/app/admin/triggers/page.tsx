@@ -631,7 +631,7 @@ export default function TriggersPage() {
                   </td>
                   <td className="px-4 py-3 text-center">
                     <span className="text-sm text-emerald-400">
-                      {trigger.default_gp_value ? `$${trigger.default_gp_value}` : '-'}
+                      {trigger.default_gp_value ? `$${Number(trigger.default_gp_value).toFixed(2)}` : '-'}
                     </span>
                   </td>
                   <td className="px-4 py-3 text-center">
