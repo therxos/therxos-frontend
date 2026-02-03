@@ -335,18 +335,45 @@ export default function TriggersPage() {
     setScanningOpps(true);
     try {
       const token = localStorage.getItem('therxos_token');
+      // Start the scan (returns immediately with a job ID)
       const res = await fetch(`${API_URL}/api/admin/triggers/scan-all-opportunities`, {
         method: 'POST',
-        headers: { Authorization: `Bearer ${token}` },
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
       });
-      if (res.ok) {
-        const data = await res.json();
-        alert(`Opportunity scan complete!\n\nTriggers scanned: ${data.triggersScanned || 0}\nPharmacies scanned: ${data.pharmaciesScanned || 0}\nOpportunities created: ${data.totalCreated || 0}\nDuplicates skipped: ${data.totalSkipped || 0}\nPatients matched: ${data.totalPatientsMatched || 0}`);
-        fetchTriggers();
-      } else {
+      if (!res.ok) {
         const error = await res.json();
         alert('Scan failed: ' + (error.error || 'Unknown error'));
+        return;
       }
+      const { jobId } = await res.json();
+      if (!jobId) {
+        alert('Scan failed: no job ID returned');
+        return;
+      }
+
+      // Poll for completion
+      let attempts = 0;
+      while (attempts < 120) { // up to 10 minutes (5s intervals)
+        await new Promise(r => setTimeout(r, 5000));
+        attempts++;
+        try {
+          const pollRes = await fetch(`${API_URL}/api/admin/triggers/scan-job/${jobId}`, {
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          if (!pollRes.ok) continue;
+          const job = await pollRes.json();
+          if (job.status === 'complete') {
+            alert(`Opportunity scan complete!\n\nTriggers scanned: ${job.triggersScanned || 0}\nPharmacies scanned: ${job.pharmaciesScanned || 0}\nOpportunities created: ${job.totalCreated || 0}`);
+            fetchTriggers();
+            return;
+          } else if (job.status === 'error') {
+            alert('Scan failed: ' + (job.error || 'Unknown error'));
+            return;
+          }
+          // Still running — continue polling
+        } catch { /* ignore poll errors, keep trying */ }
+      }
+      alert('Scan is still running in the background. Refresh the page in a few minutes.');
     } catch (err) {
       console.error('Failed to scan all opportunities:', err);
       alert('Failed to scan all opportunities');
