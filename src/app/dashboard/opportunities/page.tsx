@@ -2344,6 +2344,7 @@ export default function OpportunitiesPage() {
         <>
           <div className="fixed inset-0 bg-black/50 z-40" onClick={() => { setSelectedOpp(null); setSelectedGroup(null); }} />
           <SidePanel
+            key={selectedOpp.opportunity_id}
             opportunity={selectedOpp}
             groupItem={selectedGroup}
             onClose={() => { setSelectedOpp(null); setSelectedGroup(null); }}
