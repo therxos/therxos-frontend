@@ -35,6 +35,7 @@ import {
   ChevronUp,
   Send,
   CheckSquare,
+  Package,
 } from 'lucide-react';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL;
@@ -353,6 +354,7 @@ export default function DashboardLayout({
     { name: 'Patients', href: '/dashboard/patients', icon: Users, show: canViewPatientDetails },
     { name: 'Analytics', href: '/dashboard/analytics', icon: BarChart3, show: canViewAnalytics && canViewFinancialData },
     { name: 'Reports', href: '/dashboard/reports', icon: FileText, show: canViewAnalytics && canViewFinancialData },
+    { name: 'NDC Reference', href: '/dashboard/ndc-reference', icon: Package, show: true },
     { name: 'Data Upload', href: '/dashboard/upload', icon: Upload, show: canUploadData },
   ].filter(item => item.show);
 

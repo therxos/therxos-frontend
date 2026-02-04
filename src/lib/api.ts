@@ -145,6 +145,16 @@ export const settingsApi = {
 };
 
 // Ingestion API
+// NDC Reference API
+export const ndcReferenceApi = {
+  getDiabeticSupplies: (params?: {
+    supplyType?: string;
+    bin?: string;
+    group?: string;
+    search?: string;
+  }) => api.get('/ndc-reference/diabetic-supplies', { params }),
+};
+
 export const ingestionApi = {
   uploadCSV: (file: File, options?: { pharmacyId?: string; sourceEmail?: string; runAutoComplete?: boolean; runScan?: boolean }) => {
     const formData = new FormData();
