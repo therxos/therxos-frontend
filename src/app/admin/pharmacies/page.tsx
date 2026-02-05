@@ -443,6 +443,33 @@ export default function PharmaciesPage() {
     }
   }
 
+  async function togglePollingSetting(pharmacyId: string, settingKey: string, currentlyEnabled: boolean) {
+    setActionLoading(`${settingKey}-${pharmacyId}`);
+    try {
+      const token = localStorage.getItem('therxos_token');
+      const res = await fetch(`${API_URL}/api/admin/pharmacies/${pharmacyId}/settings`, {
+        method: 'PATCH',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ [settingKey]: !currentlyEnabled }),
+      });
+
+      if (res.ok) {
+        fetchPharmacies();
+      } else {
+        const data = await res.json();
+        alert('Failed to update polling settings: ' + (data.error || 'Unknown error'));
+      }
+    } catch (err) {
+      console.error('Polling toggle error:', err);
+      alert('Failed to update polling settings');
+    } finally {
+      setActionLoading(null);
+    }
+  }
+
   const filteredPharmacies = (pharmacies || []).filter(p => {
     if (!p) return false;
     const matchesSearch =
@@ -751,6 +778,61 @@ export default function PharmaciesPage() {
                   </div>
                   <p className="text-xs text-slate-500 mt-1">
                     {pharmacy.settings?.faxEnabled ? 'Pharmacy can send faxes via API' : 'Fax sending disabled'}
+                  </p>
+                </div>
+
+                {/* Gmail/SPP Polling */}
+                <div className="bg-[#0a1628] rounded-lg p-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Mail className="w-4 h-4 text-slate-400" />
+                      <span className="text-xs font-medium text-slate-300">Gmail/SPP Polling</span>
+                    </div>
+                    <button
+                      onClick={() => togglePollingSetting(pharmacy.pharmacy_id, 'gmail_polling_enabled', !!pharmacy.settings?.gmail_polling_enabled)}
+                      disabled={actionLoading === `gmail_polling_enabled-${pharmacy.pharmacy_id}`}
+                      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                        pharmacy.settings?.gmail_polling_enabled ? 'bg-teal-500' : 'bg-slate-600'
+                      } ${actionLoading === `gmail_polling_enabled-${pharmacy.pharmacy_id}` ? 'opacity-50' : ''}`}
+                    >
+                      <span
+                        className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                          pharmacy.settings?.gmail_polling_enabled ? 'translate-x-6' : 'translate-x-1'
+                        }`}
+                      />
+                    </button>
+                  </div>
+                  <p className="text-xs text-slate-500 mt-1">
+                    {pharmacy.settings?.gmail_polling_enabled ? 'Receives Pioneer SPP emails via Gmail' : 'Gmail polling disabled'}
+                  </p>
+                  {pharmacy.settings?.spp_report_name && (
+                    <p className="text-xs text-teal-400 mt-1">Filter: {pharmacy.settings.spp_report_name}</p>
+                  )}
+                </div>
+
+                {/* Microsoft/Outcomes Polling */}
+                <div className="bg-[#0a1628] rounded-lg p-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Activity className="w-4 h-4 text-slate-400" />
+                      <span className="text-xs font-medium text-slate-300">Microsoft/Outcomes</span>
+                    </div>
+                    <button
+                      onClick={() => togglePollingSetting(pharmacy.pharmacy_id, 'microsoft_polling_enabled', !!pharmacy.settings?.microsoft_polling_enabled)}
+                      disabled={actionLoading === `microsoft_polling_enabled-${pharmacy.pharmacy_id}`}
+                      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                        pharmacy.settings?.microsoft_polling_enabled ? 'bg-teal-500' : 'bg-slate-600'
+                      } ${actionLoading === `microsoft_polling_enabled-${pharmacy.pharmacy_id}` ? 'opacity-50' : ''}`}
+                    >
+                      <span
+                        className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                          pharmacy.settings?.microsoft_polling_enabled ? 'translate-x-6' : 'translate-x-1'
+                        }`}
+                      />
+                    </button>
+                  </div>
+                  <p className="text-xs text-slate-500 mt-1">
+                    {pharmacy.settings?.microsoft_polling_enabled ? 'Receives Outcomes reports via Outlook' : 'Microsoft polling disabled'}
                   </p>
                 </div>
 
