@@ -479,6 +479,7 @@ function PrescriberWarningModal({
 function SidePanel({
   opportunity,
   groupItem,
+  allOpportunitiesData = [],
   onClose,
   onStatusChange,
   isDemo,
@@ -489,6 +490,7 @@ function SidePanel({
 }: {
   opportunity: Opportunity | null;
   groupItem: GroupedItem | null;
+  allOpportunitiesData?: Opportunity[];
   onClose: () => void;
   onStatusChange: (id: string, status: string) => void;
   isDemo?: boolean;
@@ -612,15 +614,13 @@ function SidePanel({
 
   const [rationale, action] = (opportunity.clinical_rationale || '').split('\n\nAction: ');
 
-  // HIPAA SAFETY: Only allow batch operations for the SAME patient
-  // When grouped by patient, groupItem.opportunities are all for one patient
-  // When grouped by prescriber/drug, filter to only this patient's opportunities
-  const isPatientGrouped = groupBy === 'patient';
-  const allOpportunities = isPatientGrouped
-    ? (groupItem.opportunities || [opportunity])
-    : (groupItem.opportunities || []).filter(o => o.patient_id === opportunity.patient_id);
+  // ALWAYS show all opportunities for the selected patient (better UX when searching)
+  // This ensures clicking any opp expands to show the full patient context
+  const patientOpportunities = allOpportunitiesData.filter(o => o.patient_id === opportunity.patient_id);
+  const allOpportunities = patientOpportunities.length > 0 ? patientOpportunities : [opportunity];
 
   // Batch fax is ONLY allowed when grouped by patient (HIPAA requirement: 1 patient per fax)
+  const isPatientGrouped = groupBy === 'patient';
   const canUseBatchMode = isPatientGrouped && allOpportunities.length > 1;
 
   const byPrescriber = allOpportunities.reduce((acc, opp) => {
@@ -2581,6 +2581,7 @@ export default function OpportunitiesPage() {
             key={selectedOpp.opportunity_id}
             opportunity={selectedOpp}
             groupItem={selectedGroup}
+            allOpportunitiesData={opportunities}
             onClose={() => { setSelectedOpp(null); setSelectedGroup(null); }}
             onStatusChange={updateStatus}
             isDemo={isDemo}
