@@ -530,6 +530,7 @@ function SidePanel({
   const [faxLoading, setFaxLoading] = useState(false);
   const [faxSending, setFaxSending] = useState(false);
   const [npiConfirmed, setNpiConfirmed] = useState(false);
+  const [manualNpi, setManualNpi] = useState('');
 
   // Run preflight check when opening fax modal
   async function runPreflightCheck() {
@@ -567,10 +568,27 @@ function SidePanel({
 
   // Send fax via Notifyre
   async function sendFaxNow() {
-    if (!opportunity || !faxNumber || !npiConfirmed) return;
+    const effectiveNpi = opportunity?.prescriber_npi || manualNpi;
+    if (!opportunity || !faxNumber || !npiConfirmed || !effectiveNpi) return;
     setFaxSending(true);
     try {
       const token = localStorage.getItem('therxos_token');
+
+      // If manual NPI was entered, save it to prescriber directory first
+      if (manualNpi && !opportunity.prescriber_npi) {
+        await fetch(`${API_URL}/api/fax/directory/${manualNpi}`, {
+          method: 'PUT',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            faxNumber: faxNumber,
+            prescriberName: opportunity.prescriber_name,
+          }),
+        });
+      }
+
       const res = await fetch(`${API_URL}/api/fax/send`, {
         method: 'POST',
         headers: {
@@ -580,7 +598,7 @@ function SidePanel({
         body: JSON.stringify({
           opportunityId: opportunity.opportunity_id,
           prescriberFaxNumber: faxNumber,
-          prescriberNpi: opportunity.prescriber_npi,
+          prescriberNpi: effectiveNpi,
           npiConfirmed: true,
         }),
       });
@@ -591,6 +609,7 @@ function SidePanel({
         alert('Fax queued for delivery! The opportunity has been marked as Submitted.');
         setFaxModalOpen(false);
         setFaxNumber('');
+        setManualNpi('');
         setNpiConfirmed(false);
         setFaxPreflight(null);
         // Update the status in the UI
@@ -607,6 +626,7 @@ function SidePanel({
   function openFaxModal() {
     setFaxModalOpen(true);
     setNpiConfirmed(false);
+    setManualNpi('');
     runPreflightCheck();
   }
 
@@ -1563,14 +1583,30 @@ function SidePanel({
                         )}
                       </div>
 
-                      {/* NPI Confirmation */}
+                      {/* NPI Section */}
                       <div className="bg-[#1e3a5f] rounded-lg p-4 space-y-3">
-                        <div className="text-sm">
-                          <span className="text-slate-400">Prescriber NPI: </span>
-                          <span className={opportunity.prescriber_npi ? 'text-white font-mono' : 'text-amber-400'}>
-                            {opportunity.prescriber_npi || 'Unknown - verify from hardcopy'}
-                          </span>
-                        </div>
+                        {opportunity.prescriber_npi ? (
+                          <div className="text-sm">
+                            <span className="text-slate-400">Prescriber NPI: </span>
+                            <span className="text-white font-mono">{opportunity.prescriber_npi}</span>
+                          </div>
+                        ) : (
+                          <div>
+                            <label className="block text-sm font-medium text-slate-300 mb-2">
+                              Prescriber NPI <span className="text-amber-400">(Required - check hardcopy)</span>
+                            </label>
+                            <input
+                              type="text"
+                              value={manualNpi}
+                              onChange={(e) => setManualNpi(e.target.value.replace(/\D/g, '').slice(0, 10))}
+                              placeholder="Enter 10-digit NPI from prescription"
+                              className="w-full px-4 py-2 bg-[#0d2137] border border-[#2d4a6f] rounded-lg text-white font-mono placeholder-slate-500 focus:border-[#14b8a6] focus:outline-none"
+                            />
+                            <p className="text-xs text-slate-500 mt-1">
+                              This NPI will be saved for future faxes to this prescriber
+                            </p>
+                          </div>
+                        )}
                         <label className="flex items-start gap-3 cursor-pointer">
                           <input
                             type="checkbox"
@@ -1602,6 +1638,7 @@ function SidePanel({
                 onClick={() => {
                   setFaxModalOpen(false);
                   setFaxNumber('');
+                  setManualNpi('');
                   setNpiConfirmed(false);
                   setFaxPreflight(null);
                 }}
@@ -1612,7 +1649,7 @@ function SidePanel({
               {faxPreflight?.canSend && (
                 <button
                   onClick={sendFaxNow}
-                  disabled={!faxNumber || !npiConfirmed || faxSending}
+                  disabled={!faxNumber || !npiConfirmed || faxSending || (!opportunity.prescriber_npi && !manualNpi)}
                   className="flex-1 py-2.5 bg-[#14b8a6] hover:bg-[#0d9488] disabled:bg-[#14b8a6]/50 text-[#0a1628] rounded-lg font-medium flex items-center justify-center gap-2"
                 >
                   {faxSending ? (
