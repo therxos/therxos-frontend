@@ -613,7 +613,7 @@ function SidePanel({
       if (!res.ok) {
         alert(data.error || 'Failed to send fax');
       } else {
-        alert('Fax queued for delivery! The opportunity has been marked as Submitted.');
+        alert('Fax sent successfully!\n\nStatus: Queued for delivery\nTypical delivery time: 1-5 minutes\n\nThe opportunity has been marked as Submitted. You can check fax delivery status in your Fax History.');
         setFaxModalOpen(false);
         setFaxNumber('');
         setManualNpi('');
