@@ -289,19 +289,7 @@ export default function AdminOverviewPage() {
           </div>
         </Link>
 
-        {/* Coverage Scanner */}
-        <Link href="/admin/coverage" className="group">
-          <div className="bg-[#0d2137] border border-[#1e3a5f] rounded-xl p-6 hover:border-emerald-500/50 transition-colors">
-            <div className="flex items-center justify-between mb-4">
-              <div className="w-12 h-12 rounded-xl bg-emerald-500/20 flex items-center justify-center">
-                <Activity className="w-6 h-6 text-emerald-400" />
-              </div>
-              <ArrowRight className="w-5 h-5 text-slate-500 group-hover:text-emerald-400 transition-colors" />
-            </div>
-            <h3 className="text-lg font-semibold text-white mb-1">Coverage Scanner</h3>
-            <p className="text-sm text-slate-400">Run bulk coverage scans across triggers</p>
-          </div>
-        </Link>
+        {/* Coverage Scanner - removed, consolidated into Triggers page */}
       </div>
     </div>
   );

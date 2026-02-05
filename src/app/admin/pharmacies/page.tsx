@@ -375,6 +375,11 @@ export default function PharmaciesPage() {
       return;
     }
 
+    // Prompt for days to look back
+    const daysInput = prompt('How many days back to scan for emails?', '1');
+    if (daysInput === null) return; // User cancelled
+    const daysBack = Math.max(1, Math.min(30, parseInt(daysInput) || 1));
+
     setPollingPharmacy(pharmacyId);
     try {
       const token = localStorage.getItem('therxos_token');
@@ -385,7 +390,7 @@ export default function PharmaciesPage() {
           Authorization: `Bearer ${token}`,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ pharmacyId, daysBack: 1 }),
+        body: JSON.stringify({ pharmacyId, daysBack }),
       });
 
       const data = await res.json();

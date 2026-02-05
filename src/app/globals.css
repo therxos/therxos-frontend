@@ -3,10 +3,11 @@
 @tailwind utilities;
 
 :root {
+  /* Dark theme (default) */
   --navy-900: #0a1628;
   --navy-800: #0d2137;
   --navy-700: #1e3a5f;
-  --navy-600: #2d4a6f;
+  --navy-600: #3d5a80;
   --teal-500: #14b8a6;
   --teal-600: #0d9488;
   --teal-400: #2dd4bf;
@@ -14,19 +15,23 @@
   --slate-100: #f1f5f9;
   --slate-200: #e2e8f0;
   --slate-300: #cbd5e1;
-  --slate-400: #94a3b8;
-  --slate-500: #64748b;
+  --slate-400: #a8b8c8;
+  --slate-500: #7d8fa3;
   --slate-600: #475569;
   --green-500: #22c55e;
   --green-400: #4ade80;
   --green-100: #dcfce7;
   --amber-500: #f59e0b;
+  --amber-400: #fbbf24;
   --amber-100: #fef3c7;
   --blue-500: #3b82f6;
+  --blue-400: #60a5fa;
   --blue-100: #dbeafe;
   --red-500: #ef4444;
+  --red-400: #f87171;
   --red-100: #fee2e2;
   --purple-500: #a855f7;
+  --purple-400: #c084fc;
   --purple-100: #f3e8ff;
 }
 
@@ -127,7 +132,7 @@ body {
 }
 
 .input::placeholder {
-  color: var(--slate-500);
+  color: var(--slate-400);
 }
 
 .input:focus {
@@ -245,7 +250,7 @@ body {
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.5px;
-  color: var(--slate-400);
+  color: var(--slate-300);
 }
 
 .data-table td {
@@ -364,8 +369,8 @@ body {
   font-size: 12px;
   text-transform: uppercase;
   letter-spacing: 0.5px;
-  font-weight: 500;
-  color: var(--slate-400);
+  font-weight: 600;
+  color: var(--slate-300);
 }
 
 .sync-dot {

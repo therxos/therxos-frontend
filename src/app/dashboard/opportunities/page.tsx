@@ -71,6 +71,7 @@ interface Opportunity {
   contract_id?: string;
   plan_name?: string;
   prescriber_name?: string;
+  prescriber_npi?: string;
   coverage_confidence?: 'verified' | 'likely' | 'unknown' | 'excluded';
   verified_claim_count?: number;
   avg_reimbursement?: number;
@@ -500,6 +501,99 @@ function SidePanel({
   const [viewMode, setViewMode] = useState<'single' | 'batch'>('single');
   const [equivalency, setEquivalency] = useState<{ table: { className: string; columns: string[]; rows: { drug: string; values: string[] }[]; note: string } | null; matchedRow: number | null } | null>(null);
   const [eqOpen, setEqOpen] = useState(true);
+
+  // Fax send state
+  const [faxModalOpen, setFaxModalOpen] = useState(false);
+  const [faxNumber, setFaxNumber] = useState('');
+  const [faxPreflight, setFaxPreflight] = useState<{
+    canSend: boolean;
+    warnings: string[];
+    savedFaxNumber?: string;
+    dailyCount?: number;
+    dailyLimit?: number;
+  } | null>(null);
+  const [faxLoading, setFaxLoading] = useState(false);
+  const [faxSending, setFaxSending] = useState(false);
+  const [npiConfirmed, setNpiConfirmed] = useState(false);
+
+  // Run preflight check when opening fax modal
+  async function runPreflightCheck() {
+    if (!opportunity) return;
+    setFaxLoading(true);
+    setFaxPreflight(null);
+    try {
+      const token = localStorage.getItem('therxos_token');
+      const res = await fetch(`${API_URL}/api/fax/preflight`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          opportunityId: opportunity.opportunity_id,
+          prescriberNpi: opportunity.prescriber_npi,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setFaxPreflight({ canSend: false, warnings: [data.error || 'Preflight check failed'] });
+      } else {
+        setFaxPreflight(data);
+        if (data.savedFaxNumber) {
+          setFaxNumber(data.savedFaxNumber);
+        }
+      }
+    } catch (e) {
+      setFaxPreflight({ canSend: false, warnings: ['Network error during preflight check'] });
+    } finally {
+      setFaxLoading(false);
+    }
+  }
+
+  // Send fax via Notifyre
+  async function sendFaxNow() {
+    if (!opportunity || !faxNumber || !npiConfirmed) return;
+    setFaxSending(true);
+    try {
+      const token = localStorage.getItem('therxos_token');
+      const res = await fetch(`${API_URL}/api/fax/send`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          opportunityId: opportunity.opportunity_id,
+          prescriberFaxNumber: faxNumber,
+          prescriberNpi: opportunity.prescriber_npi,
+          npiConfirmed: true,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        alert(data.error || 'Failed to send fax');
+      } else {
+        alert('Fax queued for delivery! The opportunity has been marked as Submitted.');
+        setFaxModalOpen(false);
+        setFaxNumber('');
+        setNpiConfirmed(false);
+        setFaxPreflight(null);
+        // Update the status in the UI
+        onStatusChange(opportunity.opportunity_id, 'Submitted');
+      }
+    } catch (e) {
+      alert('Network error while sending fax');
+    } finally {
+      setFaxSending(false);
+    }
+  }
+
+  // Open fax modal and run preflight
+  function openFaxModal() {
+    setFaxModalOpen(true);
+    setNpiConfirmed(false);
+    runPreflightCheck();
+  }
 
   useEffect(() => {
     if (!opportunity?.recommended_drug_name) { setEquivalency(null); return; }
@@ -1355,9 +1449,13 @@ function SidePanel({
             )}
           </button>
         )}
-        <button className="w-full py-2.5 bg-[#14b8a6] hover:bg-[#0d9488] text-[#0a1628] rounded-lg font-medium flex items-center justify-center gap-2 opacity-50 cursor-not-allowed" disabled>
+        <button
+          onClick={openFaxModal}
+          disabled={opportunity.status !== 'Not Submitted'}
+          className={`w-full py-2.5 bg-[#14b8a6] hover:bg-[#0d9488] text-[#0a1628] rounded-lg font-medium flex items-center justify-center gap-2 ${opportunity.status !== 'Not Submitted' ? 'opacity-50 cursor-not-allowed' : ''}`}
+        >
           <Send className="w-4 h-4" />
-          Send Now (Coming Soon)
+          {opportunity.status !== 'Not Submitted' ? 'Already Actioned' : 'Send Fax Now'}
         </button>
         <button
           onClick={() => onStatusChange(opportunity.opportunity_id, 'Submitted')}
@@ -1370,6 +1468,131 @@ function SidePanel({
           Close
         </button>
       </div>
+
+      {/* Fax Send Modal */}
+      {faxModalOpen && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[60]">
+          <div className="bg-[#0d2137] border border-[#1e3a5f] rounded-xl w-[450px] max-h-[90vh] overflow-y-auto">
+            <div className="p-6 border-b border-[#1e3a5f]">
+              <h3 className="text-lg font-semibold text-white">Send Fax to Prescriber</h3>
+              <p className="text-sm text-slate-400 mt-1">
+                {opportunity.prescriber_name || 'Unknown Prescriber'}
+              </p>
+            </div>
+
+            <div className="p-6 space-y-4">
+              {faxLoading ? (
+                <div className="flex items-center justify-center py-8">
+                  <RefreshCw className="w-6 h-6 text-[#14b8a6] animate-spin" />
+                  <span className="ml-2 text-slate-400">Running preflight checks...</span>
+                </div>
+              ) : faxPreflight ? (
+                <>
+                  {/* Warnings */}
+                  {faxPreflight.warnings && faxPreflight.warnings.length > 0 && (
+                    <div className={`p-4 rounded-lg ${faxPreflight.canSend ? 'bg-amber-500/20 border border-amber-500/30' : 'bg-red-500/20 border border-red-500/30'}`}>
+                      <div className="flex items-start gap-2">
+                        <AlertCircle className={`w-5 h-5 mt-0.5 ${faxPreflight.canSend ? 'text-amber-400' : 'text-red-400'}`} />
+                        <div>
+                          {faxPreflight.warnings.map((w, i) => (
+                            <p key={i} className={`text-sm ${faxPreflight.canSend ? 'text-amber-300' : 'text-red-300'}`}>{w}</p>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Daily limit info */}
+                  {faxPreflight.dailyCount !== undefined && (
+                    <div className="text-sm text-slate-400">
+                      Faxes sent today: {faxPreflight.dailyCount} / {faxPreflight.dailyLimit}
+                    </div>
+                  )}
+
+                  {faxPreflight.canSend && (
+                    <>
+                      {/* Fax number input */}
+                      <div>
+                        <label className="block text-sm font-medium text-slate-300 mb-2">
+                          Prescriber Fax Number
+                        </label>
+                        <input
+                          type="tel"
+                          value={faxNumber}
+                          onChange={(e) => setFaxNumber(e.target.value)}
+                          placeholder="e.g., 555-123-4567"
+                          className="w-full px-4 py-3 bg-[#1e3a5f] border border-[#2d4a6f] rounded-lg text-white placeholder-slate-500 focus:border-[#14b8a6] focus:outline-none"
+                        />
+                        {faxPreflight.savedFaxNumber && (
+                          <p className="text-xs text-slate-500 mt-1">
+                            Using saved fax number from directory
+                          </p>
+                        )}
+                      </div>
+
+                      {/* NPI Confirmation */}
+                      <div className="bg-[#1e3a5f] rounded-lg p-4">
+                        <label className="flex items-start gap-3 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={npiConfirmed}
+                            onChange={(e) => setNpiConfirmed(e.target.checked)}
+                            className="mt-1 w-4 h-4 rounded border-[#2d4a6f] bg-[#0d2137] text-[#14b8a6] focus:ring-[#14b8a6]"
+                          />
+                          <span className="text-sm text-slate-300">
+                            I confirm that the prescriber NPI{opportunity.prescriber_npi ? ` (${opportunity.prescriber_npi})` : ''} matches the hardcopy prescription and this fax is authorized.
+                          </span>
+                        </label>
+                      </div>
+
+                      {/* Drug change summary */}
+                      <div className="bg-[#1e3a5f]/50 rounded-lg p-4">
+                        <p className="text-xs text-slate-500 uppercase tracking-wider mb-2">Recommendation</p>
+                        <p className="text-sm text-white">
+                          {opportunity.current_drug_name} → <span className="text-[#14b8a6]">{opportunity.recommended_drug_name}</span>
+                        </p>
+                      </div>
+                    </>
+                  )}
+                </>
+              ) : null}
+            </div>
+
+            <div className="p-4 border-t border-[#1e3a5f] flex gap-3">
+              <button
+                onClick={() => {
+                  setFaxModalOpen(false);
+                  setFaxNumber('');
+                  setNpiConfirmed(false);
+                  setFaxPreflight(null);
+                }}
+                className="flex-1 py-2.5 bg-[#1e3a5f] hover:bg-[#2d4a6f] text-white rounded-lg font-medium"
+              >
+                Cancel
+              </button>
+              {faxPreflight?.canSend && (
+                <button
+                  onClick={sendFaxNow}
+                  disabled={!faxNumber || !npiConfirmed || faxSending}
+                  className="flex-1 py-2.5 bg-[#14b8a6] hover:bg-[#0d9488] disabled:bg-[#14b8a6]/50 text-[#0a1628] rounded-lg font-medium flex items-center justify-center gap-2"
+                >
+                  {faxSending ? (
+                    <>
+                      <RefreshCw className="w-4 h-4 animate-spin" />
+                      Sending...
+                    </>
+                  ) : (
+                    <>
+                      <Send className="w-4 h-4" />
+                      Send Fax
+                    </>
+                  )}
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </aside>
   );
 }

@@ -38,6 +38,7 @@ interface Prescription {
   dispensed_date: string;
   patient_pay: number;
   insurance_pay: number;
+  gross_profit: number;
   prescriber_name: string;
 }
 
@@ -45,7 +46,7 @@ interface Opportunity {
   opportunity_id: string;
   current_drug_name: string;
   recommended_drug_name: string;
-  annual_margin_gain: number;
+  monthly_margin_gain: number;
   status: string;
 }
 
@@ -111,9 +112,9 @@ export default function PatientProfilePage() {
     if (patientId) fetchPatientData(); 
   }, [patientId, fetchPatientData]);
 
-  const totalOppValue = opportunities.reduce((s, o) => s + (Number(o.annual_margin_gain) || 0), 0);
-  const pending = opportunities.filter(o => o.status === 'new').length;
-  const captured = opportunities.filter(o => o.status === 'actioned').length;
+  const totalOppValue = opportunities.reduce((s, o) => s + (Number(o.monthly_margin_gain) || 0), 0);
+  const pending = opportunities.filter(o => o.status === 'Not Submitted').length;
+  const captured = opportunities.filter(o => ['Approved', 'Completed'].includes(o.status)).length;
 
   if (loading) return <div className="min-h-screen bg-[#0a1628] flex items-center justify-center"><RefreshCw className="w-8 h-8 text-[#14b8a6] animate-spin" /></div>;
   if (!patient) return <div className="min-h-screen bg-[#0a1628] p-8 text-center py-20"><AlertCircle className="w-12 h-12 text-slate-600 mx-auto mb-4" /><h2 className="text-xl font-semibold text-white mb-2">Patient Not Found</h2><button onClick={() => router.back()} className="px-4 py-2 bg-[#1e3a5f] text-white rounded-lg">Go Back</button></div>;
@@ -128,7 +129,7 @@ export default function PatientProfilePage() {
 
       <div className={`grid grid-cols-1 ${canViewFinancialData ? 'md:grid-cols-4' : 'md:grid-cols-3'} gap-6 mb-8`}>
         {canViewFinancialData && (
-          <div className="bg-[#0d2137] border border-[#1e3a5f] rounded-xl p-5"><div className="flex items-center gap-3"><div className="w-10 h-10 rounded-lg bg-[#14b8a6]/20 flex items-center justify-center"><DollarSign className="w-5 h-5 text-[#14b8a6]" /></div><div><p className="text-sm text-slate-400">Opp Value</p><p className="text-xl font-bold text-[#14b8a6]">{formatCurrency(totalOppValue)}</p></div></div></div>
+          <div className="bg-[#0d2137] border border-[#1e3a5f] rounded-xl p-5"><div className="flex items-center gap-3"><div className="w-10 h-10 rounded-lg bg-[#14b8a6]/20 flex items-center justify-center"><DollarSign className="w-5 h-5 text-[#14b8a6]" /></div><div><p className="text-sm text-slate-400">Monthly Value</p><p className="text-xl font-bold text-[#14b8a6]">{formatCurrency(totalOppValue)}</p></div></div></div>
         )}
         <div className="bg-[#0d2137] border border-[#1e3a5f] rounded-xl p-5"><div className="flex items-center gap-3"><div className="w-10 h-10 rounded-lg bg-amber-500/20 flex items-center justify-center"><Clock className="w-5 h-5 text-amber-400" /></div><div><p className="text-sm text-slate-400">Pending</p><p className="text-xl font-bold text-amber-400">{pending}</p></div></div></div>
         <div className="bg-[#0d2137] border border-[#1e3a5f] rounded-xl p-5"><div className="flex items-center gap-3"><div className="w-10 h-10 rounded-lg bg-emerald-500/20 flex items-center justify-center"><CheckCircle className="w-5 h-5 text-emerald-400" /></div><div><p className="text-sm text-slate-400">Captured</p><p className="text-xl font-bold text-emerald-400">{captured}</p></div></div></div>
@@ -143,8 +144,8 @@ export default function PatientProfilePage() {
         </div>
 
         <div className="lg:col-span-2 space-y-6">
-          <div className="bg-[#0d2137] border border-[#1e3a5f] rounded-xl overflow-hidden"><div className="px-6 py-4 border-b border-[#1e3a5f]"><h2 className="text-lg font-semibold text-white flex items-center gap-2"><AlertCircle className="w-5 h-5 text-emerald-400" />Opportunities ({opportunities.length})</h2></div>{opportunities.length > 0 ? <table className="w-full"><thead className="bg-[#1e3a5f]/50"><tr><th className="text-left text-xs font-semibold text-slate-400 uppercase px-4 py-3">Opportunity</th>{canViewFinancialData && <th className="text-right text-xs font-semibold text-slate-400 uppercase px-4 py-3">Value</th>}<th className="text-center text-xs font-semibold text-slate-400 uppercase px-4 py-3">Status</th></tr></thead><tbody>{opportunities.map(o => <tr key={o.opportunity_id} className="border-t border-[#1e3a5f]"><td className="px-4 py-3 text-sm text-white">{o.current_drug_name} → <span className="text-[#14b8a6]">{o.recommended_drug_name}</span></td>{canViewFinancialData && <td className="px-4 py-3 text-right text-emerald-400 font-medium">{formatCurrency(Number(o.annual_margin_gain) || 0)}</td>}<td className="px-4 py-3 text-center"><StatusBadge status={o.status} /></td></tr>)}</tbody></table> : <div className="p-8 text-center text-slate-500">No opportunities</div>}</div>
-          <div className="bg-[#0d2137] border border-[#1e3a5f] rounded-xl overflow-hidden"><div className="px-6 py-4 border-b border-[#1e3a5f]"><h2 className="text-lg font-semibold text-white flex items-center gap-2"><Pill className="w-5 h-5 text-blue-400" />Recent Prescriptions ({prescriptions.length})</h2></div>{prescriptions.length > 0 ? <table className="w-full"><thead className="bg-[#1e3a5f]/50"><tr><th className="text-left text-xs font-semibold text-slate-400 uppercase px-4 py-3">Drug</th><th className="text-left text-xs font-semibold text-slate-400 uppercase px-4 py-3">Prescriber</th><th className="text-center text-xs font-semibold text-slate-400 uppercase px-4 py-3">Date</th>{canViewFinancialData && <th className="text-right text-xs font-semibold text-slate-400 uppercase px-4 py-3">GP</th>}</tr></thead><tbody>{prescriptions.slice(0,20).map(rx => <tr key={rx.prescription_id} className="border-t border-[#1e3a5f]"><td className="px-4 py-3"><div className="text-sm text-white">{rx.drug_name}</div><div className="text-xs text-slate-500">Rx# {rx.rx_number}</div></td><td className="px-4 py-3 text-sm text-slate-300">{rx.prescriber_name || 'Unknown'}</td><td className="px-4 py-3 text-center text-sm text-slate-400">{formatDate(rx.dispensed_date)}</td>{canViewFinancialData && <td className="px-4 py-3 text-right text-emerald-400 font-medium">{formatCurrency((Number(rx.insurance_pay) || 0) + (Number(rx.patient_pay) || 0))}</td>}</tr>)}</tbody></table> : <div className="p-8 text-center text-slate-500">No prescriptions</div>}</div>
+          <div className="bg-[#0d2137] border border-[#1e3a5f] rounded-xl overflow-hidden"><div className="px-6 py-4 border-b border-[#1e3a5f]"><h2 className="text-lg font-semibold text-white flex items-center gap-2"><AlertCircle className="w-5 h-5 text-emerald-400" />Opportunities ({opportunities.length})</h2></div>{opportunities.length > 0 ? <table className="w-full"><thead className="bg-[#1e3a5f]/50"><tr><th className="text-left text-xs font-semibold text-slate-400 uppercase px-4 py-3">Opportunity</th>{canViewFinancialData && <th className="text-right text-xs font-semibold text-slate-400 uppercase px-4 py-3">Monthly</th>}<th className="text-center text-xs font-semibold text-slate-400 uppercase px-4 py-3">Status</th></tr></thead><tbody>{opportunities.map(o => <tr key={o.opportunity_id} className="border-t border-[#1e3a5f]"><td className="px-4 py-3 text-sm text-white">{o.current_drug_name} → <span className="text-[#14b8a6]">{o.recommended_drug_name}</span></td>{canViewFinancialData && <td className="px-4 py-3 text-right text-emerald-400 font-medium">{formatCurrency(Number(o.monthly_margin_gain) || 0)}</td>}<td className="px-4 py-3 text-center"><StatusBadge status={o.status} /></td></tr>)}</tbody></table> : <div className="p-8 text-center text-slate-500">No opportunities</div>}</div>
+          <div className="bg-[#0d2137] border border-[#1e3a5f] rounded-xl overflow-hidden"><div className="px-6 py-4 border-b border-[#1e3a5f]"><h2 className="text-lg font-semibold text-white flex items-center gap-2"><Pill className="w-5 h-5 text-blue-400" />Recent Prescriptions ({prescriptions.length})</h2></div>{prescriptions.length > 0 ? <table className="w-full"><thead className="bg-[#1e3a5f]/50"><tr><th className="text-left text-xs font-semibold text-slate-400 uppercase px-4 py-3">Drug</th><th className="text-left text-xs font-semibold text-slate-400 uppercase px-4 py-3">Prescriber</th><th className="text-center text-xs font-semibold text-slate-400 uppercase px-4 py-3">Date</th>{canViewFinancialData && <th className="text-right text-xs font-semibold text-slate-400 uppercase px-4 py-3">GP</th>}</tr></thead><tbody>{prescriptions.slice(0,20).map(rx => <tr key={rx.prescription_id} className="border-t border-[#1e3a5f]"><td className="px-4 py-3"><div className="text-sm text-white">{rx.drug_name}</div><div className="text-xs text-slate-500">Rx# {rx.rx_number}</div></td><td className="px-4 py-3 text-sm text-slate-300">{rx.prescriber_name || 'Unknown'}</td><td className="px-4 py-3 text-center text-sm text-slate-400">{formatDate(rx.dispensed_date)}</td>{canViewFinancialData && <td className="px-4 py-3 text-right text-emerald-400 font-medium">{formatCurrency(Number(rx.gross_profit) || 0)}</td>}</tr>)}</tbody></table> : <div className="p-8 text-center text-slate-500">No prescriptions</div>}</div>
         </div>
       </div>
     </div>

@@ -183,7 +183,7 @@ export default function AdminLayout({
         { name: 'Reference Data', href: '/admin/opportunity-approval/reference-data', icon: BookOpen },
       ],
     },
-    { name: 'Coverage Scanner', href: '/admin/coverage', icon: Zap },
+    // { name: 'Coverage Scanner', href: '/admin/coverage', icon: Zap },
   ];
 
   const sidebarWidth = sidebarCollapsed ? 'w-16' : 'w-60';
