@@ -1639,6 +1639,7 @@ export default function OpportunitiesPage() {
   const [groupBy, setGroupBy] = useState('patient');
   const [search, setSearch] = useState('');
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const [expandedPatientOpps, setExpandedPatientOpps] = useState<Set<string>>(new Set()); // For inline patient opps expansion
   const [selectedOpp, setSelectedOpp] = useState<Opportunity | null>(null);
   const [selectedGroup, setSelectedGroup] = useState<GroupedItem | null>(null);
   const [notesModal, setNotesModal] = useState<Opportunity | null>(null);
@@ -2522,12 +2523,41 @@ export default function OpportunitiesPage() {
                                 </button>
                               </td>
                               <td className="px-5 py-3 text-right">
-                                <button
-                                  onClick={() => { setSelectedOpp(opp); setSelectedGroup(group); }}
-                                  className="px-3 py-1.5 bg-[#1e3a5f] hover:bg-[#2d4a6f] text-white rounded text-sm"
-                                >
-                                  View
-                                </button>
+                                {groupBy === 'patient' ? (
+                                  <button
+                                    onClick={() => { setSelectedOpp(opp); setSelectedGroup(group); }}
+                                    className="px-3 py-1.5 bg-[#1e3a5f] hover:bg-[#2d4a6f] text-white rounded text-sm"
+                                  >
+                                    View
+                                  </button>
+                                ) : (() => {
+                                  const otherPatientOpps = opportunities.filter(o => o.patient_id === opp.patient_id && o.opportunity_id !== opp.opportunity_id).length;
+                                  const isExpanded = expandedPatientOpps.has(`patient-${opp.patient_id}-${opp.opportunity_id}`);
+                                  return (
+                                    <div className="flex items-center gap-1">
+                                      <button
+                                        onClick={() => {
+                                          const key = `patient-${opp.patient_id}-${opp.opportunity_id}`;
+                                          setExpandedPatientOpps(prev => {
+                                            const next = new Set(prev);
+                                            if (next.has(key)) next.delete(key);
+                                            else next.add(key);
+                                            return next;
+                                          });
+                                        }}
+                                        className={`px-3 py-1.5 rounded text-sm ${
+                                          isExpanded
+                                            ? 'bg-[#14b8a6] text-[#0a1628]'
+                                            : otherPatientOpps > 0
+                                              ? 'bg-[#14b8a6]/20 hover:bg-[#14b8a6]/30 text-[#14b8a6]'
+                                              : 'bg-[#1e3a5f] hover:bg-[#2d4a6f] text-white'
+                                        }`}
+                                      >
+                                        {isExpanded ? 'Hide' : otherPatientOpps > 0 ? `+${otherPatientOpps} More` : 'View'}
+                                      </button>
+                                    </div>
+                                  );
+                                })()}
                               </td>
                             </tr>
                             {altCount > 0 && expanded.has(`alt-${opp.opportunity_id}`) && (
@@ -2560,6 +2590,84 @@ export default function OpportunitiesPage() {
                                 </tr>
                               ))
                             )}
+                            {/* Inline expansion: Show all patient opportunities when not grouped by patient */}
+                            {groupBy !== 'patient' && expandedPatientOpps.has(`patient-${opp.patient_id}-${opp.opportunity_id}`) && (() => {
+                              // Get all opportunities for this patient from the full list
+                              const patientOpps = opportunities.filter(o => o.patient_id === opp.patient_id && o.opportunity_id !== opp.opportunity_id);
+                              if (patientOpps.length === 0) return null;
+                              return (
+                                <>
+                                  <tr className="border-t border-[#14b8a6]/30 bg-[#14b8a6]/5">
+                                    <td colSpan={showAnyFinancials ? 10 : 8} className="px-5 py-2">
+                                      <div className="flex items-center gap-2 text-sm text-[#14b8a6]">
+                                        <span className="font-medium">
+                                          {formatPatientName(opp.patient_first_name, opp.patient_last_name, opp.patient_hash, isDemo)}'s Other Opportunities ({patientOpps.length})
+                                        </span>
+                                        <button
+                                          onClick={() => { setSelectedOpp(opp); setSelectedGroup(group); }}
+                                          className="ml-auto px-2 py-0.5 text-xs bg-[#1e3a5f] hover:bg-[#2d4a6f] text-white rounded"
+                                        >
+                                          Open Side Panel
+                                        </button>
+                                      </div>
+                                    </td>
+                                  </tr>
+                                  {patientOpps.map(patientOpp => {
+                                    const [pRationale, pAction] = (patientOpp.clinical_rationale || '').split('\n\nAction: ');
+                                    return (
+                                      <tr key={`expanded-${patientOpp.opportunity_id}`} className="border-t border-[#1e3a5f]/50 bg-[#0d2137]">
+                                        <td className="px-5 py-2">
+                                          <span className="text-xs text-slate-500">↳</span>
+                                        </td>
+                                        <td className="px-5 py-2">
+                                          <div className="flex items-center gap-2">
+                                            <span className="text-white text-sm">
+                                              {patientOpp.current_drug_name || 'N/A'} → <span className="text-[#14b8a6]">{patientOpp.recommended_drug_name}</span>
+                                            </span>
+                                            <CoverageConfidenceBadge confidence={patientOpp.coverage_confidence} size="xs" />
+                                          </div>
+                                        </td>
+                                        <td className="px-5 py-2">
+                                          <div className="text-xs text-slate-400 max-w-xs truncate">{pAction || pRationale}</div>
+                                        </td>
+                                        {showAnyFinancials && (
+                                          <>
+                                            <td className="px-5 py-2">
+                                              <div className="text-xs text-slate-400">
+                                                {patientOpp.avg_dispensed_qty ? Math.round(Number(patientOpp.avg_dispensed_qty)) : '-'}
+                                              </div>
+                                            </td>
+                                            <td className="px-5 py-2">
+                                              <div className="text-sm text-emerald-400">{formatCurrency(Number(patientOpp.potential_margin_gain) || 0)}</div>
+                                            </td>
+                                          </>
+                                        )}
+                                        <td className="px-5 py-2">
+                                          <div className="text-xs text-slate-300">{patientOpp.prescriber_name || 'Unknown'}</div>
+                                        </td>
+                                        <td className="px-5 py-2">
+                                          <StatusDropdown status={patientOpp.status} onChange={s => updateStatus(patientOpp.opportunity_id, s)} />
+                                        </td>
+                                        <td className="px-5 py-2">
+                                          <div className="text-xs text-slate-400">
+                                            {patientOpp.actioned_at ? new Date(patientOpp.actioned_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '-'}
+                                          </div>
+                                        </td>
+                                        <td className="px-5 py-2">
+                                          <button
+                                            onClick={(e) => { e.stopPropagation(); setNotesModal(patientOpp); }}
+                                            className={`p-1 rounded hover:bg-[#2d4a6f] ${patientOpp.staff_notes ? 'text-[#14b8a6]' : 'text-slate-500'}`}
+                                          >
+                                            <StickyNote className="w-3.5 h-3.5" />
+                                          </button>
+                                        </td>
+                                        <td className="px-5 py-2"></td>
+                                      </tr>
+                                    );
+                                  })}
+                                </>
+                              );
+                            })()}
                             </React.Fragment>
                           );
                         })}
