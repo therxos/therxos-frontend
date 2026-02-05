@@ -638,9 +638,17 @@ function SidePanel({
     setNpiConfirmed(false);
     setManualNpi('');
     // Initialize editable fields from opportunity data
-    setFaxCurrentDrug(opportunity?.current_drug_name || '');
-    setFaxRecommendedDrug(opportunity?.recommended_drug_name || '');
-    setFaxRationale(opportunity?.clinical_rationale || '');
+    const currentDrug = opportunity?.current_drug_name || '';
+    const recommendedDrug = opportunity?.recommended_drug_name || '';
+    setFaxCurrentDrug(currentDrug);
+    setFaxRecommendedDrug(recommendedDrug);
+
+    // Generate default rationale for missing_therapy/combo_therapy if none exists
+    let rationale = opportunity?.clinical_rationale || '';
+    if (!rationale && ['missing_therapy', 'combo_therapy'].includes(opportunity?.opportunity_type || '')) {
+      rationale = `Patient is currently prescribed ${currentDrug} but does not have a prescription for ${recommendedDrug} on file. Please prescribe if clinically appropriate, or complete and return this form to the pharmacy. Thank you.`;
+    }
+    setFaxRationale(rationale);
     runPreflightCheck();
   }
 
