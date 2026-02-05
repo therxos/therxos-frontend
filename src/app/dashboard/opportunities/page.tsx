@@ -118,6 +118,24 @@ interface Stats {
   unknown_coverage_annual: number;
 }
 
+interface FaxQueueItem {
+  fax_id: string;
+  fax_status: string;
+  status_description: string;
+  eta: string | null;
+  can_resend: boolean;
+  created_at: string;
+  prescriber_name: string;
+  prescriber_fax_number: string;
+  notifyre_fax_id: string | null;
+  failed_reason: string | null;
+  current_drug: string;
+  recommended_drug: string;
+  opportunity_id: string;
+  patient_first: string;
+  patient_last: string;
+}
+
 // Helpers
 function formatCurrency(value: number) {
   if (isNaN(value) || value === null || value === undefined) return '$0.00';
@@ -1768,6 +1786,49 @@ export default function OpportunitiesPage() {
   const [lastSync, setLastSync] = useState(new Date());
   const [prescriberWarning, setPrescriberWarning] = useState<{ data: PrescriberWarningData; pendingUpdate: { id: string; status: string } } | null>(null);
   const [pharmacy, setPharmacy] = useState<Pharmacy | null>(null);
+  const [faxQueue, setFaxQueue] = useState<FaxQueueItem[]>([]);
+  const [faxQueueExpanded, setFaxQueueExpanded] = useState(false);
+  const [resendingFax, setResendingFax] = useState<string | null>(null);
+
+  // Fetch fax queue
+  async function fetchFaxQueue() {
+    try {
+      const token = localStorage.getItem('therxos_token');
+      const res = await fetch(`${API_URL}/api/fax/queue`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setFaxQueue(data.faxes || []);
+      }
+    } catch (e) {
+      console.error('Failed to fetch fax queue:', e);
+    }
+  }
+
+  // Resend a failed fax
+  async function handleResendFax(faxId: string) {
+    setResendingFax(faxId);
+    try {
+      const token = localStorage.getItem('therxos_token');
+      const res = await fetch(`${API_URL}/api/fax/${faxId}/resend`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        // Refresh both fax queue and opportunities
+        await Promise.all([fetchFaxQueue(), fetchData()]);
+      } else {
+        const data = await res.json();
+        alert(data.error || 'Failed to resend fax');
+      }
+    } catch (e) {
+      console.error('Failed to resend fax:', e);
+      alert('Failed to resend fax');
+    } finally {
+      setResendingFax(null);
+    }
+  }
 
   // Fetch pharmacy info
   useEffect(() => {
@@ -1810,6 +1871,13 @@ export default function OpportunitiesPage() {
 
   // Re-fetch when pharmacy changes (e.g., after impersonation)
   useEffect(() => { if (user?.pharmacyId) fetchData(); }, [user?.pharmacyId]);
+  useEffect(() => { if (user?.pharmacyId) fetchFaxQueue(); }, [user?.pharmacyId]);
+  // Auto-refresh fax queue every 30 seconds when expanded
+  useEffect(() => {
+    if (!faxQueueExpanded || faxQueue.length === 0) return;
+    const interval = setInterval(fetchFaxQueue, 30000);
+    return () => clearInterval(interval);
+  }, [faxQueueExpanded, faxQueue.length]);
   useEffect(() => { groupData(); }, [opportunities, groupBy]);
 
   async function fetchData() {
@@ -2324,6 +2392,104 @@ export default function OpportunitiesPage() {
           </div>
         </div>
       </div>
+
+      {/* Fax Queue - Only show if there are pending/failed faxes */}
+      {faxQueue.length > 0 && (
+        <div className="px-8 pb-4">
+          <div className="bg-[#0d2137] border border-[#1e3a5f] rounded-xl overflow-hidden">
+            <button
+              onClick={() => setFaxQueueExpanded(!faxQueueExpanded)}
+              className="w-full px-6 py-3 flex items-center justify-between hover:bg-[#1e3a5f]/20 transition-colors"
+            >
+              <div className="flex items-center gap-3">
+                <Send className="w-4 h-4 text-blue-400" />
+                <span className="text-sm font-medium text-white">Fax Queue</span>
+                <span className="text-xs px-2 py-0.5 bg-blue-500/20 text-blue-400 rounded-full">
+                  {faxQueue.filter(f => f.fax_status !== 'failed').length} pending
+                </span>
+                {faxQueue.filter(f => f.fax_status === 'failed').length > 0 && (
+                  <span className="text-xs px-2 py-0.5 bg-red-500/20 text-red-400 rounded-full">
+                    {faxQueue.filter(f => f.fax_status === 'failed').length} failed
+                  </span>
+                )}
+              </div>
+              {faxQueueExpanded ? (
+                <ChevronUp className="w-4 h-4 text-slate-400" />
+              ) : (
+                <ChevronDown className="w-4 h-4 text-slate-400" />
+              )}
+            </button>
+            {faxQueueExpanded && (
+              <div className="border-t border-[#1e3a5f]">
+                <table className="w-full text-sm">
+                  <thead className="bg-[#0a1628]">
+                    <tr>
+                      <th className="px-4 py-2 text-left text-xs text-slate-400 font-medium">Patient</th>
+                      <th className="px-4 py-2 text-left text-xs text-slate-400 font-medium">Drug</th>
+                      <th className="px-4 py-2 text-left text-xs text-slate-400 font-medium">Prescriber</th>
+                      <th className="px-4 py-2 text-left text-xs text-slate-400 font-medium">Fax</th>
+                      <th className="px-4 py-2 text-left text-xs text-slate-400 font-medium">Status</th>
+                      <th className="px-4 py-2 text-left text-xs text-slate-400 font-medium">Sent</th>
+                      <th className="px-4 py-2 text-right text-xs text-slate-400 font-medium">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {faxQueue.map((fax) => (
+                      <tr key={fax.fax_id} className="border-t border-[#1e3a5f]/50 hover:bg-[#1e3a5f]/20">
+                        <td className="px-4 py-3 text-white">
+                          {fax.patient_first && fax.patient_last
+                            ? `${fax.patient_last.slice(0,3).toUpperCase()},${fax.patient_first.slice(0,3).toUpperCase()}`
+                            : 'Unknown'}
+                        </td>
+                        <td className="px-4 py-3">
+                          <div className="text-slate-400 text-xs">{fax.current_drug}</div>
+                          <div className="text-emerald-400 text-xs">{fax.recommended_drug}</div>
+                        </td>
+                        <td className="px-4 py-3 text-slate-300">{fax.prescriber_name || 'Unknown'}</td>
+                        <td className="px-4 py-3 text-slate-400 text-xs">{fax.prescriber_fax_number || 'No fax'}</td>
+                        <td className="px-4 py-3">
+                          <div className="flex flex-col gap-1">
+                            <span className={`text-xs px-2 py-0.5 rounded inline-block w-fit ${
+                              fax.fax_status === 'failed' ? 'bg-red-500/20 text-red-400' :
+                              fax.fax_status === 'successful' ? 'bg-emerald-500/20 text-emerald-400' :
+                              'bg-blue-500/20 text-blue-400'
+                            }`}>
+                              {fax.status_description}
+                            </span>
+                            {fax.eta && fax.fax_status !== 'failed' && (
+                              <span className="text-[10px] text-slate-500">{fax.eta}</span>
+                            )}
+                            {fax.failed_reason && (
+                              <span className="text-[10px] text-red-400">{fax.failed_reason}</span>
+                            )}
+                          </div>
+                        </td>
+                        <td className="px-4 py-3 text-slate-400 text-xs">
+                          {new Date(fax.created_at).toLocaleString('en-US', {
+                            month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit'
+                          })}
+                        </td>
+                        <td className="px-4 py-3 text-right">
+                          {fax.can_resend && (
+                            <button
+                              onClick={() => handleResendFax(fax.fax_id)}
+                              disabled={resendingFax === fax.fax_id}
+                              className="inline-flex items-center gap-1 px-2 py-1 text-xs bg-amber-500/20 text-amber-400 hover:bg-amber-500/30 rounded transition-colors disabled:opacity-50"
+                            >
+                              <RefreshCw className={`w-3 h-3 ${resendingFax === fax.fax_id ? 'animate-spin' : ''}`} />
+                              {resendingFax === fax.fax_id ? 'Resending...' : 'Resend'}
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Filters */}
       <div className="px-8 py-2 flex items-center justify-between">
