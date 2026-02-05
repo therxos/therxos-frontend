@@ -531,6 +531,9 @@ function SidePanel({
   const [faxSending, setFaxSending] = useState(false);
   const [npiConfirmed, setNpiConfirmed] = useState(false);
   const [manualNpi, setManualNpi] = useState('');
+  const [faxRationale, setFaxRationale] = useState('');
+  const [faxCurrentDrug, setFaxCurrentDrug] = useState('');
+  const [faxRecommendedDrug, setFaxRecommendedDrug] = useState('');
 
   // Run preflight check when opening fax modal
   async function runPreflightCheck() {
@@ -600,6 +603,10 @@ function SidePanel({
           prescriberFaxNumber: faxNumber,
           prescriberNpi: effectiveNpi,
           npiConfirmed: true,
+          // Include edited content for the fax
+          currentDrugName: faxCurrentDrug,
+          recommendedDrugName: faxRecommendedDrug,
+          clinicalRationale: faxRationale,
         }),
       });
       const data = await res.json();
@@ -612,6 +619,9 @@ function SidePanel({
         setManualNpi('');
         setNpiConfirmed(false);
         setFaxPreflight(null);
+        setFaxRationale('');
+        setFaxCurrentDrug('');
+        setFaxRecommendedDrug('');
         // Update the status in the UI
         onStatusChange(opportunity.opportunity_id, 'Submitted');
       }
@@ -627,6 +637,10 @@ function SidePanel({
     setFaxModalOpen(true);
     setNpiConfirmed(false);
     setManualNpi('');
+    // Initialize editable fields from opportunity data
+    setFaxCurrentDrug(opportunity?.current_drug_name || '');
+    setFaxRecommendedDrug(opportunity?.recommended_drug_name || '');
+    setFaxRationale(opportunity?.clinical_rationale || '');
     runPreflightCheck();
   }
 
@@ -1620,12 +1634,44 @@ function SidePanel({
                         </label>
                       </div>
 
-                      {/* Drug change summary */}
-                      <div className="bg-[#1e3a5f]/50 rounded-lg p-4">
-                        <p className="text-xs text-slate-500 uppercase tracking-wider mb-2">Recommendation</p>
-                        <p className="text-sm text-white">
-                          {opportunity.current_drug_name} → <span className="text-[#14b8a6]">{opportunity.recommended_drug_name}</span>
-                        </p>
+                      {/* Editable Fax Content */}
+                      <div className="space-y-4">
+                        <p className="text-xs text-slate-500 uppercase tracking-wider">Fax Content (Editable)</p>
+
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <label className="block text-xs text-slate-400 mb-1">Current Drug</label>
+                            <input
+                              type="text"
+                              value={faxCurrentDrug}
+                              onChange={(e) => setFaxCurrentDrug(e.target.value)}
+                              className="w-full px-3 py-2 bg-[#1e3a5f] border border-[#2d4a6f] rounded-lg text-white text-sm focus:border-[#14b8a6] focus:outline-none"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-xs text-slate-400 mb-1">Recommended Drug</label>
+                            <input
+                              type="text"
+                              value={faxRecommendedDrug}
+                              onChange={(e) => setFaxRecommendedDrug(e.target.value)}
+                              className="w-full px-3 py-2 bg-[#1e3a5f] border border-[#2d4a6f] rounded-lg text-[#14b8a6] text-sm focus:border-[#14b8a6] focus:outline-none"
+                            />
+                          </div>
+                        </div>
+
+                        <div>
+                          <label className="block text-xs text-slate-400 mb-1">Clinical Rationale</label>
+                          <textarea
+                            value={faxRationale}
+                            onChange={(e) => setFaxRationale(e.target.value)}
+                            rows={4}
+                            placeholder="Enter clinical rationale for the recommendation..."
+                            className="w-full px-3 py-2 bg-[#1e3a5f] border border-[#2d4a6f] rounded-lg text-white text-sm placeholder-slate-500 focus:border-[#14b8a6] focus:outline-none resize-none"
+                          />
+                          <p className="text-xs text-slate-500 mt-1">
+                            Review and edit before sending. This will appear on the fax to the prescriber.
+                          </p>
+                        </div>
                       </div>
                     </>
                   )}
@@ -1641,6 +1687,9 @@ function SidePanel({
                   setManualNpi('');
                   setNpiConfirmed(false);
                   setFaxPreflight(null);
+                  setFaxRationale('');
+                  setFaxCurrentDrug('');
+                  setFaxRecommendedDrug('');
                 }}
                 className="flex-1 py-2.5 bg-[#1e3a5f] hover:bg-[#2d4a6f] text-white rounded-lg font-medium"
               >
