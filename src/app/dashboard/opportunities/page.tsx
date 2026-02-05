@@ -289,22 +289,29 @@ function CoverageConfidenceBadge({ confidence, claimDate, size = 'sm' }: { confi
 }
 
 // Status Dropdown with portal positioning
-function StatusDropdown({ status, onChange }: { status: string; onChange: (s: string) => void }) {
+function StatusDropdown({ status, onChange, showCompleted = true, showDenied = true }: { status: string; onChange: (s: string) => void; showCompleted?: boolean; showDenied?: boolean }) {
   const [open, setOpen] = useState(false);
   const [position, setPosition] = useState({ top: 0, left: 0, flipUp: false });
   const buttonRef = React.useRef<HTMLButtonElement>(null);
 
-  const statuses = [
+  const allStatuses = [
     { value: 'Not Submitted', label: 'Not Submitted', color: 'bg-amber-500' },
     { value: 'Submitted', label: 'Submitted', color: 'bg-blue-500' },
     { value: 'Approved', label: 'Approved', color: 'bg-emerald-500' },
-    { value: 'Completed', label: 'Completed', color: 'bg-green-500' },
-    { value: 'Denied', label: 'Denied', color: 'bg-slate-500' },
-    { value: "Didn't Work", label: "Didn't Work", color: 'bg-red-500' },
-    { value: 'Flagged', label: 'Flag for Review', color: 'bg-purple-500' },
+    { value: 'Completed', label: 'Completed', color: 'bg-green-500', requiresCompleted: true },
+    { value: 'Denied', label: 'Denied', color: 'bg-slate-500', requiresDenied: true },
+    { value: "Didn't Work", label: "Didn't Work", color: 'bg-red-500', requiresDenied: true },
+    { value: 'Flagged', label: 'Flag for Review', color: 'bg-purple-500', requiresDenied: true },
   ];
 
-  const current = statuses.find(s => s.value === status) || statuses[0];
+  // Filter statuses based on what's visible
+  const statuses = allStatuses.filter(s => {
+    if (s.requiresCompleted && !showCompleted) return false;
+    if (s.requiresDenied && !showDenied) return false;
+    return true;
+  });
+
+  const current = allStatuses.find(s => s.value === status) || allStatuses[0];
 
   const handleOpen = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -2543,7 +2550,7 @@ export default function OpportunitiesPage() {
                                 <div className="text-sm text-slate-300">{opp.prescriber_name || 'Unknown'}</div>
                               </td>
                               <td className="px-5 py-3">
-                                <StatusDropdown status={opp.status} onChange={s => updateStatus(opp.opportunity_id, s)} />
+                                <StatusDropdown status={opp.status} onChange={s => updateStatus(opp.opportunity_id, s)} showCompleted={showCompleted} showDenied={showDenied} />
                               </td>
                               <td className="px-5 py-3">
                                 <div className="text-sm text-slate-400">
@@ -2682,7 +2689,7 @@ export default function OpportunitiesPage() {
                                           <div className="text-xs text-slate-300">{patientOpp.prescriber_name || 'Unknown'}</div>
                                         </td>
                                         <td className="px-5 py-2">
-                                          <StatusDropdown status={patientOpp.status} onChange={s => updateStatus(patientOpp.opportunity_id, s)} />
+                                          <StatusDropdown status={patientOpp.status} onChange={s => updateStatus(patientOpp.opportunity_id, s)} showCompleted={showCompleted} showDenied={showDenied} />
                                         </td>
                                         <td className="px-5 py-2">
                                           <div className="text-xs text-slate-400">
