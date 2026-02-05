@@ -1500,6 +1500,17 @@ function SidePanel({
               <p className="text-sm text-slate-400 mt-1">
                 {opportunity.prescriber_name || 'Unknown Prescriber'}
               </p>
+              <div className="mt-3 bg-[#1e3a5f]/50 rounded-lg p-3">
+                <p className="text-xs text-slate-500 uppercase tracking-wider mb-1">Patient</p>
+                <p className="text-sm text-white font-medium">
+                  {opportunity.patient_first_name} {opportunity.patient_last_name}
+                </p>
+                {opportunity.patient_dob && (
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    DOB: {new Date(opportunity.patient_dob).toLocaleDateString()}
+                  </p>
+                )}
+              </div>
             </div>
 
             <div className="p-6 space-y-4">
@@ -1553,7 +1564,13 @@ function SidePanel({
                       </div>
 
                       {/* NPI Confirmation */}
-                      <div className="bg-[#1e3a5f] rounded-lg p-4">
+                      <div className="bg-[#1e3a5f] rounded-lg p-4 space-y-3">
+                        <div className="text-sm">
+                          <span className="text-slate-400">Prescriber NPI: </span>
+                          <span className={opportunity.prescriber_npi ? 'text-white font-mono' : 'text-amber-400'}>
+                            {opportunity.prescriber_npi || 'Unknown - verify from hardcopy'}
+                          </span>
+                        </div>
                         <label className="flex items-start gap-3 cursor-pointer">
                           <input
                             type="checkbox"
@@ -1562,7 +1579,7 @@ function SidePanel({
                             className="mt-1 w-4 h-4 rounded border-[#2d4a6f] bg-[#0d2137] text-[#14b8a6] focus:ring-[#14b8a6]"
                           />
                           <span className="text-sm text-slate-300">
-                            I confirm that the prescriber NPI{opportunity.prescriber_npi ? ` (${opportunity.prescriber_npi})` : ''} matches the hardcopy prescription and this fax is authorized.
+                            I confirm the prescriber NPI and SPI (Service Provider ID / location) match the hardcopy prescription and this fax is authorized.
                           </span>
                         </label>
                       </div>
