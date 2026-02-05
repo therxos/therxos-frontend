@@ -485,6 +485,7 @@ function SidePanel({
   showFullFinancials = true,
   showLimitedFinancials = false,
   pharmacy,
+  groupBy = 'patient',
 }: {
   opportunity: Opportunity | null;
   groupItem: GroupedItem | null;
@@ -494,6 +495,7 @@ function SidePanel({
   showFullFinancials?: boolean;
   showLimitedFinancials?: boolean;
   pharmacy?: Pharmacy | null;
+  groupBy?: string;
 }) {
   const showAnyFinancials = showFullFinancials || showLimitedFinancials;
   const [generating, setGenerating] = useState(false);
@@ -610,8 +612,17 @@ function SidePanel({
 
   const [rationale, action] = (opportunity.clinical_rationale || '').split('\n\nAction: ');
 
-  // Get all opportunities for this patient grouped by prescriber
-  const allOpportunities = groupItem.opportunities || [opportunity];
+  // HIPAA SAFETY: Only allow batch operations for the SAME patient
+  // When grouped by patient, groupItem.opportunities are all for one patient
+  // When grouped by prescriber/drug, filter to only this patient's opportunities
+  const isPatientGrouped = groupBy === 'patient';
+  const allOpportunities = isPatientGrouped
+    ? (groupItem.opportunities || [opportunity])
+    : (groupItem.opportunities || []).filter(o => o.patient_id === opportunity.patient_id);
+
+  // Batch fax is ONLY allowed when grouped by patient (HIPAA requirement: 1 patient per fax)
+  const canUseBatchMode = isPatientGrouped && allOpportunities.length > 1;
+
   const byPrescriber = allOpportunities.reduce((acc, opp) => {
     const prescriber = opp.prescriber_name || 'Unknown Prescriber';
     if (!acc[prescriber]) acc[prescriber] = [];
@@ -1145,7 +1156,7 @@ function SidePanel({
           {viewMode === 'batch' ? 'Batch Fax Builder' : 'Opportunity Details'}
         </span>
         <div className="flex items-center gap-2">
-          {allOpportunities.length > 1 && (
+          {canUseBatchMode && (
             <button
               onClick={() => {
                 setViewMode(viewMode === 'single' ? 'batch' : 'single');
@@ -1164,26 +1175,26 @@ function SidePanel({
 
       {/* Content */}
       <div className="flex-1 overflow-y-auto p-6 space-y-6">
-        {/* Patient */}
+        {/* Patient - ALWAYS use opportunity's patient data to prevent HIPAA issues */}
         <div>
           <div className="text-xs text-slate-500 uppercase tracking-wider mb-3">Patient</div>
           <div className="flex items-center gap-3 mb-3">
             <div className="w-12 h-12 rounded-full bg-[#14b8a6] flex items-center justify-center text-[#0a1628] font-semibold">
-              {getInitials(groupItem.last_name || groupItem.label)}
+              {getInitials(opportunity.patient_last_name || '')}
             </div>
             <div>
               <div className="font-semibold text-white">
-                {formatPatientName(groupItem.first_name, groupItem.last_name, groupItem.label, isDemo)}
+                {formatPatientName(opportunity.patient_first_name, opportunity.patient_last_name, '', isDemo)}
               </div>
-              <div className="text-sm text-slate-400">DOB: {formatDate(groupItem.date_of_birth || '')}</div>
+              <div className="text-sm text-slate-400">DOB: {formatDate(opportunity.patient_dob || '')}</div>
             </div>
           </div>
           <div className="flex flex-wrap gap-2">
             <span className="px-2 py-1 bg-[#14b8a6]/20 text-[#14b8a6] text-xs rounded font-medium">
-              BIN: {groupItem.insurance_bin || opportunity.insurance_bin || 'N/A'}
+              BIN: {opportunity.insurance_bin || 'N/A'}
             </span>
             <span className="px-2 py-1 bg-blue-500/20 text-blue-400 text-xs rounded font-medium">
-              Group: {groupItem.insurance_group || opportunity.insurance_group || 'N/A'}
+              Group: {opportunity.insurance_group || 'N/A'}
             </span>
             {opportunity.contract_id && (
               <span className="px-2 py-1 bg-purple-500/20 text-purple-400 text-xs rounded font-medium">
@@ -2576,6 +2587,7 @@ export default function OpportunitiesPage() {
             showFullFinancials={showFullFinancials}
             showLimitedFinancials={showLimitedFinancials}
             pharmacy={pharmacy}
+            groupBy={groupBy}
           />
         </>
       )}
