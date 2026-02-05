@@ -73,6 +73,7 @@ interface Opportunity {
   prescriber_name?: string;
   prescriber_npi?: string;
   coverage_confidence?: 'verified' | 'likely' | 'unknown' | 'excluded';
+  claim_date?: string;
   verified_claim_count?: number;
   avg_reimbursement?: number;
   alternatives?: Array<{
@@ -243,7 +244,7 @@ function InsuranceTags({ opp, size = 'sm' }: { opp: Opportunity; size?: 'sm' | '
 }
 
 // Coverage Confidence Badge - shows how confident we are this opportunity will be paid
-function CoverageConfidenceBadge({ confidence, size = 'sm' }: { confidence?: string; size?: 'sm' | 'xs' }) {
+function CoverageConfidenceBadge({ confidence, claimDate, size = 'sm' }: { confidence?: string; claimDate?: string; size?: 'sm' | 'xs' }) {
   const config: Record<string, { bg: string; text: string; label: string; tooltip: string }> = {
     verified: {
       bg: 'bg-emerald-500/20',
@@ -275,11 +276,14 @@ function CoverageConfidenceBadge({ confidence, size = 'sm' }: { confidence?: str
   const { bg, text, label, tooltip } = config[level];
   const sizeClass = size === 'xs' ? 'text-[10px] px-1.5 py-0.5' : 'text-xs px-2 py-0.5';
 
+  // Format claim date if provided
+  const dateStr = claimDate ? new Date(claimDate).toLocaleDateString('en-US', { month: 'short', year: '2-digit' }) : null;
+
   return (
-    <span className={`${sizeClass} ${bg} ${text} rounded font-medium cursor-default`} title={tooltip}>
+    <span className={`${sizeClass} ${bg} ${text} rounded font-medium cursor-default`} title={tooltip + (dateStr ? ` (claim from ${dateStr})` : '')}>
       {level === 'verified' && <span className="mr-0.5">&#10003;</span>}
       {level === 'excluded' && <span className="mr-0.5">&#10007;</span>}
-      {label}
+      {label}{dateStr && ` ${dateStr}`}
     </span>
   );
 }
@@ -2296,6 +2300,38 @@ export default function OpportunitiesPage() {
               </span>
             )}
           </label>
+          {/* Coverage Legend */}
+          <div className="relative group ml-2">
+            <button className="flex items-center gap-1 text-xs text-slate-400 hover:text-white px-2 py-1 bg-[#1e3a5f] rounded">
+              <AlertCircle className="w-3 h-3" /> Legend
+            </button>
+            <div className="absolute bottom-full left-0 mb-2 hidden group-hover:block z-50">
+              <div className="bg-[#0d2137] border border-[#1e3a5f] rounded-lg p-4 shadow-xl w-72">
+                <div className="text-sm font-medium text-white mb-3">Coverage Confidence Tags</div>
+                <div className="space-y-2 text-xs">
+                  <div className="flex items-center gap-2">
+                    <span className="px-2 py-0.5 bg-emerald-500/20 text-emerald-400 rounded font-medium">✓Verified</span>
+                    <span className="text-slate-400">Confirmed paid claims for this BIN+Group</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="px-2 py-0.5 bg-yellow-500/20 text-yellow-400 rounded font-medium">Likely</span>
+                    <span className="text-slate-400">Paid claims on BIN, but Group unverified</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="px-2 py-0.5 bg-slate-500/20 text-slate-400 rounded font-medium">Unknown</span>
+                    <span className="text-slate-400">No coverage data available</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="px-2 py-0.5 bg-red-500/20 text-red-400 rounded font-medium">✗Excluded</span>
+                    <span className="text-slate-400">Known not to work for this insurance</span>
+                  </div>
+                </div>
+                <div className="border-t border-[#1e3a5f] mt-3 pt-3 text-xs text-slate-500">
+                  Date shown is the most recent paid claim used to verify coverage.
+                </div>
+              </div>
+            </div>
+          </div>
           {typeFilter && (
             <div className="flex items-center gap-2 ml-2">
               <span className="px-3 py-1.5 bg-purple-500/20 text-purple-400 rounded-lg text-sm font-medium">
@@ -2462,7 +2498,7 @@ export default function OpportunitiesPage() {
                                     {opp.current_drug_name || 'N/A'} → <span className="text-[#14b8a6]">{opp.recommended_drug_name}</span>
                                     {opp.recommended_ndc && <span className="text-xs text-slate-400 ml-1">(NDC: {formatNdc(opp.recommended_ndc)})</span>}
                                   </span>
-                                  <CoverageConfidenceBadge confidence={opp.coverage_confidence} size="xs" />
+                                  <CoverageConfidenceBadge confidence={opp.coverage_confidence} claimDate={opp.claim_date} size="xs" />
                                   {altCount > 0 && (
                                     <button
                                       onClick={(e) => {
@@ -2624,7 +2660,7 @@ export default function OpportunitiesPage() {
                                             <span className="text-white text-sm">
                                               {patientOpp.current_drug_name || 'N/A'} → <span className="text-[#14b8a6]">{patientOpp.recommended_drug_name}</span>
                                             </span>
-                                            <CoverageConfidenceBadge confidence={patientOpp.coverage_confidence} size="xs" />
+                                            <CoverageConfidenceBadge confidence={patientOpp.coverage_confidence} claimDate={patientOpp.claim_date} size="xs" />
                                           </div>
                                         </td>
                                         <td className="px-5 py-2">
