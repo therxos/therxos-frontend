@@ -77,6 +77,12 @@ interface Trigger {
     avgQty?: number | null;
     bestDrugName?: string | null;
     bestNdc?: string | null;
+    isManualOverride?: boolean;
+    manualNdc?: string | null;
+    manualDrugName?: string | null;
+    manualGpValue?: number | null;
+    manualNote?: string | null;
+    mostRecentClaim?: string | null;
   }[];
   pharmacy_stats?: PharmacyStat[];
   total_opportunities?: number;
@@ -112,6 +118,9 @@ export default function TriggersPage() {
   const [pharmacies, setPharmacies] = useState<{ pharmacy_id: string; pharmacy_name: string }[]>([]);
   const [refreshing, setRefreshing] = useState(false);
   const [isNewTrigger, setIsNewTrigger] = useState(false);
+  const [editingBinValue, setEditingBinValue] = useState<{ triggerId: string; bin: string; group?: string | null; current: any } | null>(null);
+  const [binValueForm, setBinValueForm] = useState({ isManualOverride: false, manualNdc: '', manualDrugName: '', manualGpValue: '', manualNote: '' });
+  const [savingBinValue, setSavingBinValue] = useState(false);
 
   useEffect(() => {
     fetchTriggers();
@@ -307,6 +316,44 @@ export default function TriggersPage() {
       alert('Failed to save trigger');
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function saveBinValue() {
+    if (!editingBinValue) return;
+    setSavingBinValue(true);
+    try {
+      const token = localStorage.getItem('therxos_token');
+      const res = await fetch(`${API_URL}/api/admin/triggers/${editingBinValue.triggerId}/bin-values/bulk`, {
+        method: 'PUT',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          updates: [{
+            bin: editingBinValue.bin,
+            group: editingBinValue.group,
+            isManualOverride: binValueForm.isManualOverride,
+            manualNdc: binValueForm.manualNdc || null,
+            manualDrugName: binValueForm.manualDrugName || null,
+            manualGpValue: binValueForm.manualGpValue ? parseFloat(binValueForm.manualGpValue) : null,
+            manualNote: binValueForm.manualNote || null,
+          }]
+        }),
+      });
+      if (res.ok) {
+        setEditingBinValue(null);
+        fetchTriggers();
+      } else {
+        const error = await res.json();
+        alert('Failed to save: ' + (error.error || 'Unknown error'));
+      }
+    } catch (err) {
+      console.error('Failed to save BIN value:', err);
+      alert('Failed to save BIN value');
+    } finally {
+      setSavingBinValue(false);
     }
   }
 
@@ -853,12 +900,13 @@ export default function TriggersPage() {
                           </h4>
                           <div className="max-h-96 overflow-y-auto space-y-1">
                             {filtered.map((bv, idx) => (
-                              <div key={idx} className="flex flex-col text-xs bg-[#0d2137] rounded px-3 py-2 gap-0.5">
+                              <div key={idx} className={`flex flex-col text-xs rounded px-3 py-2 gap-0.5 ${bv.isManualOverride ? 'bg-purple-900/30 border border-purple-500/30' : 'bg-[#0d2137]'}`}>
                                 <div className="flex items-center justify-between">
                                   <span className="font-mono text-white">
                                     {bv.bin}{bv.group ? `/${bv.group}` : ''}
+                                    {bv.isManualOverride && <span className="ml-1 text-[9px] px-1 py-0.5 bg-purple-500/30 text-purple-400 rounded">OVERRIDE</span>}
                                   </span>
-                                  <div className="flex items-center gap-4">
+                                  <div className="flex items-center gap-3">
                                     {bv.avgQty && (
                                       <span className="text-slate-400">Qty: {Math.round(bv.avgQty)}</span>
                                     )}
@@ -868,6 +916,28 @@ export default function TriggersPage() {
                                     {bv.coverageStatus === 'verified' && (
                                       <Check className="w-3 h-3 text-emerald-400" />
                                     )}
+                                    {bv.mostRecentClaim && (
+                                      <span className="text-[9px] text-slate-500" title="Most recent claim date">
+                                        {new Date(bv.mostRecentClaim).toLocaleDateString('en-US', { month: 'short', year: '2-digit' })}
+                                      </span>
+                                    )}
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setEditingBinValue({ triggerId: trigger.trigger_id, bin: bv.bin, group: bv.group, current: bv });
+                                        setBinValueForm({
+                                          isManualOverride: bv.isManualOverride || false,
+                                          manualNdc: bv.manualNdc || '',
+                                          manualDrugName: bv.manualDrugName || '',
+                                          manualGpValue: bv.manualGpValue?.toString() || '',
+                                          manualNote: bv.manualNote || '',
+                                        });
+                                      }}
+                                      className="p-1 hover:bg-[#1e3a5f] rounded text-slate-400 hover:text-white"
+                                      title="Edit override"
+                                    >
+                                      <Pencil className="w-3 h-3" />
+                                    </button>
                                   </div>
                                 </div>
                                 {(bv.bestDrugName || bv.bestNdc) && (
@@ -875,6 +945,7 @@ export default function TriggersPage() {
                                     {bv.bestDrugName}{bv.bestDrugName && bv.bestNdc ? ' ' : ''}{bv.bestNdc && <span className="text-slate-500 font-mono">NDC: {bv.bestNdc}</span>}
                                   </p>
                                 )}
+                                {bv.manualNote && <p className="text-[9px] text-purple-400 italic">Note: {bv.manualNote}</p>}
                               </div>
                             ))}
                             {hiddenCount > 0 && (
@@ -1386,6 +1457,125 @@ export default function TriggersPage() {
                   className="px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
                 >
                   {saving ? 'Saving...' : isNewTrigger ? 'Create Trigger' : 'Save Changes'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* BIN Value Edit Modal */}
+      {editingBinValue && (
+        <>
+          <div className="fixed inset-0 bg-black/50 z-50" onClick={() => setEditingBinValue(null)} />
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <div className="bg-[#0d2137] border border-[#1e3a5f] rounded-xl w-full max-w-md">
+              <div className="flex items-center justify-between p-4 border-b border-[#1e3a5f]">
+                <h2 className="text-lg font-semibold text-white">
+                  Edit Coverage: {editingBinValue.bin}{editingBinValue.group ? `/${editingBinValue.group}` : ''}
+                </h2>
+                <button onClick={() => setEditingBinValue(null)} className="p-1 hover:bg-[#1e3a5f] rounded">
+                  <X className="w-5 h-5 text-slate-400" />
+                </button>
+              </div>
+
+              <div className="p-4 space-y-4">
+                {/* Auto-detected values (read-only) */}
+                <div className="bg-[#0a1628] rounded-lg p-3 space-y-2">
+                  <p className="text-[10px] text-slate-500 uppercase font-semibold">Auto-Detected Values</p>
+                  <div className="grid grid-cols-2 gap-2 text-xs">
+                    <div>
+                      <span className="text-slate-400">Drug:</span>
+                      <p className="text-white">{editingBinValue.current.bestDrugName || 'N/A'}</p>
+                    </div>
+                    <div>
+                      <span className="text-slate-400">NDC:</span>
+                      <p className="text-white font-mono">{editingBinValue.current.bestNdc || 'N/A'}</p>
+                    </div>
+                    <div>
+                      <span className="text-slate-400">GP/Fill:</span>
+                      <p className="text-emerald-400">${Number(editingBinValue.current.gpValue || 0).toFixed(2)}</p>
+                    </div>
+                    <div>
+                      <span className="text-slate-400">Claim Date:</span>
+                      <p className="text-white">{editingBinValue.current.mostRecentClaim ? new Date(editingBinValue.current.mostRecentClaim).toLocaleDateString() : 'N/A'}</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Manual Override Toggle */}
+                <label className="flex items-center gap-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={binValueForm.isManualOverride}
+                    onChange={(e) => setBinValueForm({ ...binValueForm, isManualOverride: e.target.checked })}
+                    className="w-5 h-5 rounded accent-purple-500"
+                  />
+                  <span className="text-sm text-white">Enable Manual Override</span>
+                </label>
+
+                {/* Manual Override Fields */}
+                {binValueForm.isManualOverride && (
+                  <div className="space-y-3 border-t border-[#1e3a5f] pt-3">
+                    <p className="text-[10px] text-purple-400 uppercase font-semibold">Manual Override Values</p>
+                    <div>
+                      <label className="block text-xs text-slate-400 mb-1">Drug Name</label>
+                      <input
+                        type="text"
+                        value={binValueForm.manualDrugName}
+                        onChange={(e) => setBinValueForm({ ...binValueForm, manualDrugName: e.target.value })}
+                        className="w-full px-3 py-2 bg-[#0a1628] border border-[#1e3a5f] rounded-lg text-sm text-white"
+                        placeholder="e.g. Ondansetron 4mg Tab"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs text-slate-400 mb-1">NDC</label>
+                      <input
+                        type="text"
+                        value={binValueForm.manualNdc}
+                        onChange={(e) => setBinValueForm({ ...binValueForm, manualNdc: e.target.value })}
+                        className="w-full px-3 py-2 bg-[#0a1628] border border-[#1e3a5f] rounded-lg text-sm text-white font-mono"
+                        placeholder="e.g. 12345-6789-01"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs text-slate-400 mb-1">GP/Fill ($)</label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={binValueForm.manualGpValue}
+                        onChange={(e) => setBinValueForm({ ...binValueForm, manualGpValue: e.target.value })}
+                        className="w-full px-3 py-2 bg-[#0a1628] border border-[#1e3a5f] rounded-lg text-sm text-white"
+                        placeholder="e.g. 45.00"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs text-slate-400 mb-1">Note (optional)</label>
+                      <input
+                        type="text"
+                        value={binValueForm.manualNote}
+                        onChange={(e) => setBinValueForm({ ...binValueForm, manualNote: e.target.value })}
+                        className="w-full px-3 py-2 bg-[#0a1628] border border-[#1e3a5f] rounded-lg text-sm text-white"
+                        placeholder="e.g. From UgoRx, verified Jan 2025"
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div className="flex items-center justify-end gap-3 p-4 border-t border-[#1e3a5f]">
+                <button
+                  onClick={() => setEditingBinValue(null)}
+                  className="px-4 py-2 text-sm font-medium text-slate-400 hover:text-white"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={saveBinValue}
+                  disabled={savingBinValue}
+                  className="px-4 py-2 bg-purple-500 hover:bg-purple-600 text-white rounded-lg text-sm font-medium disabled:opacity-50"
+                >
+                  {savingBinValue ? 'Saving...' : 'Save Override'}
                 </button>
               </div>
             </div>
