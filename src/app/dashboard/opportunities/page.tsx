@@ -2609,6 +2609,7 @@ export default function OpportunitiesPage() {
                           )}
                           <SortableHeader label="Prescriber" sortKey="prescriber_name" currentKey={oppSortKey} direction={oppSortDir} onSort={handleOppSort} className="text-left text-xs font-semibold text-slate-400 uppercase tracking-wider px-5 py-3" />
                           <SortableHeader label="Status" sortKey="status" currentKey={oppSortKey} direction={oppSortDir} onSort={handleOppSort} className="text-left text-xs font-semibold text-slate-400 uppercase tracking-wider px-5 py-3" />
+                          <SortableHeader label="Date Added" sortKey="created_at" currentKey={oppSortKey} direction={oppSortDir} onSort={handleOppSort} className="text-left text-xs font-semibold text-slate-400 uppercase tracking-wider px-5 py-3" />
                           <SortableHeader label="Last Actioned" sortKey="actioned_at" currentKey={oppSortKey} direction={oppSortDir} onSort={handleOppSort} className="text-left text-xs font-semibold text-slate-400 uppercase tracking-wider px-5 py-3" />
                           <SortableHeader label="Notes" sortKey="staff_notes" currentKey={oppSortKey} direction={oppSortDir} onSort={handleOppSort} className="text-left text-xs font-semibold text-slate-400 uppercase tracking-wider px-5 py-3" />
                           <th className="text-right text-xs font-semibold text-slate-400 uppercase tracking-wider px-5 py-3"></th>
@@ -2684,7 +2685,12 @@ export default function OpportunitiesPage() {
                               </td>
                               <td className="px-5 py-3">
                                 <div className="text-sm text-slate-400">
-                                  {opp.actioned_at ? new Date(opp.actioned_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : opp.created_at ? new Date(opp.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '-'}
+                                  {opp.created_at ? new Date(opp.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '-'}
+                                </div>
+                              </td>
+                              <td className="px-5 py-3">
+                                <div className="text-sm text-slate-400">
+                                  {opp.actioned_at ? new Date(opp.actioned_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '-'}
                                 </div>
                               </td>
                               <td className="px-5 py-3">
