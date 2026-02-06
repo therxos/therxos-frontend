@@ -13,6 +13,8 @@ import {
   Copy,
   Check,
 } from 'lucide-react';
+import { SortableHeader } from '@/lib/SortableHeader';
+import type { SortDirection } from '@/lib/useSort';
 
 interface NDCItem {
   rank: number;
@@ -30,6 +32,31 @@ export default function NDCReferencePage() {
   const [selectedBin, setSelectedBin] = useState<string>('');
   const [expandedTypes, setExpandedTypes] = useState<Set<string>>(new Set(['Pen Needles', 'Test Strips', 'Lancets']));
   const [copiedNDC, setCopiedNDC] = useState<string | null>(null);
+  const [ndcSortKey, setNdcSortKey] = useState('gp100');
+  const [ndcSortDir, setNdcSortDir] = useState<SortDirection>('desc');
+
+  function handleNdcSort(key: string) {
+    if (key === ndcSortKey) {
+      setNdcSortDir(ndcSortDir === 'asc' ? 'desc' : 'asc');
+    } else {
+      setNdcSortKey(key);
+      setNdcSortDir('desc');
+    }
+  }
+
+  function sortNdcItems(items: NDCItem[]): NDCItem[] {
+    return [...items].sort((a, b) => {
+      const aVal = (a as unknown as Record<string, unknown>)[ndcSortKey];
+      const bVal = (b as unknown as Record<string, unknown>)[ndcSortKey];
+      if (aVal == null && bVal == null) return 0;
+      if (aVal == null) return 1;
+      if (bVal == null) return -1;
+      let cmp = 0;
+      if (typeof aVal === 'number' && typeof bVal === 'number') cmp = aVal - bVal;
+      else cmp = String(aVal).localeCompare(String(bVal), undefined, { sensitivity: 'base', numeric: true });
+      return ndcSortDir === 'asc' ? cmp : -cmp;
+    });
+  }
 
   const { data, isLoading, error } = useQuery({
     queryKey: ['ndc-reference', searchQuery, selectedSupplyType, selectedBin],
@@ -196,25 +223,17 @@ export default function NDCReferencePage() {
                     <table className="w-full">
                       <thead>
                         <tr style={{ background: 'var(--navy-700)' }}>
-                          <th className="text-left text-xs font-semibold uppercase tracking-wider px-4 py-3" style={{ color: 'var(--slate-400)' }}>
-                            BIN
-                          </th>
-                          <th className="text-left text-xs font-semibold uppercase tracking-wider px-4 py-3" style={{ color: 'var(--slate-400)' }}>
-                            GROUP
-                          </th>
+                          <SortableHeader label="BIN" sortKey="bin" currentKey={ndcSortKey} direction={ndcSortDir} onSort={handleNdcSort} className="text-left text-xs font-semibold uppercase tracking-wider px-4 py-3 text-slate-400" />
+                          <SortableHeader label="GROUP" sortKey="group" currentKey={ndcSortKey} direction={ndcSortDir} onSort={handleNdcSort} className="text-left text-xs font-semibold uppercase tracking-wider px-4 py-3 text-slate-400" />
                           <th className="text-left text-xs font-semibold uppercase tracking-wider px-4 py-3" style={{ color: 'var(--slate-400)' }}>
                             NDC
                           </th>
-                          <th className="text-left text-xs font-semibold uppercase tracking-wider px-4 py-3" style={{ color: 'var(--slate-400)' }}>
-                            Drug Name
-                          </th>
-                          <th className="text-right text-xs font-semibold uppercase tracking-wider px-4 py-3" style={{ color: 'var(--slate-400)' }}>
-                            GP/100
-                          </th>
+                          <SortableHeader label="Drug Name" sortKey="drugName" currentKey={ndcSortKey} direction={ndcSortDir} onSort={handleNdcSort} className="text-left text-xs font-semibold uppercase tracking-wider px-4 py-3 text-slate-400" />
+                          <SortableHeader label="GP/100" sortKey="gp100" currentKey={ndcSortKey} direction={ndcSortDir} onSort={handleNdcSort} align="right" className="text-right text-xs font-semibold uppercase tracking-wider px-4 py-3 text-slate-400" />
                         </tr>
                       </thead>
                       <tbody>
-                        {items.map((item: NDCItem, idx: number) => (
+                        {sortNdcItems(items).map((item: NDCItem, idx: number) => (
                           <tr
                             key={`${item.bin}-${item.group}-${idx}`}
                             className="hover:bg-[var(--navy-700)] transition-colors"

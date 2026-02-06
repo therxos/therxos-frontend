@@ -17,6 +17,8 @@ import {
   DollarSign,
   BarChart3,
 } from 'lucide-react';
+import { SortableHeader } from '@/lib/SortableHeader';
+import { useSort } from '@/lib/useSort';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL;
 
@@ -87,6 +89,7 @@ export default function FaxQueuePage() {
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState<'all' | 'pending' | 'delivered' | 'failed'>('all');
   const [refreshingId, setRefreshingId] = useState<string | null>(null);
+  const [resendingId, setResendingId] = useState<string | null>(null);
 
   useEffect(() => {
     loadFaxData();
@@ -140,8 +143,29 @@ export default function FaxQueuePage() {
     }
   }
 
+  async function resendFax(faxId: string) {
+    setResendingId(faxId);
+    try {
+      const token = localStorage.getItem('therxos_token');
+      const res = await fetch(`${API_URL}/api/fax/${faxId}/resend`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        await loadFaxData();
+      } else {
+        const data = await res.json();
+        alert(data.error || 'Failed to resend fax');
+      }
+    } catch (e) {
+      console.error('Failed to resend fax:', e);
+    } finally {
+      setResendingId(null);
+    }
+  }
+
   // Filter faxes
-  const filteredFaxes = faxes.filter(fax => {
+  const filteredFaxesUnsorted = faxes.filter(fax => {
     if (filter === 'pending' && !['queued', 'sending', 'accepted', 'in_progress'].includes(fax.fax_status)) return false;
     if (filter === 'delivered' && fax.fax_status !== 'successful') return false;
     if (filter === 'failed' && !['failed', 'no_answer', 'busy'].includes(fax.fax_status)) return false;
@@ -155,6 +179,8 @@ export default function FaxQueuePage() {
     }
     return true;
   });
+
+  const { sortKey, sortDir, handleSort, sorted: filteredFaxes } = useSort(filteredFaxesUnsorted, 'sent_at', 'desc');
 
   const pendingCount = faxes.filter(f => ['queued', 'sending', 'accepted', 'in_progress'].includes(f.fax_status)).length;
   const deliveredCount = faxes.filter(f => f.fax_status === 'successful').length;
@@ -287,10 +313,10 @@ export default function FaxQueuePage() {
           <table className="w-full">
             <thead className="bg-[#1e3a5f]/50">
               <tr>
-                <th className="text-left text-xs font-semibold text-slate-300 uppercase px-4 py-3">Status</th>
-                <th className="text-left text-xs font-semibold text-slate-300 uppercase px-4 py-3">Patient / Drug</th>
-                <th className="text-left text-xs font-semibold text-slate-300 uppercase px-4 py-3">Prescriber</th>
-                <th className="text-left text-xs font-semibold text-slate-300 uppercase px-4 py-3">Sent</th>
+                <SortableHeader label="Status" sortKey="fax_status" currentKey={sortKey} direction={sortDir} onSort={handleSort} className="text-left text-xs font-semibold text-slate-300 uppercase px-4 py-3" />
+                <SortableHeader label="Patient / Drug" sortKey="patient_name" currentKey={sortKey} direction={sortDir} onSort={handleSort} className="text-left text-xs font-semibold text-slate-300 uppercase px-4 py-3" />
+                <SortableHeader label="Prescriber" sortKey="prescriber_name" currentKey={sortKey} direction={sortDir} onSort={handleSort} className="text-left text-xs font-semibold text-slate-300 uppercase px-4 py-3" />
+                <SortableHeader label="Sent" sortKey="sent_at" currentKey={sortKey} direction={sortDir} onSort={handleSort} className="text-left text-xs font-semibold text-slate-300 uppercase px-4 py-3" />
                 <th className="text-right text-xs font-semibold text-slate-300 uppercase px-4 py-3">Actions</th>
               </tr>
             </thead>
@@ -334,16 +360,28 @@ export default function FaxQueuePage() {
                       </div>
                     </td>
                     <td className="px-4 py-4 text-right">
-                      {['queued', 'sending', 'accepted', 'in_progress'].includes(fax.fax_status) && (
-                        <button
-                          onClick={() => refreshFaxStatus(fax.fax_id)}
-                          disabled={refreshingId === fax.fax_id}
-                          className="text-slate-400 hover:text-white p-2 rounded-lg hover:bg-[#1e3a5f] disabled:opacity-50"
-                          title="Refresh status"
-                        >
-                          <RefreshCw className={`w-4 h-4 ${refreshingId === fax.fax_id ? 'animate-spin' : ''}`} />
-                        </button>
-                      )}
+                      <div className="flex items-center justify-end gap-2">
+                        {['queued', 'sending', 'accepted', 'in_progress'].includes(fax.fax_status) && (
+                          <button
+                            onClick={() => refreshFaxStatus(fax.fax_id)}
+                            disabled={refreshingId === fax.fax_id}
+                            className="text-slate-400 hover:text-white p-2 rounded-lg hover:bg-[#1e3a5f] disabled:opacity-50"
+                            title="Refresh status"
+                          >
+                            <RefreshCw className={`w-4 h-4 ${refreshingId === fax.fax_id ? 'animate-spin' : ''}`} />
+                          </button>
+                        )}
+                        {['failed', 'no_answer', 'busy'].includes(fax.fax_status) && (
+                          <button
+                            onClick={() => resendFax(fax.fax_id)}
+                            disabled={resendingId === fax.fax_id}
+                            className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-500/20 text-amber-400 hover:bg-amber-500/30 rounded-lg text-sm font-medium disabled:opacity-50"
+                          >
+                            <RefreshCw className={`w-3.5 h-3.5 ${resendingId === fax.fax_id ? 'animate-spin' : ''}`} />
+                            {resendingId === fax.fax_id ? 'Resending...' : 'Resend'}
+                          </button>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 );

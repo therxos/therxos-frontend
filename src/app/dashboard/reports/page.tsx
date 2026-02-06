@@ -20,6 +20,8 @@ import {
   Users,
   Trophy,
 } from 'lucide-react';
+import { SortableHeader } from '@/lib/SortableHeader';
+import type { SortDirection } from '@/lib/useSort';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL;
 
@@ -90,6 +92,29 @@ export default function ReportsPage() {
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
   const [compareMode, setCompareMode] = useState(false);
   const [previousStats, setPreviousStats] = useState<MonthlyStats | null>(null);
+  const [staffSortKey, setStaffSortKey] = useState('captured_value');
+  const [staffSortDir, setStaffSortDir] = useState<SortDirection>('desc');
+
+  function handleStaffSort(key: string) {
+    if (key === staffSortKey) {
+      setStaffSortDir(staffSortDir === 'asc' ? 'desc' : 'asc');
+    } else {
+      setStaffSortKey(key);
+      setStaffSortDir('desc');
+    }
+  }
+
+  function sortStaff(staff: any[]): any[] {
+    return [...staff].sort((a, b) => {
+      const aVal = a[staffSortKey];
+      const bVal = b[staffSortKey];
+      if (aVal == null && bVal == null) return 0;
+      if (aVal == null) return 1;
+      if (bVal == null) return -1;
+      let cmp = typeof aVal === 'number' && typeof bVal === 'number' ? aVal - bVal : String(aVal).localeCompare(String(bVal));
+      return staffSortDir === 'asc' ? cmp : -cmp;
+    });
+  }
 
   // Re-fetch when pharmacy or month/year changes
   useEffect(() => {
@@ -619,18 +644,18 @@ export default function ReportsPage() {
             <table className="w-full">
               <thead>
                 <tr className="text-left text-xs text-slate-400 uppercase border-b border-[#1e3a5f]">
-                  <th className="pb-3 pr-4">Staff Member</th>
+                  <SortableHeader label="Staff Member" sortKey="name" currentKey={staffSortKey} direction={staffSortDir} onSort={handleStaffSort} className="pb-3 pr-4" />
                   <th className="pb-3 pr-4">Role</th>
-                  <th className="pb-3 pr-4 text-right">Actioned</th>
-                  <th className="pb-3 pr-4 text-right">Approved</th>
-                  <th className="pb-3 pr-4 text-right">Approved Value</th>
-                  <th className="pb-3 pr-4 text-right">Completed</th>
-                  <th className="pb-3 pr-4 text-right">Completed Value</th>
-                  <th className="pb-3 text-right">Total Captured</th>
+                  <SortableHeader label="Actioned" sortKey="actioned_count" currentKey={staffSortKey} direction={staffSortDir} onSort={handleStaffSort} align="right" className="pb-3 pr-4" />
+                  <SortableHeader label="Approved" sortKey="approved_count" currentKey={staffSortKey} direction={staffSortDir} onSort={handleStaffSort} align="right" className="pb-3 pr-4" />
+                  <SortableHeader label="Approved Value" sortKey="approved_value" currentKey={staffSortKey} direction={staffSortDir} onSort={handleStaffSort} align="right" className="pb-3 pr-4" />
+                  <SortableHeader label="Completed" sortKey="completed_count" currentKey={staffSortKey} direction={staffSortDir} onSort={handleStaffSort} align="right" className="pb-3 pr-4" />
+                  <SortableHeader label="Completed Value" sortKey="completed_value" currentKey={staffSortKey} direction={staffSortDir} onSort={handleStaffSort} align="right" className="pb-3 pr-4" />
+                  <SortableHeader label="Total Captured" sortKey="captured_value" currentKey={staffSortKey} direction={staffSortDir} onSort={handleStaffSort} align="right" className="pb-3" />
                 </tr>
               </thead>
               <tbody>
-                {(stats?.staff_performance || []).map((staff, idx) => (
+                {sortStaff(stats?.staff_performance || []).map((staff, idx) => (
                   <tr key={staff.user_id} className="border-b border-[#1e3a5f]/50">
                     <td className="py-3 pr-4">
                       <div className="flex items-center gap-2">

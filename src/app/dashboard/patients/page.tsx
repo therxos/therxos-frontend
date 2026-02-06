@@ -8,6 +8,8 @@ import { useAuthStore } from '@/store';
 import { usePermissions } from '@/hooks/usePermissions';
 import Link from 'next/link';
 import { Search, Filter, Users, AlertCircle, ChevronRight } from 'lucide-react';
+import { SortableHeader } from '@/lib/SortableHeader';
+import { useSort } from '@/lib/useSort';
 
 // Demo data
 const DEMO_PATIENTS = [
@@ -69,7 +71,7 @@ export default function PatientsPage() {
   });
 
   const displayPatients = isDemo ? DEMO_PATIENTS : (patients || []);
-  const filteredPatients = displayPatients.filter((p: any) => {
+  const filteredPatientsUnsorted = displayPatients.filter((p: any) => {
     if (search) {
       const searchLower = search.toLowerCase();
       const matchesName = p.patient_name?.toLowerCase().includes(searchLower);
@@ -85,6 +87,8 @@ export default function PatientsPage() {
     }
     return true;
   });
+
+  const { sortKey, sortDir, handleSort, sorted: filteredPatients } = useSort(filteredPatientsUnsorted, 'opportunity_count', 'desc');
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -135,12 +139,12 @@ export default function PatientsPage() {
           <table className="data-table">
             <thead>
               <tr>
-                <th>Patient</th>
+                <SortableHeader label="Patient" sortKey="last_name" currentKey={sortKey} direction={sortDir} onSort={handleSort} />
                 <th>Conditions</th>
                 <th className="text-center">Med Sync</th>
-                <th className="text-right">Opportunities</th>
-                {canViewFinancialData && <th className="text-right">Potential Margin</th>}
-                <th className="text-right">Last Visit</th>
+                <SortableHeader label="Opportunities" sortKey="opportunity_count" currentKey={sortKey} direction={sortDir} onSort={handleSort} align="right" />
+                {canViewFinancialData && <SortableHeader label="Potential Margin" sortKey="total_margin" currentKey={sortKey} direction={sortDir} onSort={handleSort} align="right" />}
+                <SortableHeader label="Last Visit" sortKey="last_visit" currentKey={sortKey} direction={sortDir} onSort={handleSort} align="right" />
                 <th></th>
               </tr>
             </thead>
