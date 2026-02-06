@@ -74,7 +74,7 @@ interface Opportunity {
   plan_name?: string;
   prescriber_name?: string;
   prescriber_npi?: string;
-  coverage_confidence?: 'verified' | 'likely' | 'unknown' | 'excluded';
+  coverage_confidence?: 'verified' | 'likely' | 'unknown';
   claim_date?: string;
   verified_claim_count?: number;
   avg_reimbursement?: number;
@@ -266,12 +266,6 @@ function CoverageConfidenceBadge({ confidence, claimDate, size = 'sm' }: { confi
       label: 'Unknown',
       tooltip: 'No coverage data available for this insurance'
     },
-    excluded: {
-      bg: 'bg-red-500/20',
-      text: 'text-red-400',
-      label: 'Excluded',
-      tooltip: 'Known not to work for this BIN+Group'
-    }
   };
 
   const level = confidence && config[confidence] ? confidence : 'unknown';
@@ -284,7 +278,6 @@ function CoverageConfidenceBadge({ confidence, claimDate, size = 'sm' }: { confi
   return (
     <span className={`${sizeClass} ${bg} ${text} rounded font-medium cursor-default`} title={tooltip + (dateStr ? ` (claim from ${dateStr})` : '')}>
       {level === 'verified' && <span className="mr-0.5">&#10003;</span>}
-      {level === 'excluded' && <span className="mr-0.5">&#10007;</span>}
       {label}{dateStr && ` ${dateStr}`}
     </span>
   );
@@ -1285,7 +1278,7 @@ function SidePanel({
                   </button>
                 </div>
                 <div className="space-y-2">
-                  {opps.map(opp => (
+                  {opps.filter(o => o.opportunity_type !== 'ndc_optimization').map(opp => (
                     <label
                       key={opp.opportunity_id}
                       className={`flex items-start gap-3 p-3 rounded-lg cursor-pointer transition-colors ${
@@ -1515,6 +1508,7 @@ function SidePanel({
             )}
           </button>
         )}
+        {opportunity.opportunity_type !== 'ndc_optimization' && (
         <button
           onClick={openFaxModal}
           disabled={opportunity.status !== 'Not Submitted'}
@@ -1523,6 +1517,7 @@ function SidePanel({
           <Send className="w-4 h-4" />
           {opportunity.status !== 'Not Submitted' ? 'Already Actioned' : 'Send Fax Now'}
         </button>
+        )}
         <button
           onClick={() => onStatusChange(opportunity.opportunity_id, 'Submitted')}
           className="w-full py-2.5 bg-[#1e3a5f] hover:bg-[#2d4a6f] text-white rounded-lg font-medium flex items-center justify-center gap-2 border border-[#2d4a6f]"
@@ -2165,7 +2160,7 @@ export default function OpportunitiesPage() {
                 <td class="value">${formatCurrency(getAnnualValue(opp))}</td>
                 <td>${opp.prescriber_name || 'Unknown'}</td>
                 <td><span class="status status-${opp.status.toLowerCase().replace(/\s+/g, '-')}">${opp.status}</span></td>
-                <td>${opp.coverage_confidence === 'verified' ? 'Verified' : opp.coverage_confidence === 'likely' ? 'Likely' : opp.coverage_confidence === 'excluded' ? 'Excluded' : 'Unknown'}</td>
+                <td>${opp.coverage_confidence === 'verified' ? 'Verified' : opp.coverage_confidence === 'likely' ? 'Likely' : 'Unknown'}</td>
                 <td>${opp.insurance_bin || '-'}</td>
               </tr>
             `).join('')}
@@ -2469,10 +2464,6 @@ export default function OpportunitiesPage() {
                     <span className="px-2 py-0.5 bg-slate-500/20 text-slate-400 rounded font-medium">Unknown</span>
                     <span className="text-slate-400">No coverage data available</span>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <span className="px-2 py-0.5 bg-red-500/20 text-red-400 rounded font-medium">✗Excluded</span>
-                    <span className="text-slate-400">Known not to work for this insurance</span>
-                  </div>
                 </div>
                 <div className="border-t border-[#1e3a5f] mt-3 pt-3 text-xs text-slate-500">
                   Date shown is the most recent paid claim used to verify coverage.
@@ -2609,17 +2600,17 @@ export default function OpportunitiesPage() {
                             <SortableHeader label="Patient" sortKey="patient_last_name" currentKey={oppSortKey} direction={oppSortDir} onSort={handleOppSort} className="text-left text-xs font-semibold text-slate-400 uppercase tracking-wider px-5 py-3" />
                           )}
                           <SortableHeader label="Opportunity" sortKey="recommended_drug_name" currentKey={oppSortKey} direction={oppSortDir} onSort={handleOppSort} className="text-left text-xs font-semibold text-slate-400 uppercase tracking-wider px-5 py-3" />
-                          <th className="text-left text-xs font-semibold text-slate-400 uppercase tracking-wider px-5 py-3">Action</th>
+                          <SortableHeader label="Action" sortKey="clinical_rationale" currentKey={oppSortKey} direction={oppSortDir} onSort={handleOppSort} className="text-left text-xs font-semibold text-slate-400 uppercase tracking-wider px-5 py-3" />
                           {showAnyFinancials && (
                             <>
-                              <th className="text-left text-xs font-semibold text-slate-400 uppercase tracking-wider px-5 py-3">Qty/Fill</th>
+                              <SortableHeader label="Qty/Fill" sortKey="avg_dispensed_qty" currentKey={oppSortKey} direction={oppSortDir} onSort={handleOppSort} className="text-left text-xs font-semibold text-slate-400 uppercase tracking-wider px-5 py-3" />
                               <SortableHeader label={showFullFinancials ? 'GP/Fill / Annual' : 'GP/Fill'} sortKey="potential_margin_gain" currentKey={oppSortKey} direction={oppSortDir} onSort={handleOppSort} className="text-left text-xs font-semibold text-slate-400 uppercase tracking-wider px-5 py-3" />
                             </>
                           )}
                           <SortableHeader label="Prescriber" sortKey="prescriber_name" currentKey={oppSortKey} direction={oppSortDir} onSort={handleOppSort} className="text-left text-xs font-semibold text-slate-400 uppercase tracking-wider px-5 py-3" />
                           <SortableHeader label="Status" sortKey="status" currentKey={oppSortKey} direction={oppSortDir} onSort={handleOppSort} className="text-left text-xs font-semibold text-slate-400 uppercase tracking-wider px-5 py-3" />
-                          <SortableHeader label="Created" sortKey="created_at" currentKey={oppSortKey} direction={oppSortDir} onSort={handleOppSort} className="text-left text-xs font-semibold text-slate-400 uppercase tracking-wider px-5 py-3" />
-                          <th className="text-left text-xs font-semibold text-slate-400 uppercase tracking-wider px-5 py-3">Notes</th>
+                          <SortableHeader label="Last Actioned" sortKey="actioned_at" currentKey={oppSortKey} direction={oppSortDir} onSort={handleOppSort} className="text-left text-xs font-semibold text-slate-400 uppercase tracking-wider px-5 py-3" />
+                          <SortableHeader label="Notes" sortKey="staff_notes" currentKey={oppSortKey} direction={oppSortDir} onSort={handleOppSort} className="text-left text-xs font-semibold text-slate-400 uppercase tracking-wider px-5 py-3" />
                           <th className="text-right text-xs font-semibold text-slate-400 uppercase tracking-wider px-5 py-3"></th>
                         </tr>
                       </thead>
@@ -2693,7 +2684,7 @@ export default function OpportunitiesPage() {
                               </td>
                               <td className="px-5 py-3">
                                 <div className="text-sm text-slate-400">
-                                  {opp.created_at ? new Date(opp.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '-'}
+                                  {opp.actioned_at ? new Date(opp.actioned_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : opp.created_at ? new Date(opp.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '-'}
                                 </div>
                               </td>
                               <td className="px-5 py-3">
