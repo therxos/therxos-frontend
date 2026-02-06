@@ -121,6 +121,8 @@ export default function TriggersPage() {
   const [editingBinValue, setEditingBinValue] = useState<{ triggerId: string; bin: string; group?: string | null; current: any } | null>(null);
   const [binValueForm, setBinValueForm] = useState({ isManualOverride: false, manualNdc: '', manualDrugName: '', manualGpValue: '', manualNote: '' });
   const [savingBinValue, setSavingBinValue] = useState(false);
+  const [addingBinValue, setAddingBinValue] = useState<{ triggerId: string } | null>(null);
+  const [newBinForm, setNewBinForm] = useState({ bin: '', group: '', manualDrugName: '', manualNdc: '', manualGpValue: '', manualNote: '' });
 
   useEffect(() => {
     fetchTriggers();
@@ -354,6 +356,58 @@ export default function TriggersPage() {
       alert('Failed to save BIN value');
     } finally {
       setSavingBinValue(false);
+    }
+  }
+
+  async function saveNewBinValue() {
+    if (!addingBinValue || !newBinForm.bin || !newBinForm.manualGpValue) return;
+    setSavingBinValue(true);
+    try {
+      const token = localStorage.getItem('therxos_token');
+      const res = await fetch(`${API_URL}/api/admin/triggers/${addingBinValue.triggerId}/bin-values/bulk`, {
+        method: 'PUT',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          updates: [{
+            bin: newBinForm.bin,
+            group: newBinForm.group || null,
+            gpValue: parseFloat(newBinForm.manualGpValue),
+            coverageStatus: 'manual',
+            isManualOverride: true,
+            manualDrugName: newBinForm.manualDrugName || null,
+            manualNdc: newBinForm.manualNdc || null,
+            manualGpValue: parseFloat(newBinForm.manualGpValue),
+            manualNote: newBinForm.manualNote || null,
+          }]
+        }),
+      });
+      if (res.ok) {
+        setAddingBinValue(null);
+        fetchTriggers();
+      } else {
+        const error = await res.json();
+        alert('Failed to save: ' + (error.error || 'Unknown error'));
+      }
+    } catch (err) {
+      console.error('Failed to save new BIN value:', err);
+      alert('Failed to save new BIN value');
+    } finally {
+      setSavingBinValue(false);
+    }
+  }
+
+  async function deleteBinValue(triggerId: string, bin: string, group?: string | null) {
+    if (!confirm(`Delete manual entry for ${bin}${group ? '/' + group : ''}?`)) return;
+    try {
+      const token = localStorage.getItem('therxos_token');
+      const url = group
+        ? `${API_URL}/api/admin/triggers/${triggerId}/bin-values/${bin}?group=${encodeURIComponent(group)}`
+        : `${API_URL}/api/admin/triggers/${triggerId}/bin-values/${bin}`;
+      const res = await fetch(url, { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } });
+      if (res.ok) fetchTriggers();
+      else alert('Failed to delete');
+    } catch (err) {
+      alert('Failed to delete');
     }
   }
 
@@ -887,24 +941,38 @@ export default function TriggersPage() {
                         {/* Right Column - BIN Values */}
                         <div>
                           {(() => {
+                            const effectiveGp = (bv: any) => bv.isManualOverride && bv.manualGpValue ? Number(bv.manualGpValue) : (Number(bv.gpValue) || 0);
                             const allValid = (trigger.bin_values || [])
-                              .filter(bv => !bv.isExcluded && (bv.gpValue || 0) > 0 && !bv.bin?.startsWith('MEDICARE:'));
+                              .filter(bv => !bv.isExcluded && (effectiveGp(bv) > 0 || bv.isManualOverride) && !bv.bin?.startsWith('MEDICARE:'));
                             const filtered = allValid
-                              .filter(bv => (bv.gpValue || 0) >= 15)
-                              .sort((a, b) => (b.gpValue || 0) - (a.gpValue || 0));
+                              .filter(bv => effectiveGp(bv) >= 15 || bv.isManualOverride)
+                              .sort((a, b) => effectiveGp(b) - effectiveGp(a));
                             const hiddenCount = allValid.length - filtered.length;
                             return (
                               <>
-                          <h4 className="text-xs font-semibold text-slate-400 uppercase mb-2">
-                            BIN/Group Coverage ({filtered.length} entries{filtered.length !== (trigger.bin_values?.length || 0) ? ` of ${trigger.bin_values?.length || 0}` : ''})
-                          </h4>
+                          <div className="flex items-center justify-between mb-2">
+                            <h4 className="text-xs font-semibold text-slate-400 uppercase">
+                              BIN/Group Coverage ({filtered.length} entries{filtered.length !== (trigger.bin_values?.length || 0) ? ` of ${trigger.bin_values?.length || 0}` : ''})
+                            </h4>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setAddingBinValue({ triggerId: trigger.trigger_id });
+                                setNewBinForm({ bin: '', group: '', manualDrugName: '', manualNdc: '', manualGpValue: '', manualNote: '' });
+                              }}
+                              className="p-1 hover:bg-[#1e3a5f] rounded text-purple-400 hover:text-purple-300"
+                              title="Add manual BIN coverage"
+                            >
+                              <Plus className="w-4 h-4" />
+                            </button>
+                          </div>
                           <div className="max-h-96 overflow-y-auto space-y-1">
                             {filtered.map((bv, idx) => (
                               <div key={idx} className={`flex flex-col text-xs rounded px-3 py-2 gap-0.5 ${bv.isManualOverride ? 'bg-purple-900/30 border border-purple-500/30' : 'bg-[#0d2137]'}`}>
                                 <div className="flex items-center justify-between">
                                   <span className="font-mono text-white">
                                     {bv.bin}{bv.group ? `/${bv.group}` : ''}
-                                    {bv.isManualOverride && <span className="ml-1 text-[9px] px-1 py-0.5 bg-purple-500/30 text-purple-400 rounded">OVERRIDE</span>}
+                                    {bv.isManualOverride && <span className="ml-1 text-[9px] px-1 py-0.5 bg-purple-500/30 text-purple-400 rounded">{bv.verifiedAt ? 'OVERRIDE' : 'MANUAL'}</span>}
                                   </span>
                                   <div className="flex items-center gap-3">
                                     {bv.avgQty && (
@@ -938,6 +1006,18 @@ export default function TriggersPage() {
                                     >
                                       <Pencil className="w-3 h-3" />
                                     </button>
+                                    {bv.isManualOverride && (
+                                      <button
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          deleteBinValue(trigger.trigger_id, bv.bin, bv.group);
+                                        }}
+                                        className="p-1 hover:bg-red-900/50 rounded text-slate-500 hover:text-red-400"
+                                        title="Delete manual entry"
+                                      >
+                                        <Trash2 className="w-3 h-3" />
+                                      </button>
+                                    )}
                                   </div>
                                 </div>
                                 {(bv.bestDrugName || bv.bestNdc) && (
@@ -1457,6 +1537,105 @@ export default function TriggersPage() {
                   className="px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
                 >
                   {saving ? 'Saving...' : isNewTrigger ? 'Create Trigger' : 'Save Changes'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* Add New BIN Modal */}
+      {addingBinValue && (
+        <>
+          <div className="fixed inset-0 bg-black/50 z-50" onClick={() => setAddingBinValue(null)} />
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <div className="bg-[#0d2137] border border-[#1e3a5f] rounded-xl w-full max-w-md">
+              <div className="flex items-center justify-between p-4 border-b border-[#1e3a5f]">
+                <h2 className="text-lg font-semibold text-white">Add Manual BIN Coverage</h2>
+                <button onClick={() => setAddingBinValue(null)} className="p-1 hover:bg-[#1e3a5f] rounded">
+                  <X className="w-5 h-5 text-slate-400" />
+                </button>
+              </div>
+
+              <div className="p-4 space-y-3">
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs text-slate-400 mb-1">BIN <span className="text-red-400">*</span></label>
+                    <input
+                      type="text"
+                      value={newBinForm.bin}
+                      onChange={(e) => setNewBinForm({ ...newBinForm, bin: e.target.value })}
+                      className="w-full px-3 py-2 bg-[#0a1628] border border-[#1e3a5f] rounded-lg text-sm text-white font-mono"
+                      placeholder="e.g. 004336"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-slate-400 mb-1">Group</label>
+                    <input
+                      type="text"
+                      value={newBinForm.group}
+                      onChange={(e) => setNewBinForm({ ...newBinForm, group: e.target.value })}
+                      className="w-full px-3 py-2 bg-[#0a1628] border border-[#1e3a5f] rounded-lg text-sm text-white font-mono"
+                      placeholder="Optional"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-xs text-slate-400 mb-1">Drug Name</label>
+                  <input
+                    type="text"
+                    value={newBinForm.manualDrugName}
+                    onChange={(e) => setNewBinForm({ ...newBinForm, manualDrugName: e.target.value })}
+                    className="w-full px-3 py-2 bg-[#0a1628] border border-[#1e3a5f] rounded-lg text-sm text-white"
+                    placeholder="e.g. GNP Pen Needles 32G"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-slate-400 mb-1">NDC</label>
+                  <input
+                    type="text"
+                    value={newBinForm.manualNdc}
+                    onChange={(e) => setNewBinForm({ ...newBinForm, manualNdc: e.target.value })}
+                    className="w-full px-3 py-2 bg-[#0a1628] border border-[#1e3a5f] rounded-lg text-sm text-white font-mono"
+                    placeholder="e.g. 12345-6789-01"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-slate-400 mb-1">GP/Fill ($) <span className="text-red-400">*</span></label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={newBinForm.manualGpValue}
+                    onChange={(e) => setNewBinForm({ ...newBinForm, manualGpValue: e.target.value })}
+                    className="w-full px-3 py-2 bg-[#0a1628] border border-[#1e3a5f] rounded-lg text-sm text-white"
+                    placeholder="e.g. 49.00"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-slate-400 mb-1">Source Note</label>
+                  <input
+                    type="text"
+                    value={newBinForm.manualNote}
+                    onChange={(e) => setNewBinForm({ ...newBinForm, manualNote: e.target.value })}
+                    className="w-full px-3 py-2 bg-[#0a1628] border border-[#1e3a5f] rounded-lg text-sm text-white"
+                    placeholder="e.g. From UgoRx, verified Feb 2026"
+                  />
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-3 p-4 border-t border-[#1e3a5f]">
+                <button
+                  onClick={() => setAddingBinValue(null)}
+                  className="px-4 py-2 text-sm font-medium text-slate-400 hover:text-white"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={saveNewBinValue}
+                  disabled={savingBinValue || !newBinForm.bin || !newBinForm.manualGpValue}
+                  className="px-4 py-2 bg-purple-500 hover:bg-purple-600 text-white rounded-lg text-sm font-medium disabled:opacity-50"
+                >
+                  {savingBinValue ? 'Saving...' : 'Add Entry'}
                 </button>
               </div>
             </div>
