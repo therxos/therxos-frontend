@@ -1749,24 +1749,43 @@ export default function OpportunitiesPage() {
     unknown_coverage_count: 0, unknown_coverage_annual: 0,
   });
   const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState('all');
-  const [statusFilter, setStatusFilter] = useState<string | null>(null);
-  const [showDenied, setShowDenied] = useState(false);
-  const [showCompleted, setShowCompleted] = useState(false);
-  const [hideUnknownCoverage, setHideUnknownCoverage] = useState(false);
-  const [typeFilter, setTypeFilter] = useState<string | null>(null);
-  const [groupBy, setGroupBy] = useState('patient');
-  const [search, setSearch] = useState('');
-  const [expanded, setExpanded] = useState<Set<string>>(new Set());
-  const [expandedPatientOpps, setExpandedPatientOpps] = useState<Set<string>>(new Set()); // For inline patient opps expansion
+
+  // Restore UI state from sessionStorage on mount
+  const ss = typeof window !== 'undefined' ? sessionStorage : null;
+  const savedState = (() => {
+    try { return JSON.parse(ss?.getItem('opps_ui_state') || '{}'); } catch { return {}; }
+  })();
+
+  const [filter, setFilter] = useState(savedState.filter || 'all');
+  const [statusFilter, setStatusFilter] = useState<string | null>(savedState.statusFilter || null);
+  const [showDenied, setShowDenied] = useState(savedState.showDenied || false);
+  const [showCompleted, setShowCompleted] = useState(savedState.showCompleted || false);
+  const [hideUnknownCoverage, setHideUnknownCoverage] = useState(savedState.hideUnknownCoverage || false);
+  const [typeFilter, setTypeFilter] = useState<string | null>(savedState.typeFilter || null);
+  const [groupBy, setGroupBy] = useState(savedState.groupBy || 'patient');
+  const [search, setSearch] = useState(savedState.search || '');
+  const [expanded, setExpanded] = useState<Set<string>>(new Set(savedState.expanded || []));
+  const [expandedPatientOpps, setExpandedPatientOpps] = useState<Set<string>>(new Set(savedState.expandedPatientOpps || []));
   const [selectedOpp, setSelectedOpp] = useState<Opportunity | null>(null);
   const [selectedGroup, setSelectedGroup] = useState<GroupedItem | null>(null);
   const [notesModal, setNotesModal] = useState<Opportunity | null>(null);
   const [lastSync, setLastSync] = useState(new Date());
   const [prescriberWarning, setPrescriberWarning] = useState<{ data: PrescriberWarningData; pendingUpdate: { id: string; status: string } } | null>(null);
   const [pharmacy, setPharmacy] = useState<Pharmacy | null>(null);
-  const [oppSortKey, setOppSortKey] = useState('created_at');
-  const [oppSortDir, setOppSortDir] = useState<SortDirection>('desc');
+  const [oppSortKey, setOppSortKey] = useState(savedState.oppSortKey || 'created_at');
+  const [oppSortDir, setOppSortDir] = useState<SortDirection>(savedState.oppSortDir || 'desc');
+
+  // Persist UI state to sessionStorage on change
+  useEffect(() => {
+    try {
+      ss?.setItem('opps_ui_state', JSON.stringify({
+        filter, statusFilter, showDenied, showCompleted, hideUnknownCoverage,
+        typeFilter, groupBy, search, oppSortKey, oppSortDir,
+        expanded: Array.from(expanded),
+        expandedPatientOpps: Array.from(expandedPatientOpps),
+      }));
+    } catch {}
+  }, [filter, statusFilter, showDenied, showCompleted, hideUnknownCoverage, typeFilter, groupBy, search, oppSortKey, oppSortDir, expanded, expandedPatientOpps]);
 
   function handleOppSort(key: string) {
     if (key === oppSortKey) {
