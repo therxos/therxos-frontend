@@ -284,14 +284,16 @@ function CoverageConfidenceBadge({ confidence, claimDate, size = 'sm' }: { confi
 }
 
 // Status Dropdown with portal positioning
-function StatusDropdown({ status, onChange, showCompleted = true, showDenied = true }: { status: string; onChange: (s: string) => void; showCompleted?: boolean; showDenied?: boolean }) {
+function StatusDropdown({ status, onChange, showCompleted = true, showDenied = true, opportunityType }: { status: string; onChange: (s: string) => void; showCompleted?: boolean; showDenied?: boolean; opportunityType?: string }) {
   const [open, setOpen] = useState(false);
   const [position, setPosition] = useState({ top: 0, left: 0, flipUp: false });
   const buttonRef = React.useRef<HTMLButtonElement>(null);
 
+  const isNdcOptimization = opportunityType === 'ndc_optimization';
+
   const allStatuses = [
     { value: 'Not Submitted', label: 'Not Submitted', color: 'bg-amber-500' },
-    { value: 'Submitted', label: 'Submitted', color: 'bg-blue-500' },
+    { value: 'Submitted', label: 'Submitted', color: 'bg-blue-500', hideForNdc: true },
     { value: 'Approved', label: 'Approved', color: 'bg-emerald-500' },
     { value: 'Completed', label: 'Completed', color: 'bg-green-500', requiresCompleted: true },
     { value: 'Denied', label: 'Denied', color: 'bg-slate-500', requiresDenied: true },
@@ -299,10 +301,11 @@ function StatusDropdown({ status, onChange, showCompleted = true, showDenied = t
     { value: 'Flagged', label: 'Flag for Review', color: 'bg-purple-500', requiresDenied: true },
   ];
 
-  // Filter statuses based on what's visible
+  // Filter statuses based on what's visible and opportunity type
   const statuses = allStatuses.filter(s => {
     if (s.requiresCompleted && !showCompleted) return false;
     if (s.requiresDenied && !showDenied) return false;
+    if (isNdcOptimization && s.hideForNdc) return false;
     return true;
   });
 
@@ -2700,7 +2703,7 @@ export default function OpportunitiesPage() {
                                 <div className="text-sm text-slate-300">{opp.prescriber_name || 'Unknown'}</div>
                               </td>
                               <td className="px-5 py-3">
-                                <StatusDropdown status={opp.status} onChange={s => updateStatus(opp.opportunity_id, s)} showCompleted={true} showDenied={true} />
+                                <StatusDropdown status={opp.status} onChange={s => updateStatus(opp.opportunity_id, s)} showCompleted={true} showDenied={true} opportunityType={opp.opportunity_type} />
                               </td>
                               <td className="px-5 py-3">
                                 <div className="text-sm text-slate-400">
@@ -2844,7 +2847,7 @@ export default function OpportunitiesPage() {
                                           <div className="text-xs text-slate-300">{patientOpp.prescriber_name || 'Unknown'}</div>
                                         </td>
                                         <td className="px-5 py-2">
-                                          <StatusDropdown status={patientOpp.status} onChange={s => updateStatus(patientOpp.opportunity_id, s)} showCompleted={true} showDenied={true} />
+                                          <StatusDropdown status={patientOpp.status} onChange={s => updateStatus(patientOpp.opportunity_id, s)} showCompleted={true} showDenied={true} opportunityType={patientOpp.opportunity_type} />
                                         </td>
                                         <td className="px-5 py-2">
                                           <div className="text-xs text-slate-400">
